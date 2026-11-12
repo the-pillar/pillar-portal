@@ -9,7 +9,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 <!-- END:nextjs-agent-rules -->
 
 <!-- bmad:context -->
-<!-- Verified 2026-10-28 against bdcc8aa. Managed by bmad-project-context; edits inside this block are replaced on refresh. Keep anything you want preserved outside the markers. -->
+<!-- Verified 2026-11-12 against 14451ba. Managed by bmad-project-context; edits inside this block are replaced on refresh. Keep anything you want preserved outside the markers. -->
 
 ## The Pillar Portal
 
@@ -23,15 +23,15 @@ Internal portal for The Pillar, a university student publication: a task board f
 - Merge PRs into `main` by squash, after the required `ci` check passes.
 - Stop for the user's yes, listing the commands, before any `--linked` Supabase command, `supabase config push`, a Supabase or Vercel dashboard or CLI change, `gh secret` or `gh workflow`, and any push to `pillar-portal-backups`.
 - After merging a PR that adds a migration, in the same session: `pnpm exec supabase db push --linked` (dry run first), `test db --linked`, then `migration list --linked` showing no local-only version. Staging deploys `main` on merge, so code ahead of its migration breaks it.
-- A story stays `review` until its spec's manual checks run (ask first: claude-in-chrome or by hand) and their results are written into the spec; the user moves it to `done`.
-- Never add story history, module descriptions or setup steps to CLAUDE.md or this block, and skip any "record Story X in CLAUDE.md" task a spec carries. Add a line here only for a new invariant, a command caveat or a mistake an agent made, through `bmad-project-context`.
+- A story stays `in-review` until its plan's manual checks run (ask first: claude-in-chrome or by hand) and their results are written into the plan; only the user calls it done, then run `uv run _bmad/method/scripts/tickets.py mark <epic>.<id> done`.
+- Never add story history, module descriptions or setup steps to CLAUDE.md or this block, and skip any "record Story X in CLAUDE.md" task a plan or ticket carries. Add a line here only for a new invariant, a command caveat or a mistake an agent made, through `bmad-project-context`.
 
 ## Where things are
 
-- Next story: `_bmad-output/implementation-artifacts/sprint-status.yaml`; specs, `deferred-work.md` and the retros sit beside it. Stories: `_bmad-output/planning-artifacts/epics.md`.
-- Product intent: `_bmad-output/planning-artifacts/prds/prd-pillar-portal-2026-08-30/prd.md`. Behavior and copy: `_bmad-output/planning-artifacts/ux-designs/ux-pillar-portal-2026-09-12/EXPERIENCE.md`, with `DESIGN.md` beside it for visual tokens. Invariants AD-1…AD-22: `_bmad-output/planning-artifacts/architecture/architecture-pillar-portal-2026-09-25/ARCHITECTURE-SPINE.md`.
+- Next story: `uv run _bmad/method/scripts/tickets.py next` (`status` for the whole board; `find <epic>.<id>` for one story's entry and plan). Entries, plans and retrospectives live under `_bmad-output/initiative-pillar-portal/tickets/`, and `deferred-work.md` in `_bmad-output/initiative-pillar-portal/`.
+- Product intent: `_bmad-output/initiative-pillar-portal/prd-pillar-portal-2026-08-30/prd-pillar-portal-2026-08-30.md`. Behavior and copy: `_bmad-output/initiative-pillar-portal/ux-pillar-portal-2026-09-12/EXPERIENCE.md`, with `DESIGN.md` beside it for visual tokens. Invariants AD-1…AD-22: the spine, `_bmad-output/initiative-pillar-portal/architecture-pillar-portal-2026-09-25/architecture-pillar-portal-2026-09-25.md`.
 - When they disagree, EXPERIENCE.md beats the PRD on behavior and copy, and the spine beats both on data, commands, security and sequencing. Use their copy verbatim.
-- The PRD numbers stories differently: use `epics.md`'s numbers and sprint keys, except when quoting the PRD.
+- The PRD numbers stories differently: use the ticket tree's `<epic>.<id>` refs, which keep the old epics.md numbers, except when quoting the PRD.
 - Touching sections, desks, positions, approvers, personas or member roles? Read `docs/pillar-org-structure.md` first.
 - Backups run from the private sibling repo `../pillar-portal-backups`. Bumping the Supabase CLI in `package.json`, or Supabase's Postgres major, means updating its `.github/workflows/backup.yml` (`SUPABASE_CLI_VERSION`/`SUPABASE_CLI_SHA256`, `postgresql-client-17`).
 
