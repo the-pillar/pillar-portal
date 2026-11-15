@@ -9,13 +9,14 @@
   "packageManager": "pnpm@12.6.0",
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "pnpm check:env && next build",
     "start": "next start",
     "lint": "eslint",
     "format": "prettier --write \"**/*.{ts,tsx}\"",
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
     "check:hex": "node scripts/check-no-hex.mjs",
+    "check:env": "node --conditions=react-server --env-file-if-exists=.env.local scripts/check-server-env.mjs",
     "check:bundle": "node --conditions=react-server --env-file-if-exists=.env.local scripts/check-bundle-secrets.mjs",
     "db:types": "supabase gen types typescript --local --schema public > src/lib/supabase/database.types.ts.tmp && mv src/lib/supabase/database.types.ts.tmp src/lib/supabase/database.types.ts || { rm -f src/lib/supabase/database.types.ts.tmp; exit 1; }"
   },
