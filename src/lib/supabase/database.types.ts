@@ -164,6 +164,48 @@ export type Database = {
         }
         Relationships: []
       }
+      member_onboarding: {
+        Row: {
+          checklist_done_at: string | null
+          copied_task_at: string | null
+          first_run_closed_at: string | null
+          first_run_shown_at: string | null
+          member_id: string
+          tour_seen_at: string | null
+        }
+        Insert: {
+          checklist_done_at?: string | null
+          copied_task_at?: string | null
+          first_run_closed_at?: string | null
+          first_run_shown_at?: string | null
+          member_id: string
+          tour_seen_at?: string | null
+        }
+        Update: {
+          checklist_done_at?: string | null
+          copied_task_at?: string | null
+          first_run_closed_at?: string | null
+          first_run_shown_at?: string | null
+          member_id?: string
+          tour_seen_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "member_onboarding_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: true
+            referencedRelation: "member_directory"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "member_onboarding_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: true
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       member_positions: {
         Row: {
           is_primary: boolean
@@ -563,6 +605,19 @@ export type Database = {
         }
         Returns: undefined
       }
+      my_onboarding: {
+        Args: never
+        Returns: {
+          approved_member: boolean
+          checklist_done: boolean
+          copied_task: boolean
+          first_run_closed: boolean
+          first_run_shown: boolean
+          tour_and_checklist: boolean
+          tour_seen: boolean
+          two_factor: boolean
+        }[]
+      }
       my_open_slots: {
         Args: never
         Returns: {
@@ -599,7 +654,12 @@ export type Database = {
         }
         Returns: undefined
       }
+      record_onboarding: {
+        Args: { step: Database["public"]["Enums"]["onboarding_step"] }
+        Returns: undefined
+      }
       reopen_task: { Args: { task_id: string }; Returns: undefined }
+      reset_first_run: { Args: never; Returns: undefined }
       respond_to_slot: {
         Args: {
           reason?: string
@@ -644,6 +704,12 @@ export type Database = {
     Enums: {
       job_status: "ok" | "failed" | "skipped"
       member_role: "pending" | "staff" | "editorial_admin"
+      onboarding_step:
+        | "tour_seen"
+        | "copied_task"
+        | "checklist_done"
+        | "first_run_shown"
+        | "first_run_closed"
       production_role:
         | "writer"
         | "layout_artist"
@@ -782,6 +848,13 @@ export const Constants = {
     Enums: {
       job_status: ["ok", "failed", "skipped"],
       member_role: ["pending", "staff", "editorial_admin"],
+      onboarding_step: [
+        "tour_seen",
+        "copied_task",
+        "checklist_done",
+        "first_run_shown",
+        "first_run_closed",
+      ],
       production_role: [
         "writer",
         "layout_artist",

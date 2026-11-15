@@ -98,3 +98,12 @@ authenticated public.member_open_slot_counts()
 authenticated private.can_rename_member(uuid)
 authenticated public.set_member_name(uuid, text)
 authenticated public.member_capabilities(uuid[])
+
+# members_onboarding: the caller's own onboarding record (the two helpers are
+# called by my_onboarding, which runs with the caller's rights;
+# private.close_first_run has no grant: only respond_to_slot calls it)
+authenticated private.has_verified_factor()
+authenticated private.has_approved_member()
+authenticated public.record_onboarding(onboarding_step)
+authenticated public.reset_first_run()
+authenticated public.my_onboarding()
