@@ -19,18 +19,24 @@ import { PendingMemberCard } from "./pending-member-card"
 const {
   approveMemberAction,
   declineMemberAction,
+  renameMemberAction,
   refresh,
   toastError,
   toastSuccess,
 } = vi.hoisted(() => ({
   approveMemberAction: vi.fn(),
   declineMemberAction: vi.fn(),
+  renameMemberAction: vi.fn(),
   refresh: vi.fn(),
   toastError: vi.fn(),
   toastSuccess: vi.fn(),
 }))
 
-vi.mock("../actions", () => ({ approveMemberAction, declineMemberAction }))
+vi.mock("../actions", () => ({
+  approveMemberAction,
+  declineMemberAction,
+  renameMemberAction,
+}))
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }))
 vi.mock("sonner", () => ({
   toast: { error: toastError, success: toastSuccess },
@@ -69,6 +75,8 @@ const MEMBER: PendingMember = {
   signedInAt: "2026-10-20T01:05:00+00:00",
   signedInLabel: "Tue, Oct 20, 2026 at 9:05 AM PHT",
   lookAlikeName: null,
+  googleName: "ANA REYES",
+  canRename: true,
 }
 
 const GROUPS: PositionGroup[] = [
@@ -141,6 +149,45 @@ function pendingCall(action: typeof approveMemberAction) {
 }
 
 describe("PendingMemberCard", () => {
+  it("keeps the ticked positions while the name is edited and saved", async () => {
+    const user = userEvent.setup()
+    renameMemberAction.mockResolvedValue({
+      ok: true,
+      data: { memberId: MEMBER.id, name: "Ana R." },
+    })
+    const { rerender } = render(<Approvals />)
+
+    await user.click(pickButton())
+    await user.click(checkbox("Staff Writer"))
+    await user.click(
+      screen.getByRole("button", { name: "Edit name for Ana Reyes" })
+    )
+    await user.clear(screen.getByRole("textbox", { name: "Display name" }))
+    await user.type(
+      screen.getByRole("textbox", { name: "Display name" }),
+      "Ana R.{Enter}"
+    )
+
+    await waitFor(() => expect(renameMemberAction).toHaveBeenCalledOnce())
+    await waitFor(() => expect(toastSuccess).toHaveBeenCalled())
+    // As revalidation would: the same card, renamed.
+    rerender(<Approvals members={[{ ...MEMBER, name: "Ana R." }]} />)
+
+    expect(
+      screen.getByRole("heading", { level: 3, name: "Ana R." })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole("button", { name: "Edit name for Ana R." })
+    ).toBeInTheDocument()
+    expect(checkbox("Staff Writer")).toHaveAttribute("aria-checked", "true")
+  })
+
+  it("shows no Edit name when canRename is false", () => {
+    render(<Approvals members={[{ ...MEMBER, canRename: false }]} />)
+
+    expect(screen.queryByRole("button", { name: /^Edit name/ })).toBeNull()
+  })
+
   it("shows the member's name, email and sign-in time in PHT, with the picker closed", () => {
     render(<Approvals />)
 

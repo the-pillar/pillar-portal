@@ -29,6 +29,7 @@ type Query = {
 const { state, createClient, redirect, RedirectError } = vi.hoisted(() => {
   const state = {
     claims: vi.fn(),
+    rpc: vi.fn(),
     rows: [] as Row[],
     queryError: null as { code: string; message: string } | null,
     selected: [] as string[],
@@ -98,6 +99,7 @@ const { state, createClient, redirect, RedirectError } = vi.hoisted(() => {
     createClient: vi.fn(async () => ({
       auth: { getClaims: state.claims },
       from,
+      rpc: state.rpc,
     })),
     redirect: vi.fn((url: string) => {
       throw new RedirectError(url)
@@ -347,18 +349,21 @@ const PENDING_ROWS = [
     id: "00000000-0000-4000-8000-000000000011",
     name: "New Person",
     email: "new.person@gmail.com",
+    google_name: "NEW PERSON",
     created_at: "2026-10-19T01:05:00+00:00",
   },
   {
     id: "00000000-0000-4000-8000-000000000012",
     name: "Maria Jose  dela Cruz",
     email: "mj@yahoo.com",
+    google_name: null,
     created_at: "2026-10-20T13:30:00+00:00",
   },
   {
     id: "00000000-0000-4000-8000-000000000013",
     name: "Someone Else",
     email: "Staff.Writer+second@gmail.com",
+    google_name: null,
     created_at: "2026-10-20T14:00:00+00:00",
   },
 ]
@@ -368,6 +373,7 @@ const ACTIVE_ROWS = [
     id: "00000000-0000-4000-8000-000000000021",
     name: "María José Dela Cruz",
     email: "mj.delacruz@gmail.com",
+    google_name: "MARÍA JOSÉ",
     member_positions: [
       { position: "online_manager", is_primary: false },
       { position: "news_editor", is_primary: true },
@@ -377,6 +383,7 @@ const ACTIVE_ROWS = [
     id: "00000000-0000-4000-8000-000000000022",
     name: "Head Cartoonist",
     email: "staffwriter@example.com",
+    google_name: null,
     member_positions: [
       { position: "staff_cartoonist", is_primary: false },
       { position: "staff_writer", is_primary: false },
@@ -389,6 +396,17 @@ const ACTIVE_ROWS = [
 function answerApprovals(
   overrides: Partial<Record<"pending" | "active" | "positions", unknown>> = {}
 ) {
+  // Everyone may be renamed but the third pending member and the second
+  // active one; a member with no row is not offered Edit name either.
+  state.rpc.mockResolvedValue({
+    data: [
+      { member_id: PENDING_ROWS[0].id, can_rename: true },
+      { member_id: PENDING_ROWS[1].id, can_rename: true },
+      { member_id: PENDING_ROWS[2].id, can_rename: false },
+      { member_id: ACTIVE_ROWS[0].id, can_rename: true },
+    ],
+    error: null,
+  })
   state.result.mockImplementation((query: Query) => {
     if (query.table === "positions") {
       return overrides.positions !== undefined
@@ -420,7 +438,7 @@ describe("getMemberApprovals", () => {
     expect(state.queries).toEqual([
       {
         table: "members",
-        columns: "id, name, email, created_at",
+        columns: "id, name, google_name, email, created_at",
         calls: [
           ["eq", "role", "pending"],
           ...NOT_DECLINED_OR_DEACTIVATED,
@@ -430,7 +448,8 @@ describe("getMemberApprovals", () => {
       },
       {
         table: "members",
-        columns: "id, name, email, member_positions(position, is_primary)",
+        columns:
+          "id, name, google_name, email, member_positions(position, is_primary)",
         calls: [
           ["neq", "role", "pending"],
           ...NOT_DECLINED_OR_DEACTIVATED,
@@ -460,6 +479,8 @@ describe("getMemberApprovals", () => {
         signedInAt: "2026-10-19T01:05:00+00:00",
         signedInLabel: "Mon, Oct 19, 2026 at 9:05 AM PHT",
         lookAlikeName: null,
+        googleName: "NEW PERSON",
+        canRename: true,
       },
       {
         id: PENDING_ROWS[1].id,
@@ -469,6 +490,8 @@ describe("getMemberApprovals", () => {
         signedInLabel: "Tue, Oct 20, 2026 at 9:30 PM PHT",
         // The name matches once accents, case and spacing are ignored.
         lookAlikeName: "María José Dela Cruz",
+        googleName: null,
+        canRename: true,
       },
       {
         id: PENDING_ROWS[2].id,
@@ -478,6 +501,8 @@ describe("getMemberApprovals", () => {
         signedInLabel: "Tue, Oct 20, 2026 at 10:00 PM PHT",
         // The email local part matches once case, dots and +tag are ignored.
         lookAlikeName: "Head Cartoonist",
+        googleName: null,
+        canRename: false,
       },
     ])
   })
@@ -492,12 +517,16 @@ describe("getMemberApprovals", () => {
         id: ACTIVE_ROWS[0].id,
         name: "María José Dela Cruz",
         email: "mj.delacruz@gmail.com",
+        googleName: "MARÍA JOSÉ",
+        canRename: true,
         positionTitles: ["News Editor", "Online Manager"],
       },
       {
         id: ACTIVE_ROWS[1].id,
         name: "Head Cartoonist",
         email: "staffwriter@example.com",
+        googleName: null,
+        canRename: false,
         positionTitles: ["Head Cartoonist", "Staff Writer", "Staff Cartoonist"],
       },
     ])
@@ -535,12 +564,35 @@ describe("getMemberApprovals", () => {
     ])
   })
 
-  it("returns empty lists when nobody is pending or active", async () => {
+  it("asks member_capabilities once for every listed member", async () => {
+    answerApprovals()
+
+    await getMemberApprovals()
+
+    expect(state.rpc).toHaveBeenCalledExactlyOnceWith("member_capabilities", {
+      ids: [...PENDING_ROWS, ...ACTIVE_ROWS].map((row) => row.id),
+    })
+  })
+
+  it("returns empty lists when nobody is pending or active, without asking for capabilities", async () => {
     await expect(getMemberApprovals()).resolves.toEqual({
       pending: [],
       roster: [],
       positionGroups: [],
     })
+    expect(state.rpc).not.toHaveBeenCalled()
+  })
+
+  it("throws when member_capabilities fails", async () => {
+    answerApprovals()
+    state.rpc.mockResolvedValue({
+      data: null,
+      error: { code: "PGRST000", message: "connection refused" },
+    })
+
+    await expect(getMemberApprovals()).rejects.toThrow(
+      "getMemberApprovals: reading member_capabilities failed"
+    )
   })
 
   it.each([

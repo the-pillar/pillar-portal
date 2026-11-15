@@ -23,6 +23,7 @@ const { approveMemberAction } = vi.hoisted(() => ({
 vi.mock("../actions", () => ({
   approveMemberAction,
   declineMemberAction: vi.fn(),
+  renameMemberAction: vi.fn(),
 }))
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }))
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }))
@@ -46,12 +47,16 @@ const ROSTER: MemberApprovalsData["roster"] = [
     name: "Head Layout Artist",
     email: "persona-head_layout_artist@example.com",
     positionTitles: ["Head Layout Artist"],
+    googleName: null,
+    canRename: true,
   },
   {
     id: "00000000-0000-4000-8000-000000000062",
     name: "News Editor and Online Manager",
     email: "demo-news_editor@example.com",
     positionTitles: ["News Editor", "Online Manager"],
+    googleName: "NEWS EDITOR",
+    canRename: false,
   },
 ]
 
@@ -71,6 +76,8 @@ const PENDING: MemberApprovalsData["pending"] = [
     signedInAt: "2026-10-19T01:05:00+00:00",
     signedInLabel: "Mon, Oct 19, 2026 at 9:05 AM PHT",
     lookAlikeName: null,
+    googleName: null,
+    canRename: true,
   },
   {
     id: "00000000-0000-4000-8000-000000000072",
@@ -79,10 +86,34 @@ const PENDING: MemberApprovalsData["pending"] = [
     signedInAt: "2026-10-20T01:05:00+00:00",
     signedInLabel: "Tue, Oct 20, 2026 at 9:05 AM PHT",
     lookAlikeName: null,
+    googleName: null,
+    canRename: true,
   },
 ]
 
 describe("MemberApprovals", () => {
+  it("offers Edit name only on the rows whose canRename is true", () => {
+    render(
+      <MemberApprovals
+        approvals={{
+          pending: PENDING,
+          roster: ROSTER,
+          positionGroups: POSITION_GROUPS,
+        }}
+      />
+    )
+
+    expect(
+      screen
+        .getAllByRole("button", { name: /^Edit name for / })
+        .map((button) => button.getAttribute("aria-label"))
+    ).toEqual([
+      "Edit name for Ana Reyes",
+      "Edit name for Ben Cruz",
+      "Edit name for Head Layout Artist",
+    ])
+  })
+
   it("says nobody is waiting when the list is empty, and still shows the roster", async () => {
     const { container } = render(
       <MemberApprovals
@@ -169,7 +200,7 @@ describe("MemberApprovals", () => {
     }
   )
 
-  it("shows each active member's name, email and positions, read-only", () => {
+  it("shows each active member's name, email and positions, with Edit name only where offered", () => {
     render(
       <MemberApprovals
         approvals={{
@@ -184,14 +215,14 @@ describe("MemberApprovals", () => {
       screen.getByRole("region", { name: "Active members" })
     ).getAllByRole("listitem")
     expect(rows.map((row) => row.textContent)).toEqual([
-      "Head Layout Artistpersona-head_layout_artist@example.comHead Layout Artist",
+      "Head Layout ArtistEdit namepersona-head_layout_artist@example.comHead Layout Artist",
       "News Editor and Online Managerdemo-news_editor@example.comNews Editor · Online Manager",
     ])
     expect(
-      within(
-        screen.getByRole("region", { name: "Active members" })
-      ).queryByRole("button")
-    ).toBeNull()
+      within(screen.getByRole("region", { name: "Active members" }))
+        .getAllByRole("button")
+        .map((button) => button.getAttribute("aria-label"))
+    ).toEqual(["Edit name for Head Layout Artist"])
   })
 })
 

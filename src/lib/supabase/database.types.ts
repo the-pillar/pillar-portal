@@ -211,6 +211,7 @@ export type Database = {
           deactivated_at: string | null
           declined_at: string | null
           email: string
+          google_name: string | null
           id: string
           name: string
           role: Database["public"]["Enums"]["member_role"]
@@ -223,6 +224,7 @@ export type Database = {
           deactivated_at?: string | null
           declined_at?: string | null
           email: string
+          google_name?: string | null
           id: string
           name: string
           role?: Database["public"]["Enums"]["member_role"]
@@ -235,6 +237,7 @@ export type Database = {
           deactivated_at?: string | null
           declined_at?: string | null
           email?: string
+          google_name?: string | null
           id?: string
           name?: string
           role?: Database["public"]["Enums"]["member_role"]
@@ -539,6 +542,13 @@ export type Database = {
       }
       health_check: { Args: never; Returns: boolean }
       mark_done: { Args: { task_id: string }; Returns: undefined }
+      member_capabilities: {
+        Args: { ids: string[] }
+        Returns: {
+          can_rename: boolean
+          member_id: string
+        }[]
+      }
       member_open_slot_counts: {
         Args: never
         Returns: {
@@ -601,6 +611,10 @@ export type Database = {
       send_back_task: {
         Args: { note: string; task_id: string }
         Returns: undefined
+      }
+      set_member_name: {
+        Args: { member_id: string; name: string }
+        Returns: string
       }
       task_capabilities: {
         Args: { ids: string[] }

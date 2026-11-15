@@ -90,3 +90,11 @@ authenticated public.update_task(uuid, text, text, timestamp with time zone, tex
 # listed above)
 authenticated public.reassign_slot(uuid, uuid, timestamp with time zone)
 authenticated public.member_open_slot_counts()
+
+# members_display_names: an admin renames a pending or active member
+# (private.can_rename_member is called by both the command and
+# member_capabilities, which runs with the caller's rights;
+# private.clean_name has no grant: only definer functions call it)
+authenticated private.can_rename_member(uuid)
+authenticated public.set_member_name(uuid, text)
+authenticated public.member_capabilities(uuid[])

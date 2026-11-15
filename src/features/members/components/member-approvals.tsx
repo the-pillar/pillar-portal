@@ -1,4 +1,5 @@
 import type { MemberApprovalsData } from "../queries"
+import { MemberNameEditor } from "./member-name-editor"
 import { PendingMemberCard } from "./pending-member-card"
 
 const AWAITING_HEADING_ID = "awaiting-approval-heading"
@@ -6,8 +7,9 @@ const ACTIVE_HEADING_ID = "active-members-heading"
 
 /**
  * /admin/members' two lists (Story 2.2): "Awaiting approval", one card per
- * pending member, oldest first, and the read-only "Active members" roster by
- * name, each with their positions, the primary first (Epic 5 adds changes).
+ * pending member, oldest first, and the "Active members" roster by name,
+ * each with their positions, the primary first, and Edit name where
+ * `member_capabilities` offers it (Story 8.2; Epic 5 adds position changes).
  * An approved or declined member leaves the first list, so the heading is
  * where focus goes then.
  */
@@ -56,7 +58,11 @@ export function MemberApprovals({
               key={member.id}
               className="flex flex-col gap-0.5 p-card-padding"
             >
-              <p className="font-medium break-words">{member.name}</p>
+              <MemberNameEditor
+                member={member}
+                as="p"
+                nameClassName="font-medium break-words"
+              />
               <p className="text-sm break-all text-muted-foreground">
                 {member.email}
               </p>

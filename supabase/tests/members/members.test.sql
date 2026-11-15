@@ -146,8 +146,8 @@ select pg_temp.new_auth_user(
 select results_eq(
   $$ select char_length(name), avatar_url from public.members
      where id = '00000000-0000-4000-8000-000000000013' $$,
-  $$ values (200, null::text) $$,
-  'the name is capped at 200 characters, and a non-http(s) avatar URL is dropped'
+  $$ values (100, null::text) $$,
+  'the name is capped at 100 characters, and a non-http(s) avatar URL is dropped'
 );
 
 select pg_temp.new_auth_user(

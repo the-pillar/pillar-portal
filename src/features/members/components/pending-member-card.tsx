@@ -36,6 +36,7 @@ import { approveMemberAction, declineMemberAction } from "../actions"
 import { memberErrorMessage } from "../errors"
 import type { PositionGroup } from "../position-groups"
 import type { PendingMember } from "../queries"
+import { MemberNameEditor } from "./member-name-editor"
 
 type DialogKind = "look-alike" | "decline"
 
@@ -185,7 +186,11 @@ export function PendingMemberCard({
 
   return (
     <li ref={rootRef} className="rounded-lg bg-card p-card-padding shadow-card">
-      <h3 className="font-semibold break-words">{member.name}</h3>
+      <MemberNameEditor
+        member={member}
+        as="h3"
+        nameClassName="font-semibold break-words"
+      />
       <p className="text-sm break-all text-muted-foreground">{member.email}</p>
       <p className="text-sm text-muted-foreground">
         Signed in{" "}
