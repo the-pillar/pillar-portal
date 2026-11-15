@@ -2,7 +2,7 @@ import { monthWeeks } from "@/lib/time"
 import { cn } from "@/lib/utils"
 
 import { tasksByDay } from "../planner"
-import type { TaskCardData } from "../queries/shared"
+import type { PlannerCard } from "../queries/planner"
 import { PlannerChip } from "./planner-chip"
 
 const WEEKDAYS = [
@@ -19,7 +19,9 @@ const WEEKDAYS = [
  * The Planner's month grid (`md` and up): a table labelled by the month
  * heading, weeks starting on Sunday, each task as a chip on its Manila due
  * date, every chip shown (no "+n more"). Days outside the month are blank
- * cells. Today's cell is `aria-current="date"` with a 2px inset navy ring.
+ * cells in the page color. Each day is a white cell at least 112px tall that
+ * grows to fit its chips; today's cell is `aria-current="date"` and its number
+ * sits on a filled navy circle.
  * The layout is fixed, so a long title truncates instead of widening its
  * column. No directive and no members imports.
  */
@@ -34,7 +36,7 @@ export function PlannerGrid({
   /** Today's Manila date, `YYYY-MM-DD`. */
   today: string
   /** The month's tasks, ordered by due date then id. */
-  tasks: TaskCardData[]
+  tasks: PlannerCard[]
   /** The id of the heading that names the month. */
   labelledBy: string
 }) {
@@ -65,7 +67,7 @@ export function PlannerGrid({
             {week.map((day, index) => {
               if (day === null) {
                 return (
-                  <td key={`blank-${index}`} className="border bg-muted/50" />
+                  <td key={`blank-${index}`} className="border bg-background" />
                 )
               }
               const isToday = day === today
@@ -74,16 +76,13 @@ export function PlannerGrid({
                 <td
                   key={day}
                   aria-current={isToday ? "date" : undefined}
-                  className={cn(
-                    "h-28 border p-1.5 align-top",
-                    isToday && "ring-2 ring-navy ring-inset"
-                  )}
+                  className="h-28 border bg-card p-1.5 align-top"
                 >
                   <time
                     dateTime={day}
                     className={cn(
-                      "block px-1 text-xs font-semibold text-muted-foreground",
-                      isToday && "text-navy"
+                      "flex size-6 items-center justify-center rounded-full text-xs font-semibold text-muted-foreground",
+                      isToday && "bg-navy text-white"
                     )}
                   >
                     {Number(day.slice(8))}

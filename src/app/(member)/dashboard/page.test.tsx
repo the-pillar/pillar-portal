@@ -13,13 +13,9 @@ const { BoardView, PlannerView, WhatsMineView, requireActiveMember } =
     BoardView: vi.fn(({ viewerId }: { viewerId: string }) => (
       <p>board view, viewer={viewerId}</p>
     )),
-    PlannerView: vi.fn(
-      ({ month, scope }: { month: unknown; scope: unknown }) => (
-        <p>
-          planner view, month={String(month)}, scope={String(scope)}
-        </p>
-      )
-    ),
+    PlannerView: vi.fn(({ month }: { month: unknown }) => (
+      <p>planner view, month={String(month)}</p>
+    )),
     WhatsMineView: vi.fn(() => <p>whats mine view</p>),
     requireActiveMember: vi.fn(),
   }))
@@ -112,16 +108,10 @@ describe("DashboardPage", () => {
     expect(PlannerView).not.toHaveBeenCalled()
   })
 
-  it("renders the Planner for ?view=planner, handing it the raw month and scope", async () => {
-    render(
-      await DashboardPage(
-        props({ view: "planner", month: "2026-11", scope: "home" })
-      )
-    )
+  it("renders the Planner for ?view=planner, handing it the raw month", async () => {
+    render(await DashboardPage(props({ view: "planner", month: "2026-11" })))
 
-    expect(
-      screen.getByText("planner view, month=2026-11, scope=home")
-    ).toBeInTheDocument()
+    expect(screen.getByText("planner view, month=2026-11")).toBeInTheDocument()
     expect(BoardView).not.toHaveBeenCalled()
     expect(WhatsMineView).not.toHaveBeenCalled()
   })
@@ -135,7 +125,6 @@ describe("DashboardPage", () => {
 
     expect(PlannerView.mock.calls[0][0]).toEqual({
       month: ["2026-11", "2026-12"],
-      scope: undefined,
     })
   })
 

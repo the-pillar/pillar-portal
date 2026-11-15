@@ -5,7 +5,8 @@ import { cleanup, render, screen } from "@testing-library/react"
 import axe from "axe-core"
 import { afterEach, describe, expect, it } from "vitest"
 
-import type { TaskCardData } from "../queries/shared"
+import type { PlannerCard } from "../queries/planner"
+import { plannerCard } from "./board-fixtures"
 import { PlannerChip } from "./planner-chip"
 
 afterEach(cleanup)
@@ -18,19 +19,8 @@ async function axeViolations(node: Element) {
   return results.violations
 }
 
-const TASK: TaskCardData = {
-  id: "00000000-0000-4000-8000-000000000031",
-  title: "Masthead brief",
-  ownerName: "Layout",
-  // Sat, Oct 10 2026, 5:00 PM in Manila.
-  dueAt: "2026-10-10T09:00:00+00:00",
-  column: "to_do",
-  overdue: false,
-  sentBack: false,
-  hasAwaitingResponse: false,
-  hasNeedsReassignment: false,
-  assignees: [],
-}
+// Sat, Oct 10 2026, 5:00 PM in Manila.
+const TASK: PlannerCard = plannerCard({ title: "Masthead brief" })
 
 const glyphOf = (link: HTMLElement) => link.querySelector("svg")
 
@@ -39,17 +29,21 @@ describe("PlannerChip", () => {
     render(<PlannerChip task={TASK} />)
 
     const link = screen.getByRole("link", {
-      name: "Masthead brief, To Do, due Sat, Oct 10 at 5:00 PM",
+      name: "Layout: Masthead brief, To Do, due Sat, Oct 10, 5:00 PM",
     })
     expect(link).toHaveAttribute("href", `/dashboard/tasks/${TASK.id}`)
     expect(link.tagName).toBe("A")
-    // A card pill with the card shadow, at least 28px tall.
+    // A white card with the card shadow, at least 24px tall, in the owner's
+    // color on a 3px left stripe.
     expect(link).toHaveClass(
       "bg-card",
       "shadow-card",
-      "rounded-full",
-      "min-h-7"
+      "rounded-xs",
+      "min-h-6",
+      "border-l-[3px]",
+      "border-l-(--owner)"
     )
+    expect(link).toHaveAttribute("data-owner", "layout")
   })
 
   it("shows the title truncated to one line after the glyph", () => {
@@ -99,7 +93,7 @@ describe("PlannerChip", () => {
       "doing",
       false,
       true,
-      "lucide-circle-arrow-left",
+      "lucide-circle-alert",
       "text-status-attention",
       "Sent back",
     ],
@@ -117,7 +111,7 @@ describe("PlannerChip", () => {
       render(<PlannerChip task={{ ...TASK, column, overdue, sentBack }} />)
 
       const link = screen.getByRole("link", {
-        name: `Masthead brief, ${status}, due Sat, Oct 10 at 5:00 PM`,
+        name: `Layout: Masthead brief, ${status}, due Sat, Oct 10, 5:00 PM`,
       })
       const svg = glyphOf(link)
       expect(svg).toHaveClass(glyph, color, "size-3")
@@ -125,11 +119,36 @@ describe("PlannerChip", () => {
     }
   )
 
+  it("fills a chip where I hold an open slot with navy-tint and a semibold title", () => {
+    const { rerender } = render(<PlannerChip task={TASK} />)
+    expect(screen.getByRole("link")).toHaveClass("bg-card")
+    expect(screen.getByRole("link")).not.toHaveClass("bg-navy-tint")
+    expect(screen.getByText("Masthead brief")).not.toHaveClass("font-semibold")
+
+    rerender(<PlannerChip task={{ ...TASK, yours: true }} />)
+
+    expect(screen.getByRole("link")).toHaveClass("bg-navy-tint")
+    expect(screen.getByText("Masthead brief")).toHaveClass("font-semibold")
+  })
+
+  it("is a full-width 44px row with a muted owner prefix in the row variant", () => {
+    render(<PlannerChip task={TASK} variant="row" />)
+
+    const link = screen.getByRole("link", {
+      name: "Layout: Masthead brief, To Do, due Sat, Oct 10, 5:00 PM",
+    })
+    expect(link).toHaveClass("min-h-11", "w-full")
+    expect(screen.getByText("Layout ·")).toHaveClass("text-muted-foreground")
+  })
+
   it("has no axe violations", async () => {
     const { container } = render(
       <ul>
         <li>
           <PlannerChip task={TASK} />
+        </li>
+        <li>
+          <PlannerChip task={{ ...TASK, id: "z", yours: true }} variant="row" />
         </li>
         <li>
           <PlannerChip task={{ ...TASK, id: "x", overdue: true }} />

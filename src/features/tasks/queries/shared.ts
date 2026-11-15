@@ -5,7 +5,7 @@ import { z } from "zod"
 import { initialsOf, WRITERS_DESK_ID } from "@/features/members"
 import type { createClient } from "@/lib/supabase/server"
 
-import type { OwnerFilter, TaskOwnerOption } from "../board"
+import type { TaskOwnerOption } from "../board"
 import { isTaskOverdue, type SlotState, type TaskColumn } from "../status"
 
 // What more than one view's reads share. index.ts exports only the card types
@@ -30,6 +30,9 @@ export function ownerOptions(
       .map((desk) => ({ kind: "desk" as const, id: desk.id, name: desk.name })),
   ]
 }
+
+/** PostgREST's `max_rows` (supabase/config.toml): a read that returns this many may be cut short. */
+export const MAX_ROWS = 1000
 
 export const FORMER_MEMBER = "Former member"
 
@@ -177,27 +180,4 @@ export function taskCardsQuery(supabase: ServerClient) {
     .order("id")
     .order("created_at", { referencedTable: "task_assignments" })
     .order("id", { referencedTable: "task_assignments" })
-}
-
-type TaskCardsQuery = ReturnType<typeof taskCardsQuery>
-
-/**
- * Narrows a card query to the tasks an owner filter names. `mine` is decided
- * by the viewer's open slots, never by a column of `tasks`, so only the Board
- * (which filters in the client) uses it and this takes the owner kinds only.
- */
-export function withOwnerFilter(
-  query: TaskCardsQuery,
-  filter: Exclude<OwnerFilter, { kind: "mine" }>
-): TaskCardsQuery {
-  switch (filter.kind) {
-    case "section":
-      return query.eq("owning_section_id", filter.id)
-    case "desk":
-      return query.eq("owning_desk_id", filter.id)
-    case "articles":
-      return query.not("owning_section_id", "is", null)
-    case "all":
-      return query
-  }
 }

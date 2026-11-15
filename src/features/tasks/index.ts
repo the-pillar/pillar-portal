@@ -55,7 +55,7 @@ export { HandedBackQueue } from "./components/handed-back-queue"
 export { PlannerChip } from "./components/planner-chip"
 export { PlannerDayList } from "./components/planner-day-list"
 export { PlannerGrid } from "./components/planner-grid"
-export { PlannerScopeToggle } from "./components/planner-scope-toggle"
+export { TaskPlanner } from "./components/task-planner"
 export { ReviewQueue } from "./components/review-queue"
 export { TaskBoard } from "./components/task-board"
 export { TaskChangesRefresher } from "./components/task-changes-refresher"
@@ -67,14 +67,15 @@ export { TASK_ERROR_COPY, taskErrorMessage } from "./errors"
 export type { TaskErrorCode } from "./errors"
 export {
   deadlineCount,
-  parseIncludeScope,
+  parsePlannerFilter,
   plannerChipLabel,
   plannerChipStatus,
+  plannerEmptyMessage,
+  plannerFilterChips,
   plannerHref,
-  plannerScopeLabel,
   tasksByDay,
 } from "./planner"
-export type { PlannerChipStatusKind, PlannerScope } from "./planner"
+export type { PlannerChipStatusKind } from "./planner"
 export { getBoard, getBoardOwners } from "./queries/board"
 export type { BoardCard } from "./queries/board"
 export { getTaskForCalendar } from "./queries/calendar"
@@ -85,6 +86,7 @@ export {
 } from "./queries/handed-back"
 export type { HandedBackSlot } from "./queries/handed-back"
 export { getPlanner } from "./queries/planner"
+export type { PlannerCard } from "./queries/planner"
 export { getReassignOptions } from "./queries/reassign"
 export type { ReassignOptions } from "./queries/reassign"
 export {

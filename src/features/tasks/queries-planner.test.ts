@@ -39,6 +39,8 @@ const task = (
   revision_note_at: null,
   sections: null,
   desks: { name: "Layout" },
+  owning_section_id: null,
+  owning_desk_id: "layout",
   task_assignments: [{ member_id: ME, state: "on_it" }],
   ...extra,
 })
@@ -46,19 +48,15 @@ const task = (
 type Fixture = {
   openSlots?: unknown[]
   openError?: unknown
-  /**
-   * The rows each tasks query returns, in the order the queries are built:
-   * the scope's first (it starts alongside my_open_slots), then mine.
-   */
-  taskRows?: unknown[][]
-  taskErrors?: unknown[]
+  taskRows?: unknown[]
+  taskError?: unknown
   directoryError?: unknown
 }
 
-// Every tasks query records its builder calls separately, so a test can tell
-// the viewer's own read from the scope's.
+// The tasks query and the directory read record their builder calls, so a
+// test can see exactly what was asked.
 function mockPlanner(fixture: Fixture = {}) {
-  const taskQueries: Call[][] = []
+  const taskCalls: Call[] = []
   const directoryCalls: Call[] = []
   const rpc = vi.fn(async (name: string) => {
     expect(name).toBe("my_open_slots")
@@ -66,14 +64,13 @@ function mockPlanner(fixture: Fixture = {}) {
       data: fixture.openSlots ?? [
         { id: "s1", task_id: T1, state: "awaiting_response" },
         { id: "s2", task_id: T1, state: "on_it" },
-        { id: "s3", task_id: T2, state: "on_it" },
       ],
       error: fixture.openError ?? null,
     }
   })
   const recorder = (calls: Call[], result: () => unknown) => {
     const builder: Record<string, unknown> = {}
-    for (const method of ["select", "order", "eq", "not", "in", "gte", "lt"]) {
+    for (const method of ["select", "order", "gte", "lt"]) {
       builder[method] = (...args: unknown[]) => {
         calls.push({ method, args })
         return builder
@@ -84,12 +81,9 @@ function mockPlanner(fixture: Fixture = {}) {
   }
   const from = vi.fn((table: string) => {
     if (table === "tasks") {
-      const index = taskQueries.length
-      const calls: Call[] = []
-      taskQueries.push(calls)
-      return recorder(calls, () => ({
-        data: fixture.taskRows?.[index] ?? [],
-        error: fixture.taskErrors?.[index] ?? null,
+      return recorder(taskCalls, () => ({
+        data: fixture.taskRows ?? [],
+        error: fixture.taskError ?? null,
       }))
     }
     if (table === "member_directory") {
@@ -104,39 +98,26 @@ function mockPlanner(fixture: Fixture = {}) {
     throw new Error(`unexpected table: ${table}`)
   })
   createClient.mockResolvedValue({ from, rpc })
-  return { taskQueries, directoryCalls, rpc, from }
+  return { taskCalls, directoryCalls, rpc, from }
 }
 
 const callsOf = (calls: Call[], ...methods: string[]) =>
   calls.filter((call) => methods.includes(call.method))
 
 describe("getPlanner", () => {
-  it("reads only the month's window, from Manila midnight on the 1st to the next 1st", async () => {
-    const { taskQueries } = mockPlanner()
+  it("reads one unfiltered month, from Manila midnight on the 1st to the next 1st, with the Board's select and ordering", async () => {
+    const { taskCalls, from } = mockPlanner()
 
-    await getPlanner("2026-10", { kind: "desk", id: "layout" })
+    await getPlanner("2026-10")
 
-    expect(taskQueries).toHaveLength(2)
-    for (const calls of taskQueries) {
-      expect(callsOf(calls, "gte", "lt")).toEqual([
-        { method: "gte", args: ["due_at", "2026-09-30T16:00:00.000Z"] },
-        { method: "lt", args: ["due_at", "2026-10-31T16:00:00.000Z"] },
-      ])
-    }
-  })
-
-  it("reads my tasks by the distinct ids my_open_slots gives, with the Board's select and ordering", async () => {
-    const { taskQueries, rpc } = mockPlanner()
-
-    await getPlanner("2026-10", null)
-
-    expect(rpc).toHaveBeenCalledWith("my_open_slots")
-    expect(taskQueries).toHaveLength(1)
-    const [mine] = taskQueries
-    expect(callsOf(mine, "in")).toEqual([
-      { method: "in", args: ["id", [T1, T2]] },
+    expect(from.mock.calls.filter(([table]) => table === "tasks")).toHaveLength(
+      1
+    )
+    expect(callsOf(taskCalls, "gte", "lt")).toEqual([
+      { method: "gte", args: ["due_at", "2026-09-30T16:00:00.000Z"] },
+      { method: "lt", args: ["due_at", "2026-10-31T16:00:00.000Z"] },
     ])
-    expect(callsOf(mine, "select")).toEqual([
+    expect(callsOf(taskCalls, "select")).toEqual([
       {
         method: "select",
         args: [
@@ -144,7 +125,7 @@ describe("getPlanner", () => {
         ],
       },
     ])
-    expect(callsOf(mine, "order")).toEqual([
+    expect(callsOf(taskCalls, "order")).toEqual([
       { method: "order", args: ["due_at"] },
       { method: "order", args: ["id"] },
       {
@@ -156,97 +137,70 @@ describe("getPlanner", () => {
         args: ["id", { referencedTable: "task_assignments" }],
       },
     ])
-    expect(callsOf(mine, "eq", "not")).toEqual([])
   })
 
-  it("returns [] with no further query when I hold no open slot and there is no scope", async () => {
-    const { taskQueries, directoryCalls } = mockPlanner({ openSlots: [] })
+  it("returns [] with no further query when the month has no tasks", async () => {
+    const { directoryCalls, rpc } = mockPlanner({ taskRows: [] })
 
-    await expect(getPlanner("2026-10", null)).resolves.toEqual([])
-    expect(taskQueries).toEqual([])
+    await expect(getPlanner("2026-10")).resolves.toEqual([])
+    expect(rpc).not.toHaveBeenCalled()
     expect(directoryCalls).toEqual([])
   })
 
-  it("reads only the scope when I hold no open slot", async () => {
-    const { taskQueries } = mockPlanner({
-      openSlots: [],
-      taskRows: [[task(T3, "2026-10-20T09:00:00+00:00", { column: "done" })]],
-    })
-
-    const cards = await getPlanner("2026-10", { kind: "desk", id: "layout" })
-
-    expect(taskQueries).toHaveLength(1)
-    expect(callsOf(taskQueries[0], "in")).toEqual([])
-    expect(callsOf(taskQueries[0], "eq")).toEqual([
-      { method: "eq", args: ["owning_desk_id", "layout"] },
-    ])
-    // Done included: the scope isn't filtered by column.
-    expect(cards.map((card) => [card.id, card.column])).toEqual([[T3, "done"]])
-  })
-
-  it.each([
-    [
-      { kind: "section", id: "feature" } as const,
-      [{ method: "eq", args: ["owning_section_id", "feature"] }],
-    ],
-    [
-      { kind: "desk", id: "layout" } as const,
-      [{ method: "eq", args: ["owning_desk_id", "layout"] }],
-    ],
-    [
-      { kind: "articles" } as const,
-      [{ method: "not", args: ["owning_section_id", "is", null] }],
-    ],
-  ])(
-    "filters the scope %j with the Board's owner filter",
-    async (scope, expected) => {
-      const { taskQueries } = mockPlanner()
-
-      await getPlanner("2026-10", scope)
-
-      const [scoped, mine] = taskQueries
-      expect(callsOf(mine, "eq", "not")).toEqual([])
-      expect(callsOf(scoped, "eq", "not")).toEqual(expected)
-      expect(callsOf(scoped, "in")).toEqual([])
-    }
-  )
-
-  it("shows a task that is both mine and in scope once, ordered by due date then id", async () => {
-    const shared = task(T2, "2026-10-10T09:00:00+00:00")
-    mockPlanner({
+  it("keeps every task, Done included, marks yours from my_open_slots, and orders by due date then id", async () => {
+    const { rpc } = mockPlanner({
       taskRows: [
-        [task(T1, "2026-10-20T09:00:00+00:00"), shared],
-        [shared, task(T3, "2026-10-10T09:00:00+00:00")],
+        task(T1, "2026-10-20T09:00:00+00:00"),
+        task(T3, "2026-10-10T09:00:00+00:00", { column: "done" }),
+        task(T2, "2026-10-10T09:00:00+00:00", {
+          owning_section_id: "news",
+          owning_desk_id: null,
+          sections: { name: "News" },
+          desks: null,
+        }),
       ],
     })
 
-    const cards = await getPlanner("2026-10", { kind: "desk", id: "layout" })
+    const cards = await getPlanner("2026-10")
 
+    expect(rpc).toHaveBeenCalledWith("my_open_slots")
     // T2 and T3 share a due time, so the id breaks the tie.
-    expect(cards.map((card) => card.id)).toEqual([T2, T3, T1])
+    expect(
+      cards.map((card) => [
+        card.id,
+        card.column,
+        card.yours,
+        card.ownerKind,
+        card.ownerId,
+      ])
+    ).toEqual([
+      [T2, "to_do", false, "section", "news"],
+      [T3, "done", false, "desk", "layout"],
+      [T1, "to_do", true, "desk", "layout"],
+    ])
   })
 
   it("builds task cards with names from the whole member_directory", async () => {
     const { directoryCalls } = mockPlanner({
       taskRows: [
-        [
-          task(T1, "2026-10-01T00:00:00+00:00", {
-            title: "Masthead brief",
-            column: "doing",
-            revision_note_at: "2026-09-30T00:00:00+00:00",
-            sections: { name: "News" },
-            desks: null,
-            task_assignments: [
-              { member_id: ME, state: "on_it" },
-              { member_id: OTHER, state: "awaiting_response" },
-              { member_id: "gone", state: "needs_reassignment" },
-            ],
-          }),
-        ],
+        task(T1, "2026-10-01T00:00:00+00:00", {
+          title: "Masthead brief",
+          column: "doing",
+          revision_note_at: "2026-09-30T00:00:00+00:00",
+          sections: { name: "News" },
+          desks: null,
+          owning_section_id: "news",
+          owning_desk_id: null,
+          task_assignments: [
+            { member_id: ME, state: "on_it" },
+            { member_id: OTHER, state: "awaiting_response" },
+            { member_id: "gone", state: "needs_reassignment" },
+          ],
+        }),
       ],
     })
 
-    const cards = await getPlanner("2026-10", null)
+    const cards = await getPlanner("2026-10")
 
     expect(directoryCalls).toEqual([{ method: "select", args: ["id, name"] }])
     expect(cards).toEqual([
@@ -260,7 +214,9 @@ describe("getPlanner", () => {
         sentBack: true,
         hasAwaitingResponse: true,
         hasNeedsReassignment: true,
-        ownerId: "",
+        ownerId: "news",
+        ownerKind: "section",
+        yours: true,
         doneAt: null,
         assignees: [
           { id: ME, name: "Sam Layout", initials: "SL", handedBack: false },
@@ -282,32 +238,39 @@ describe("getPlanner", () => {
     ])
   })
 
-  it("reads no directory when the month has no tasks", async () => {
-    const { taskQueries, directoryCalls } = mockPlanner({ taskRows: [[], []] })
+  it("throws when the read returns max_rows rows, which may be cut short", async () => {
+    mockPlanner({
+      taskRows: Array.from({ length: 1000 }, (_, n) =>
+        task(`id-${n}`, "2026-10-10T09:00:00+00:00")
+      ),
+    })
 
-    await expect(getPlanner("2026-10", { kind: "articles" })).resolves.toEqual(
-      []
+    await expect(getPlanner("2026-10")).rejects.toThrow(
+      "getPlanner: the month reached PostgREST's max_rows"
     )
-    expect(taskQueries).toHaveLength(2)
-    expect(directoryCalls).toEqual([])
   })
 
   it.each([
-    ["my_open_slots", { openError: { message: "x" } }],
-    ["my tasks", { taskErrors: [null, { message: "x" }] }],
-    ["the scope's tasks", { taskErrors: [{ message: "x" }] }],
+    ["tasks", { taskError: { message: "x" } }],
+    [
+      "my_open_slots",
+      {
+        taskRows: [task(T1, "2026-10-01T00:00:00+00:00")],
+        openError: { message: "x" },
+      },
+    ],
     [
       "member_directory",
       {
-        taskRows: [[task(T1, "2026-10-01T00:00:00+00:00")]],
+        taskRows: [task(T1, "2026-10-01T00:00:00+00:00")],
         directoryError: { message: "x" },
       },
     ],
   ])("throws when reading %s fails", async (name, fixture) => {
     mockPlanner(fixture)
 
-    await expect(
-      getPlanner("2026-10", { kind: "desk", id: "layout" })
-    ).rejects.toThrow(`getPlanner: reading ${name} failed`)
+    await expect(getPlanner("2026-10")).rejects.toThrow(
+      `getPlanner: reading ${name} failed`
+    )
   })
 })

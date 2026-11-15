@@ -10,6 +10,7 @@ import {
   taskCardsQuery,
   toTaskCard,
   FORMER_MEMBER,
+  MAX_ROWS,
   type TaskCardData,
 } from "./shared"
 
@@ -38,9 +39,6 @@ export async function getBoardOwners(): Promise<TaskOwnerOption[]> {
 
   return ownerOptions(sectionsResult.data ?? [], desksResult.data ?? [])
 }
-
-/** PostgREST's `max_rows` (supabase/config.toml): a read that returns this many may be cut short. */
-export const BOARD_MAX_ROWS = 1000
 
 export type BoardCard = TaskCardData & {
   ownerId: string
@@ -97,7 +95,7 @@ export async function getBoard(): Promise<BoardCard[]> {
     })
   }
   const tasks = tasksResult.data ?? []
-  if (tasks.length >= BOARD_MAX_ROWS) {
+  if (tasks.length >= MAX_ROWS) {
     throw new Error("getBoard: the window reached PostgREST's max_rows")
   }
   if (tasks.length === 0) return []
