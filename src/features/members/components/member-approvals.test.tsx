@@ -26,7 +26,9 @@ vi.mock("../actions", () => ({
   renameMemberAction: vi.fn(),
 }))
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }))
-vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }))
+vi.mock("@/components/ui/toast", () => ({
+  toast: { error: vi.fn(), success: vi.fn() },
+}))
 
 afterEach(() => {
   cleanup()

@@ -29,7 +29,7 @@ const { reassignSlotAction, refresh, toastSuccess, toastError } = vi.hoisted(
 
 vi.mock("../actions", () => ({ reassignSlotAction }))
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }))
-vi.mock("sonner", () => ({
+vi.mock("@/components/ui/toast", () => ({
   toast: { success: toastSuccess, error: toastError },
 }))
 vi.mock("@/lib/env.client", () => ({

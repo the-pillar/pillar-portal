@@ -13,7 +13,7 @@ import {
 import { requireAdmin } from "../../require-admin"
 
 export const metadata: Metadata = {
-  title: "Tasks · The Pillar Portal",
+  title: "Tasks",
 }
 
 const HEADING_ID = "admin-tasks-heading"

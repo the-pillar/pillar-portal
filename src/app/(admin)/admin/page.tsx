@@ -7,7 +7,7 @@ import { ADMIN_HOME_COUNTS, type AdminHomeCount } from "./admin-home-counts"
 import { AdminHomeSkeleton } from "./admin-home-skeleton"
 
 export const metadata: Metadata = {
-  title: "Admin home · The Pillar Portal",
+  title: "Admin home",
 }
 
 // Admin home (Story 2.3): what needs an admin right now, one card per count.

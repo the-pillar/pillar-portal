@@ -68,14 +68,14 @@ const props = (search: Search) =>
 describe("generateMetadata", () => {
   it("titles the Board view", async () => {
     await expect(generateMetadata(props({ view: "board" }))).resolves.toEqual({
-      title: "Board · The Pillar Portal",
+      title: "Board",
     })
   })
 
   it("titles the Planner view", async () => {
     await expect(generateMetadata(props({ view: "planner" }))).resolves.toEqual(
       {
-        title: "Planner · The Pillar Portal",
+        title: "Planner",
       }
     )
   })
@@ -87,7 +87,7 @@ describe("generateMetadata", () => {
     ["a repeated planner view", { view: ["planner", "planner"] }],
   ])("titles What's mine for %s", async (_label, search) => {
     await expect(generateMetadata(props(search))).resolves.toEqual({
-      title: "What's mine · The Pillar Portal",
+      title: "What's mine",
     })
   })
 })

@@ -548,7 +548,7 @@ describe("getMemberApprovals", () => {
       },
       {
         id: "section_editors",
-        label: "Section Editors",
+        label: "Desk Editors",
         positions: [{ id: "news_editor", title: "News Editor" }],
       },
       {

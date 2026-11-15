@@ -24,7 +24,8 @@ export type ReassignList = {
   emptyDesk: boolean
 }
 
-export const REASSIGN_EMPTY_DESK = "No one on this desk yet — showing everyone."
+export const REASSIGN_EMPTY_DESK =
+  "No one in this section yet — showing everyone."
 
 function compareIds(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0

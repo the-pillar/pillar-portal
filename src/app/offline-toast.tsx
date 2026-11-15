@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef } from "react"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/toast"
 
 const OFFLINE_COPY = "You're offline. Changes won't save until you reconnect."
 

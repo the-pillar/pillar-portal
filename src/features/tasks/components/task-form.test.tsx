@@ -26,7 +26,7 @@ const {
   refresh,
   toastSuccess,
   toastError,
-  toastPlain,
+  toastNotice,
 } = vi.hoisted(() => ({
   createTaskAction: vi.fn(),
   updateTaskAction: vi.fn(),
@@ -34,17 +34,18 @@ const {
   refresh: vi.fn(),
   toastSuccess: vi.fn(),
   toastError: vi.fn(),
-  toastPlain: vi.fn(),
+  toastNotice: vi.fn(),
 }))
 
 vi.mock("../actions", () => ({ createTaskAction, updateTaskAction }))
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push, refresh }),
 }))
-vi.mock("sonner", () => ({
-  toast: Object.assign(toastPlain, {
+vi.mock("@/components/ui/toast", () => ({
+  toast: Object.assign(vi.fn(), {
     success: toastSuccess,
     error: toastError,
+    notice: toastNotice,
   }),
 }))
 // TaskForm imports PRODUCTION_ROLE_LABELS through @/features/members, whose
@@ -329,7 +330,7 @@ describe("TaskForm", () => {
     vi.stubGlobal("navigator", {})
     await toastSuccess.mock.calls[0][1].action.onClick()
     vi.unstubAllGlobals()
-    expect(toastPlain).toHaveBeenCalledWith(
+    expect(toastNotice).toHaveBeenCalledWith(
       "Copy this and paste it in Messenger.",
       expect.objectContaining({
         description: expect.stringContaining("/dashboard/tasks/task-1"),

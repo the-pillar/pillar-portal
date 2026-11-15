@@ -58,7 +58,7 @@ describe("boardEmptyMessage", () => {
 
   it("has its own copy for all articles", () => {
     expect(boardEmptyMessage({ kind: "articles" }, OWNERS)).toBe(
-      "No tasks in any section right now."
+      "No tasks in any desk right now."
     )
   })
 

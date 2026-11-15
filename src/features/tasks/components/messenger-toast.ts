@@ -1,4 +1,4 @@
-import { toast } from "sonner"
+import { toast } from "@/components/ui/toast"
 
 import { copyText, MESSENGER_COPIED, MESSENGER_HINT } from "../messenger"
 
@@ -14,12 +14,7 @@ export function copyForMessengerAction(text: string) {
       label: "Copy for Messenger",
       onClick: async () => {
         if (await copyText(text)) toast.success(MESSENGER_COPIED)
-        else
-          toast(MESSENGER_HINT, {
-            description: text,
-            duration: Infinity,
-            closeButton: true,
-          })
+        else toast.notice(MESSENGER_HINT, { description: text })
       },
     },
   }

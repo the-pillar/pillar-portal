@@ -111,7 +111,7 @@ afterEach(() => {
 
 describe("EditTaskPage", () => {
   it("is titled Edit task", () => {
-    expect(metadata.title).toBe("Edit task · The Pillar Portal")
+    expect(metadata.title).toBe("Edit task")
   })
 
   it("runs the admin check first, then reads the task and the form options together", async () => {

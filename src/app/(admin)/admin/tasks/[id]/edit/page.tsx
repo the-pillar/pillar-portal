@@ -12,7 +12,7 @@ import {
 import { requireAdmin } from "../../../../require-admin"
 
 export const metadata: Metadata = {
-  title: "Edit task · The Pillar Portal",
+  title: "Edit task",
 }
 
 // Edit task (spec-3-7): the task form in edit mode. The admin check comes

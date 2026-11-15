@@ -24,7 +24,9 @@ const { respondToSlotAction } = vi.hoisted(() => ({
 
 vi.mock("../actions", () => ({ respondToSlotAction }))
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }))
-vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }))
+vi.mock("@/components/ui/toast", () => ({
+  toast: { error: vi.fn(), success: vi.fn() },
+}))
 
 afterEach(() => {
   cleanup()

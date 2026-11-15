@@ -68,7 +68,7 @@ describe("BoardColumns", () => {
   it.each([
     [{ kind: "section", id: "news" } as const, "No tasks in News right now."],
     [{ kind: "desk", id: "photo" } as const, "No tasks in Photo right now."],
-    [{ kind: "articles" } as const, "No tasks in any section right now."],
+    [{ kind: "articles" } as const, "No tasks in any desk right now."],
   ])(
     "shows %j's empty line with a Show all link, and no columns",
     async (filter, message) => {

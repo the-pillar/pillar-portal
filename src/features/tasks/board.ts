@@ -66,7 +66,7 @@ export function boardEmptyMessage(
     case "all":
       return null
     case "articles":
-      return "No tasks in any section right now."
+      return "No tasks in any desk right now."
     case "section":
     case "desk": {
       const name =

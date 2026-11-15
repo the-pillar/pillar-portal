@@ -22,7 +22,7 @@ import {
   type DragOverEvent,
   type DragStartEvent,
 } from "@dnd-kit/core"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/toast"
 
 import { StatusDot } from "@/components/status-badge"
 import { useCommand } from "@/lib/use-command"

@@ -7,7 +7,7 @@ import axe from "axe-core"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 const { toast } = vi.hoisted(() => ({ toast: vi.fn() }))
-vi.mock("sonner", () => ({ toast }))
+vi.mock("@/components/ui/toast", () => ({ toast }))
 
 import { AddToCalendarMenu, TaskCardMenu } from "./calendar-menu"
 

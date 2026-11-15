@@ -11,7 +11,7 @@ const { toast } = vi.hoisted(() => ({
   toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }),
 }))
 
-vi.mock("sonner", () => ({ toast }))
+vi.mock("@/components/ui/toast", () => ({ toast }))
 
 import { OfflineToast } from "./offline-toast"
 
