@@ -35,6 +35,12 @@ const TASKS = [
     column: "doing",
     // Sent back, and not moved since.
     revision_note_at: "2025-12-30T00:00:00+00:00",
+    owning_section_id: "news",
+    owning_desk_id: null,
+    moved_at: "2026-01-01T00:00:00.123456+00:00",
+    moved_by: OTHER,
+    created_by: ME,
+    done_at: null,
     sections: { name: "News" },
     desks: null,
     task_assignments: [
@@ -49,6 +55,12 @@ const TASKS = [
     due_at: "2099-01-01T00:00:00+00:00",
     column: "to_do",
     revision_note_at: null,
+    owning_section_id: null,
+    owning_desk_id: "layout",
+    moved_at: "2026-01-02T00:00:00+00:00",
+    moved_by: null,
+    created_by: null,
+    done_at: null,
     sections: null,
     desks: { name: "Layout" },
     task_assignments: [{ member_id: "gone", state: "on_it" }],
@@ -62,14 +74,22 @@ type Fixture = {
   capabilitiesError?: unknown
   directory?: unknown
   directoryError?: unknown
+  open?: unknown
+  openError?: unknown
 }
 
 function mockBoard(fixture: Fixture = {}) {
   const taskCalls: Call[] = []
   const directoryCalls: Call[] = []
   const rpc = vi.fn(async (name: string, args: unknown) => {
-    expect(name).toBe("task_capabilities")
     void args
+    if (name === "my_open_slots") {
+      return {
+        data: fixture.open ?? [{ task_id: T1 }, { task_id: T1 }],
+        error: fixture.openError ?? null,
+      }
+    }
+    expect(name).toBe("task_capabilities")
     return {
       data: fixture.capabilities ?? [
         {
@@ -118,48 +138,33 @@ function mockBoard(fixture: Fixture = {}) {
 }
 
 describe("getBoard", () => {
-  it.each([
-    [
-      { kind: "section", id: "news" } as const,
-      "eq",
-      ["owning_section_id", "news"],
-    ],
-    [
-      { kind: "desk", id: "layout" } as const,
-      "eq",
-      ["owning_desk_id", "layout"],
-    ],
-    [{ kind: "articles" } as const, "not", ["owning_section_id", "is", null]],
-  ])("filters %j with .%s", async (filter, method, args) => {
+  it("reads the whole window unfiltered: no owner filter, Done only from the last 30 days", async () => {
+    vi.useFakeTimers({ now: new Date("2026-11-02T09:15:30.250Z") })
     const { taskCalls } = mockBoard()
 
-    await getBoard(filter)
+    await getBoard()
 
-    expect(taskCalls.filter((call) => call.method === method)).toEqual([
-      { method, args },
+    expect(
+      taskCalls.filter((call) => ["eq", "not", "or"].includes(call.method))
+    ).toEqual([
+      {
+        method: "or",
+        args: ["column.neq.done,done_at.gte.2026-10-03T09:15:30.250Z"],
+      },
     ])
   })
 
-  it.each([
-    { kind: "all" } as const,
-    { kind: "articles" } as const,
-    { kind: "desk", id: "layout" } as const,
-  ])(
-    "keeps every task that isn't Done and Done ones from the last 30 days, for %j",
-    async (filter) => {
-      vi.useFakeTimers({ now: new Date("2026-11-02T09:15:30.250Z") })
-      const { taskCalls } = mockBoard()
+  it("throws, rather than show a cut-short Board, when the read hits max_rows", async () => {
+    const task = TASKS[0]
+    mockBoard({
+      tasks: Array.from({ length: 1000 }, (_, n) => ({
+        ...task,
+        id: `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`,
+      })),
+    })
 
-      await getBoard(filter)
-
-      expect(taskCalls.filter((call) => call.method === "or")).toEqual([
-        {
-          method: "or",
-          args: ["column.neq.done,done_at.gte.2026-10-03T09:15:30.250Z"],
-        },
-      ])
-    }
-  )
+    await expect(getBoard()).rejects.toThrow("max_rows")
+  })
 
   it("dates the cutoff and each card's Overdue badge from the same now", async () => {
     // T1 is due Jan 1, 2026: overdue from the next instant on.
@@ -173,7 +178,7 @@ describe("getBoard", () => {
       return capabilities!(name, args)
     })
 
-    const [first] = await getBoard({ kind: "all" })
+    const [first] = await getBoard()
 
     expect(taskCalls.find((call) => call.method === "or")?.args).toEqual([
       "column.neq.done,done_at.gte.2025-12-02T00:00:00.000Z",
@@ -184,7 +189,7 @@ describe("getBoard", () => {
   it("applies no owner filter for All", async () => {
     const { taskCalls } = mockBoard()
 
-    await getBoard({ kind: "all" })
+    await getBoard()
 
     expect(
       taskCalls.filter((call) => call.method === "eq" || call.method === "not")
@@ -194,7 +199,7 @@ describe("getBoard", () => {
   it("orders tasks by due date then id, and embedded slots by created_at then id", async () => {
     const { taskCalls } = mockBoard()
 
-    await getBoard({ kind: "all" })
+    await getBoard()
 
     expect(taskCalls.filter((call) => call.method === "order")).toEqual([
       { method: "order", args: ["due_at"] },
@@ -213,7 +218,7 @@ describe("getBoard", () => {
   it("returns [] with no further query when no task matches", async () => {
     const { rpc, directoryCalls } = mockBoard({ tasks: [] })
 
-    await expect(getBoard({ kind: "all" })).resolves.toEqual([])
+    await expect(getBoard()).resolves.toEqual([])
     expect(rpc).not.toHaveBeenCalled()
     expect(directoryCalls).toEqual([])
   })
@@ -221,7 +226,7 @@ describe("getBoard", () => {
   it("builds cards with moves from task_capabilities and nothing else", async () => {
     const { rpc, directoryCalls } = mockBoard()
 
-    const cards = await getBoard({ kind: "all" })
+    const cards = await getBoard()
 
     expect(rpc).toHaveBeenCalledWith("task_capabilities", { ids: [T1, T2] })
     // The whole directory, never an .in() list of ids that could outgrow a URL.
@@ -237,6 +242,15 @@ describe("getBoard", () => {
         sentBack: true,
         hasAwaitingResponse: true,
         hasNeedsReassignment: true,
+        ownerId: "news",
+        ownerKind: "section",
+        yours: true,
+        // The version exactly as PostgREST wrote it, microseconds and all.
+        movedAt: "2026-01-01T00:00:00.123456+00:00",
+        movedBy: OTHER,
+        movedByName: "Olive Writer",
+        createdBy: ME,
+        doneAt: null,
         assignees: [
           // On it on one slot and handed back on the other: not marked.
           { id: ME, name: "Sam Layout", initials: "SL", handedBack: false },
@@ -260,6 +274,14 @@ describe("getBoard", () => {
         sentBack: false,
         hasAwaitingResponse: false,
         hasNeedsReassignment: false,
+        ownerId: "layout",
+        ownerKind: "desk",
+        yours: false,
+        movedAt: "2026-01-02T00:00:00+00:00",
+        movedBy: null,
+        movedByName: null,
+        createdBy: null,
+        doneAt: null,
         assignees: [
           {
             id: "gone",
@@ -298,7 +320,7 @@ describe("getBoard", () => {
         ],
       })
 
-      const [first] = await getBoard({ kind: "all" })
+      const [first] = await getBoard()
 
       expect(first?.moves).toEqual(moves)
     }
@@ -327,7 +349,7 @@ describe("getBoard", () => {
       ],
     })
 
-    const cards = await getBoard({ kind: "all" })
+    const cards = await getBoard()
 
     expect(cards.map((card) => card.moves)).toEqual([["to_do", "doing"], []])
   })
@@ -335,21 +357,24 @@ describe("getBoard", () => {
   it("reads task_capabilities once for the whole Board", async () => {
     const { rpc } = mockBoard()
 
-    await getBoard({ kind: "all" })
+    await getBoard()
 
-    expect(rpc).toHaveBeenCalledOnce()
+    // Once each: task_capabilities and my_open_slots.
+    expect(rpc.mock.calls.map(([name]) => name).sort()).toEqual([
+      "my_open_slots",
+      "task_capabilities",
+    ])
   })
 
   it.each([
     ["tasks", { tasksError: { message: "x" } }],
     ["task_capabilities", { capabilitiesError: { message: "x" } }],
+    ["my_open_slots", { openError: { message: "x" } }],
     ["member_directory", { directoryError: { message: "x" } }],
   ])("throws when reading %s fails", async (name, fixture) => {
     mockBoard(fixture)
 
-    await expect(getBoard({ kind: "all" })).rejects.toThrow(
-      `getBoard: reading ${name} failed`
-    )
+    await expect(getBoard()).rejects.toThrow(`getBoard: reading ${name} failed`)
   })
 })
 

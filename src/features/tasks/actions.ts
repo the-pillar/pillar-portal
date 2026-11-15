@@ -23,47 +23,47 @@ import {
 import type { SlotState, TaskColumn } from "./status"
 
 // AD-3's result shape, shared by every action in the slice.
-type ActionError = { ok: false; code: TaskErrorCode; params?: Record<string, unknown> }
+type ActionError = {
+  ok: false
+  code: TaskErrorCode
+  params?: Record<string, unknown>
+}
 
 export type CreateTaskState = { ok: true; data: { id: string } } | ActionError
 
 export type RespondToSlotState =
-  | { ok: true; data: { state: SlotState } }
-  | ActionError
+  { ok: true; data: { state: SlotState } } | ActionError
 
 export type HandBackSlotState =
-  | { ok: true; data: { state: "needs_reassignment" } }
-  | ActionError
+  { ok: true; data: { state: "needs_reassignment" } } | ActionError
 
+/**
+ * `movedAt`: the version move_task returned, exactly as PostgREST wrote it,
+ * which the next move of the card (Undo) passes back.
+ */
 export type MoveTaskState =
-  | { ok: true; data: { column: TaskColumn } }
-  | ActionError
+  { ok: true; data: { column: TaskColumn; movedAt: string } } | ActionError
 
 export type MarkDoneState = { ok: true; data: { column: "done" } } | ActionError
 
 export type SendBackTaskState =
-  | { ok: true; data: { column: "doing" } }
-  | ActionError
+  { ok: true; data: { column: "doing" } } | ActionError
 
 export type ReopenTaskState =
-  | { ok: true; data: { column: "doing" } }
-  | ActionError
+  { ok: true; data: { column: "doing" } } | ActionError
 
 export type DeleteTaskState =
-  | { ok: true; data: { taskId: string } }
-  | ActionError
+  { ok: true; data: { taskId: string } } | ActionError
 
 /**
  * `newAssignee`: update_task's answer, true when any slot got a new member
  * (reassigned or added), so the form offers Copy for Messenger.
  */
 export type UpdateTaskState =
-  | { ok: true; data: { taskId: string; newAssignee: boolean } }
-  | ActionError
+  { ok: true; data: { taskId: string; newAssignee: boolean } } | ActionError
 
 export type ReassignSlotState =
-  | { ok: true; data: { slotId: string } }
-  | ActionError
+  { ok: true; data: { slotId: string } } | ActionError
 
 // The codes each command raises as `raise exception ... message = '<code>'`
 // and the UI has copy for. Any other message — a code the UI never expects
@@ -81,6 +81,37 @@ const COMMAND_ERROR_CODES: ReadonlySet<TaskErrorCode> = new Set([
   "tasks.not_found",
   "tasks.not_allowed",
 ])
+
+// move_task adds tasks.stale: the card's version is not the one the caller
+// holds, its detail naming the column it is in and who moved it.
+const MOVE_ERROR_CODES: ReadonlySet<TaskErrorCode> = new Set([
+  ...COMMAND_ERROR_CODES,
+  "tasks.stale",
+])
+
+/**
+ * The params of a tasks.stale from move_task: its `details` is the JSON the
+ * command built ('column', 'moved_by', 'moved_by_name'). Anything else, or
+ * unreadable JSON, gives none and the generic stale copy.
+ */
+function staleMoveParams(
+  details: unknown
+): Record<string, unknown> | undefined {
+  if (typeof details !== "string") return undefined
+  try {
+    const parsed: unknown = JSON.parse(details)
+    if (typeof parsed !== "object" || parsed === null) return undefined
+    const { column, moved_by_name } = parsed as Record<string, unknown>
+    return {
+      ...(typeof column === "string" ? { column } : {}),
+      ...(typeof moved_by_name === "string"
+        ? { movedByName: moved_by_name }
+        : {}),
+    }
+  } catch {
+    return undefined
+  }
+}
 
 // The approver's commands, delete_task included. send_back_task's
 // tasks.invalid_note backstop (taskSendBackSchema already refuses a blank or
@@ -132,7 +163,9 @@ const UNIQUE_VIOLATION = "23505"
  * because this is reachable directly, not only through the form that already
  * validated it with the same schema.
  */
-export async function createTaskAction(input: unknown): Promise<CreateTaskState> {
+export async function createTaskAction(
+  input: unknown
+): Promise<CreateTaskState> {
   const parsed = taskCreateSchema.safeParse(input)
   if (!parsed.success) {
     return { ok: false, code: "tasks.create_failed" }
@@ -256,35 +289,37 @@ export async function handBackSlotAction(
 }
 
 /**
- * Moves a task to another column (AD-3, AD-4). move_task decides whether the
- * caller may; this only parses, calls it, maps the error and revalidates.
+ * Moves a task to another column (AD-3, AD-4), if the caller's
+ * `expectedMovedAt` is still the task's version. move_task decides whether
+ * the caller may; this only parses, calls it, maps the error and revalidates.
  */
 export async function moveTaskAction(input: unknown): Promise<MoveTaskState> {
   const parsed = taskMoveSchema.safeParse(input)
   if (!parsed.success) {
     return { ok: false, code: "tasks.save_failed" }
   }
-  const { taskId, toColumn } = parsed.data
+  const { taskId, toColumn, expectedMovedAt } = parsed.data
 
   const supabase = await createClient()
-  const { error } = await supabase.rpc("move_task", {
+  const { data, error } = await supabase.rpc("move_task", {
     task_id: taskId,
     to_column: toColumn,
+    expected_moved_at: expectedMovedAt,
   })
 
   if (error) {
-    return {
-      ok: false,
-      code: mapCommandError(error, COMMAND_ERROR_CODES, "tasks.save_failed", {
-        route: "action moveTaskAction",
-        entityType: "task",
-        entityId: taskId,
-      }),
-    }
+    const code = mapCommandError(error, MOVE_ERROR_CODES, "tasks.save_failed", {
+      route: "action moveTaskAction",
+      entityType: "task",
+      entityId: taskId,
+    })
+    const params =
+      code === "tasks.stale" ? staleMoveParams(error.details) : undefined
+    return { ok: false, code, ...(params ? { params } : {}) }
   }
 
   revalidatePath(MEMBER_AREA, "layout")
-  return { ok: true, data: { column: toColumn } }
+  return { ok: true, data: { column: toColumn, movedAt: data } }
 }
 
 /**

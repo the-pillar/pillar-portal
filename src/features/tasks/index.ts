@@ -27,6 +27,8 @@ export type {
 export {
   BOARD_ROW_HEIGHT,
   boardEmptyMessage,
+  boardFilterChips,
+  matchesFilter,
   ownerFilterParam,
   parseOwnerFilterParam,
 } from "./board"
@@ -45,7 +47,8 @@ export {
 export type { MessengerTask } from "./messenger"
 export { buildIcs } from "./ics-file"
 export type { CalendarEvent, CalendarTask } from "./calendar"
-export { BoardOwnerFilter } from "./components/board-owner-filter"
+export { BoardFilterChips } from "./components/board-filter-chips"
+export type { FilterChipData } from "./components/board-filter-chips"
 export { AddToCalendarMenu, TaskCardMenu } from "./components/calendar-menu"
 export { CopyForMessenger } from "./components/copy-for-messenger"
 export { HandedBackQueue } from "./components/handed-back-queue"

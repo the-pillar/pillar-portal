@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useOptimistic, useRef } from "react"
+import { useEffect, useOptimistic, useRef, useState } from "react"
 
 import { StatusDot } from "@/components/status-badge"
 import { useCommand } from "@/lib/use-command"
@@ -32,18 +32,28 @@ export function TaskColumnControl({
   column,
   sentBack,
   allowedMoves,
+  movedAt,
 }: {
   taskId: string
   column: TaskColumn
   /** The task's revision note stands (task detail's revisionNote). */
   sentBack: boolean
   allowedMoves: readonly TaskColumn[]
+  /**
+   * The task's `moved_at`, the version a move passes back. A saved move
+   * returns the new one, which replaces it until the page re-reads.
+   */
+  movedAt: string
 }) {
   const { isPending, run } = useCommand({
     errorMessage: taskErrorMessage,
     thrownCode: "tasks.save_failed",
   })
   const [shownColumn, setShownColumn] = useOptimistic(column)
+  // The version the next move passes, per page read: a new `movedAt` prop
+  // (after a refresh) wins over what an earlier move returned.
+  const [saved, setSaved] = useState({ from: movedAt, movedAt })
+  const version = saved.from === movedAt ? saved.movedAt : movedAt
   const statusRef = useRef<HTMLParagraphElement>(null)
   const status = taskStatus(shownColumn, sentBack && shownColumn === column)
   const hasMoves = allowedMoves.length > 0
@@ -60,10 +70,16 @@ export function TaskColumnControl({
   }, [hasMoves])
 
   function move(toColumn: TaskColumn) {
-    run(() => {
-      setShownColumn(toColumn)
-      return moveTaskAction({ taskId, toColumn })
-    })
+    run(
+      () => {
+        setShownColumn(toColumn)
+        return moveTaskAction({ taskId, toColumn, expectedMovedAt: version })
+      },
+      {
+        onSuccess: (result) =>
+          setSaved({ from: movedAt, movedAt: result.data.movedAt }),
+      }
+    )
   }
 
   return (

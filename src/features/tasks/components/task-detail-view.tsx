@@ -78,6 +78,7 @@ export function TaskDetailView({
           column={task.column}
           sentBack={task.revisionNote !== null}
           allowedMoves={task.allowedMoves}
+          movedAt={task.movedAt}
         />
       </div>
 

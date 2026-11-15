@@ -2,20 +2,18 @@
 import "@testing-library/jest-dom/vitest"
 
 import { cleanup, render, screen } from "@testing-library/react"
-import axe from "axe-core"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-import type { OwnerFilter, TaskOwnerOption } from "@/features/tasks"
+const { getBoard, getBoardOwners, getMyHomeScope, TaskBoard } = vi.hoisted(
+  () => ({
+    getBoard: vi.fn(),
+    getBoardOwners: vi.fn(),
+    getMyHomeScope: vi.fn(),
+    TaskBoard: vi.fn(() => <p>board</p>),
+  })
+)
 
-const { getBoard, TaskBoard } = vi.hoisted(() => ({
-  getBoard: vi.fn(),
-  TaskBoard: vi.fn(({ cards }: { cards: unknown[] }) => (
-    <p>board with {cards.length} cards</p>
-  )),
-}))
-
-// Keep the real board.ts copy; stub only what reads Supabase or needs a
-// client runtime.
+vi.mock("@/features/members", () => ({ getMyHomeScope }))
 vi.mock("@/features/tasks", async () => {
   // vi.importActual isn't an import statement, so the slice-boundary lint
   // rule (which wants @/features/tasks through its index) doesn't see it.
@@ -23,8 +21,10 @@ vi.mock("@/features/tasks", async () => {
     "@/features/tasks/board"
   )
   return {
-    boardEmptyMessage: board.boardEmptyMessage,
+    ownerFilterParam: board.ownerFilterParam,
+    parseOwnerFilterParam: board.parseOwnerFilterParam,
     getBoard,
+    getBoardOwners,
     TaskBoard,
   }
 })
@@ -36,78 +36,48 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
-const OWNERS: TaskOwnerOption[] = [
+const OWNERS = [
   { kind: "section", id: "news", name: "News" },
-  { kind: "desk", id: "photo", name: "Photo" },
+  { kind: "desk", id: "layout", name: "Layout" },
 ]
 
-async function renderColumns(filter: OwnerFilter) {
-  return render(await BoardColumns({ filter, owners: OWNERS }))
-}
-
-// color-contrast can't be computed in jsdom (it is always "incomplete").
-async function axeViolations(node: Element) {
-  const results = await axe.run(node, {
-    rules: { "color-contrast": { enabled: false } },
-  })
-  return results.violations
+function props(call = 0) {
+  return (TaskBoard.mock.calls[call] as unknown as [Record<string, unknown>])[0]
 }
 
 describe("BoardColumns", () => {
-  it("reads the filter's board and hands the cards to TaskBoard", async () => {
-    getBoard.mockResolvedValue([{ id: "a" }, { id: "b" }])
-    const filter = { kind: "section", id: "news" } as const
+  it("reads the whole window once, unfiltered, and hands it to TaskBoard with the viewer and home scope", async () => {
+    getBoardOwners.mockResolvedValue(OWNERS)
+    getMyHomeScope.mockResolvedValue({ kind: "desk", id: "layout" })
+    getBoard.mockResolvedValue([{ id: "a" }])
 
-    await renderColumns(filter)
+    render(await BoardColumns({ viewerId: "me" }))
 
-    expect(getBoard).toHaveBeenCalledWith(filter)
-    expect(screen.getByText("board with 2 cards")).toBeInTheDocument()
-    expect(screen.queryByRole("link", { name: "Show all" })).toBeNull()
+    expect(getBoard).toHaveBeenCalledWith()
+    expect(screen.getByText("board")).toBeInTheDocument()
+    expect(props()).toEqual({
+      cards: [{ id: "a" }],
+      owners: OWNERS,
+      viewerId: "me",
+      homeFilter: { kind: "desk", id: "layout" },
+    })
   })
 
-  it.each([
-    [{ kind: "section", id: "news" } as const, "No tasks in News right now."],
-    [{ kind: "desk", id: "photo" } as const, "No tasks in Photo right now."],
-    [{ kind: "articles" } as const, "No tasks in any desk right now."],
-  ])(
-    "shows %j's empty line with a Show all link, and no columns",
-    async (filter, message) => {
-      getBoard.mockResolvedValue([])
-
-      await renderColumns(filter)
-
-      expect(
-        screen.getByRole("heading", { level: 2, name: message })
-      ).toBeInTheDocument()
-      expect(screen.getByRole("link", { name: "Show all" })).toHaveAttribute(
-        "href",
-        "/dashboard?view=board&owner=all"
-      )
-      expect(TaskBoard).not.toHaveBeenCalled()
-    }
-  )
-
-  it("shows All's four empty columns, not the empty line", async () => {
+  it("falls back to All when the home scope names no listed owner", async () => {
+    getBoardOwners.mockResolvedValue(OWNERS)
+    getMyHomeScope.mockResolvedValue({ kind: "desk", id: "gone" })
     getBoard.mockResolvedValue([])
 
-    await renderColumns({ kind: "all" })
+    render(await BoardColumns({ viewerId: "me" }))
 
-    expect(screen.getByText("board with 0 cards")).toBeInTheDocument()
-    expect(screen.queryByRole("heading", { level: 2 })).toBeNull()
+    expect(props().homeFilter).toEqual({ kind: "all" })
   })
 
   it("lets a query failure throw", async () => {
+    getBoardOwners.mockResolvedValue(OWNERS)
+    getMyHomeScope.mockResolvedValue({ kind: "all" })
     getBoard.mockRejectedValue(new Error("boom"))
 
-    await expect(
-      BoardColumns({ filter: { kind: "all" }, owners: OWNERS })
-    ).rejects.toThrow("boom")
-  })
-
-  it("has no axe violations in the empty block", async () => {
-    getBoard.mockResolvedValue([])
-    const { container } = await renderColumns({ kind: "desk", id: "photo" })
-
-    expect(await axeViolations(container)).toEqual([])
+    await expect(BoardColumns({ viewerId: "me" })).rejects.toThrow("boom")
   })
 })

@@ -263,7 +263,11 @@ describe("taskMoveSchema", () => {
     "accepts a move to %s",
     (toColumn) => {
       expect(
-        taskMoveSchema.safeParse({ taskId: TASK_ID, toColumn }).success
+        taskMoveSchema.safeParse({
+          taskId: TASK_ID,
+          toColumn,
+          expectedMovedAt: "2026-11-15T01:02:03.123456+00:00",
+        }).success
       ).toBe(true)
     }
   )
@@ -277,7 +281,24 @@ describe("taskMoveSchema", () => {
 
   it("refuses a task id that isn't a UUID", () => {
     expect(
-      taskMoveSchema.safeParse({ taskId: "abc", toColumn: "doing" }).success
+      taskMoveSchema.safeParse({
+        taskId: "abc",
+        toColumn: "doing",
+        expectedMovedAt: "x",
+      }).success
+    ).toBe(false)
+  })
+
+  it("requires the version the move expects", () => {
+    expect(
+      taskMoveSchema.safeParse({ taskId: TASK_ID, toColumn: "doing" }).success
+    ).toBe(false)
+    expect(
+      taskMoveSchema.safeParse({
+        taskId: TASK_ID,
+        toColumn: "doing",
+        expectedMovedAt: "",
+      }).success
     ).toBe(false)
   })
 })

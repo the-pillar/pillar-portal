@@ -1,5 +1,7 @@
 import { STALE_COPY } from "@/lib/command-copy"
 
+import { TASK_COLUMN_LABELS, TASK_COLUMNS, type TaskColumn } from "./status"
+
 // Error codes the tasks slice's actions return, and the copy each one shows.
 // Raw Postgres errors never reach the UI (mirrors
 // src/features/members/errors.ts).
@@ -63,6 +65,41 @@ export const TASK_ERROR_COPY = {
 
 export type TaskErrorCode = keyof typeof TASK_ERROR_COPY
 
-export function taskErrorMessage(code: TaskErrorCode): string {
+/** The column a refused move says the card is in now, from the stale params. */
+export function staleColumn(
+  params: Record<string, unknown> | undefined
+): TaskColumn | null {
+  const column = params?.column
+  return (TASK_COLUMNS as readonly unknown[]).includes(column)
+    ? (column as TaskColumn)
+    : null
+}
+
+/**
+ * The toast for a refusal. A stale move that says where the card went reads
+ * "That card moved — it's now in <column>." (EXPERIENCE.md › Drop refused);
+ * every other code, and a stale one without params (Task detail's other
+ * commands), keeps its fixed copy.
+ */
+export function taskErrorMessage(
+  code: TaskErrorCode,
+  params?: Record<string, unknown>
+): string {
+  if (code === "tasks.stale") {
+    const column = staleColumn(params)
+    if (column) {
+      return `That card moved — it's now in ${TASK_COLUMN_LABELS[column]}.`
+    }
+  }
   return TASK_ERROR_COPY[code]
+}
+
+/** The toast when Undo finds the card moved again (EXPERIENCE.md › Undo no longer applies). */
+export function undoStaleMessage(
+  params: Record<string, unknown> | undefined
+): string {
+  const name = params?.movedByName
+  return typeof name === "string" && name !== ""
+    ? `Can't undo — ${name} moved this card since.`
+    : "Can't undo — someone moved this card since."
 }

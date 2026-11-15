@@ -182,12 +182,16 @@ export const slotHandBackSchema = z.object({
 })
 
 /**
- * A column move ("Move to…"). `done` stays a valid value: move_task refuses
- * it, and task_capabilities never offers it.
+ * A column move ("Move to…", a drop, Undo). `done` stays a valid value:
+ * move_task refuses it, and task_capabilities never offers it.
+ * `expectedMovedAt` is the card's version, `moved_at` as the database wrote
+ * it (AD-21): a move from a stale card is refused, so Undo can't overwrite
+ * someone's later move.
  */
 export const taskMoveSchema = z.object({
   taskId: z.uuid(),
   toColumn: z.enum(TASK_COLUMNS),
+  expectedMovedAt: z.string().min(1),
 })
 
 /** Mark done and Reopen: the approver's commands that take only the task. */

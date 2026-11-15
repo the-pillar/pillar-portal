@@ -62,6 +62,35 @@ describe("TaskCardMenu", () => {
     expect(trigger).toHaveFocus()
   })
 
+  it("lists Move to rows first, then the calendar rows, and moves on choosing one", async () => {
+    const user = userEvent.setup()
+    const onMove = vi.fn()
+    render(
+      <TaskCardMenu
+        taskId={ID}
+        title="Lay out"
+        moves={["doing", "done"]}
+        onMove={onMove}
+      />
+    )
+    await user.click(screen.getByRole("button", { name: /More actions/ }))
+
+    expect(
+      screen.getAllByRole("menuitem").map((item) => item.textContent)
+    ).toEqual([
+      "Move to Doing",
+      "Move to Done",
+      "Open in Google Calendar (opens in a new tab)",
+      "Download .ics",
+    ])
+    expect(
+      screen.getByText("Lay out", { selector: "[role=menu] *" })
+    ).toBeInTheDocument()
+
+    await user.click(screen.getByRole("menuitem", { name: "Move to Done" }))
+    expect(onMove).toHaveBeenCalledExactlyOnceWith("done")
+  })
+
   it("stops mousedown and touchstart from reaching the card", async () => {
     const parent = vi.fn()
     render(

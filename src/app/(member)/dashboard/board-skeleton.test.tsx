@@ -32,7 +32,7 @@ describe("BoardSkeleton", () => {
     const status = screen.getByRole("status")
     expect(status).toHaveAttribute("aria-busy", "true")
     expect(status).toHaveTextContent("Loading the board")
-    const blocks = [...status.children].filter((el) => el.tagName === "DIV")
+    const blocks = [...status.querySelectorAll("div.w-72")]
     expect(blocks).toHaveLength(4)
     for (const block of blocks) {
       expect(block).toHaveClass("w-72", "shrink-0", "lg:flex-1")

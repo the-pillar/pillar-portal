@@ -159,11 +159,6 @@
   --motion-stagger: 50ms;
   --motion-undo-window: 5000ms;
   --motion-reduced-fade: 150ms;
-
-  /* DESIGN.md components.task-card.avatar-handed-back-opacity: a task card's
-     avatar for a member who handed back every slot they hold on the task.
-     Dimmed, never hidden; the sr-only names mark them "(handed back)". */
-  --avatar-handed-back-opacity: 0.4;
 }
 
 /* The app header's height: its 56px row (`min-h-14`) and the 3px gold rule
@@ -389,6 +384,9 @@
     --motion-first-run-y: 0px;
     --motion-card-leave-y: 0px;
     --motion-tour-scale: 1;
+    /* The highlight still shows: it holds 1 second, then fades at
+       --motion-reduced-fade (the animation-duration cap below). */
+    --motion-highlight-hold: 1000ms;
     --tw-enter-translate-x: 0;
     --tw-enter-translate-y: 0;
     --tw-enter-scale: 1;
@@ -425,4 +423,75 @@
 
 .toast-countdown {
   animation: toast-countdown var(--motion-undo-window) linear forwards;
+}
+
+/* Board cards (DESIGN.md › Motion). A card someone else moved, or a new task,
+   gets data-highlight once: a navy-tint overlay, held, then faded out. It
+   multiplies over the card so the text stays readable while it shows. */
+@keyframes card-highlight {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+[data-highlight] {
+  position: relative;
+}
+
+[data-highlight]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-lg);
+  background: var(--color-navy-tint);
+  mix-blend-mode: multiply;
+  pointer-events: none;
+  animation: card-highlight var(--motion-highlight) var(--ease-out)
+    var(--motion-highlight-hold) both;
+}
+
+/* A card the viewer just moved fades into its new column. */
+@keyframes card-land {
+  from {
+    opacity: 0;
+    transform: translateY(var(--motion-land-y)) scale(var(--motion-land-scale));
+  }
+}
+
+[data-landed] {
+  animation: card-land var(--motion-enter) var(--ease-out) both;
+}
+
+/* The card under the pointer (the drag overlay): tilts and lifts, its deep
+   shadow pre-painted on a pseudo-element whose opacity changes, never an
+   animated shadow. */
+@keyframes card-lift {
+  from {
+    transform: none;
+  }
+}
+
+@keyframes card-lift-shadow {
+  from {
+    opacity: 0;
+  }
+}
+
+.card-dragging {
+  position: relative;
+  transform: rotate(var(--motion-lift-rotate)) scale(var(--motion-lift-scale));
+  animation: card-lift var(--motion-lift) var(--ease-out) both;
+}
+
+.card-dragging::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lift);
+  animation: card-lift-shadow var(--motion-lift) var(--ease-out) both;
 }
