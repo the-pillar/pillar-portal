@@ -9,7 +9,7 @@ import {
 } from "@/features/tasks"
 
 export const metadata: Metadata = {
-  title: "Task · The Pillar Portal",
+  title: "Task",
 }
 
 // Task detail, where a Messenger link lands (spec-1-6). The state check comes

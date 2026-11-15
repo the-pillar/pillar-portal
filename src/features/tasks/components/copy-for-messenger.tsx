@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import { MessageSquareShare } from "lucide-react"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/toast"
 
 import { copyText, MESSENGER_COPIED, MESSENGER_HINT } from "../messenger"
 

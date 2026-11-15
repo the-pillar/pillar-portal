@@ -56,7 +56,7 @@ async function renderPage(id: string) {
 
 describe("TaskPage", () => {
   it("is titled Task", () => {
-    expect(metadata.title).toBe("Task · The Pillar Portal")
+    expect(metadata.title).toBe("Task")
   })
 
   it("runs the shared state check first and reads no task when it redirects", async () => {

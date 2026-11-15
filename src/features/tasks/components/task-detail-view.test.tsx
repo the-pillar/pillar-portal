@@ -51,7 +51,9 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/lib/env.client", () => ({
   clientEnv: { NEXT_PUBLIC_SITE_URL: "https://pillar.example" },
 }))
-vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: toastSuccess } }))
+vi.mock("@/components/ui/toast", () => ({
+  toast: { error: vi.fn(), success: toastSuccess },
+}))
 
 // jsdom implements neither PointerEvent capture nor scrollIntoView, which
 // Radix's Select relies on to open/scroll its portal content.

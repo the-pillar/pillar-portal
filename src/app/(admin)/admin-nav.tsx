@@ -37,7 +37,8 @@ export function isCurrentAdminLink(
 }
 
 /**
- * The admin sidebar's links (`lg` and up; below it, admin-tabs.tsx's row). A
+ * The admin sidebar's links (`lg` and up; below it, admin-tabs.tsx's row): a
+ * white surface, the current area a navy pill. A
  * client component only for `usePathname`; it imports nothing from
  * @/features/members, so admin-shell.tsx (which does) can stay a Server
  * Component.
@@ -46,7 +47,10 @@ export function AdminNavLinks() {
   const pathname = usePathname()
 
   return (
-    <nav aria-label="Admin" className="flex flex-col gap-1">
+    <nav
+      aria-label="Admin"
+      className="flex flex-col gap-1 rounded-xl bg-white p-2"
+    >
       {ADMIN_NAV_LINKS.map((link) => {
         const current = isCurrentAdminLink(pathname, link)
         return (
@@ -55,8 +59,8 @@ export function AdminNavLinks() {
             href={link.href}
             aria-current={current ? "page" : undefined}
             className={cn(
-              "min-h-11 rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted",
-              current && "bg-muted"
+              "flex min-h-11 items-center rounded-md px-3 py-2 text-sm font-semibold text-foreground hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+              current && "bg-navy text-white hover:bg-navy"
             )}
           >
             {link.label}

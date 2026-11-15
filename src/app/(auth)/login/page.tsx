@@ -29,7 +29,7 @@ export async function generateMetadata(): Promise<Metadata> {
     member && member.state !== "active"
       ? ACCOUNT_STATE_COPY[member.state].title
       : "Sign in"
-  return { title: `${title} · The Pillar Portal` }
+  return { title }
 }
 
 // Sign-in and account states (UX-DR52, AD-7).

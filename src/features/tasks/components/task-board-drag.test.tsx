@@ -57,7 +57,7 @@ vi.mock("@dnd-kit/core", async (importOriginal) => {
 })
 vi.mock("../actions", () => ({ moveTaskAction, markDoneAction }))
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }))
-vi.mock("sonner", () => ({
+vi.mock("@/components/ui/toast", () => ({
   toast: { error: toastError, success: toastSuccess },
 }))
 

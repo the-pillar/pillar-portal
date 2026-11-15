@@ -37,7 +37,7 @@ type Element = ReactElement<{
 
 describe("AdminMembersPage", () => {
   it("is titled Members", () => {
-    expect(metadata).toEqual({ title: "Members · The Pillar Portal" })
+    expect(metadata).toEqual({ title: "Members" })
   })
 
   it("checks for an admin, then renders the h1 and the lists inside a Suspense boundary with the skeleton", async () => {

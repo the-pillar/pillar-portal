@@ -65,7 +65,7 @@ describe("AdminTabs", () => {
         "flex-1",
         "shrink-0",
         "whitespace-nowrap",
-        "border-b-3",
+        "rounded-md",
         "text-sm",
         "font-semibold"
       )
@@ -73,7 +73,9 @@ describe("AdminTabs", () => {
       expect(link).toHaveClass(
         "focus-visible:outline-2",
         "focus-visible:-outline-offset-2",
-        "focus-visible:outline-white"
+        link.getAttribute("aria-current") === "page"
+          ? "focus-visible:outline-ring"
+          : "focus-visible:outline-ring-on-dark"
       )
       expect(link).not.toHaveClass("focus-visible:outline-offset-2")
     }
@@ -91,10 +93,10 @@ describe("AdminTabs", () => {
     for (const name of ["Home", "Tasks", "Members"]) {
       if (name === current) {
         expect(tab(name)).toHaveAttribute("aria-current", "page")
-        expect(tab(name)).toHaveClass("border-white", "text-white")
+        expect(tab(name)).toHaveClass("bg-white", "text-navy")
       } else {
         expect(tab(name)).not.toHaveAttribute("aria-current")
-        expect(tab(name)).toHaveClass("text-white/72")
+        expect(tab(name)).toHaveClass("text-tab-idle-on-navy")
       }
     }
   })

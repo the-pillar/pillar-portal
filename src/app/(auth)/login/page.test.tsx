@@ -441,9 +441,9 @@ describe("LoginPage inside an in-app browser", () => {
 
 describe("LoginPage's title", () => {
   it.each([
-    ["pending", "pending", "Awaiting approval · The Pillar Portal"],
-    ["declined", "pending", "Access declined · The Pillar Portal"],
-    ["deactivated", "editorial_admin", "No access · The Pillar Portal"],
+    ["pending", "pending", "Awaiting approval"],
+    ["declined", "pending", "Access declined"],
+    ["deactivated", "editorial_admin", "No access"],
   ] as const)("names a %s member's state", async (state, role, title) => {
     getCurrentMember.mockResolvedValue({ ...MEMBER, role, state })
 
@@ -457,7 +457,7 @@ describe("LoginPage's title", () => {
     getCurrentMember.mockResolvedValue(member)
 
     await expect(generateMetadata()).resolves.toEqual({
-      title: "Sign in · The Pillar Portal",
+      title: "Sign in",
     })
   })
 })

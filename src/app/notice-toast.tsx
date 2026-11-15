@@ -2,7 +2,7 @@
 
 import { useEffect } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/toast"
 
 type Notice = {
   /**
@@ -11,7 +11,8 @@ type Notice = {
    */
   pathname: string
   text: string
-  /** `success` for a command's own confirmation, `default` otherwise. */
+  /** `success` for a command's own confirmation, `default` for a redirect's
+   * explanation, which stays until closed. */
   tone: "default" | "success"
   /** Whether focus moves to the page's h1 (`main h1[tabindex="-1"]`). */
   focusHeading: boolean
@@ -58,7 +59,7 @@ export function NoticeToast() {
     if (entry && entry.pathname === pathname) {
       const options = { id: `notice-${notice}` }
       if (entry.tone === "success") toast.success(entry.text, options)
-      else toast(entry.text, options)
+      else toast.notice(entry.text, options)
       if (entry.focusHeading) {
         document.querySelector<HTMLElement>('main h1[tabindex="-1"]')?.focus()
       }

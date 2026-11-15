@@ -7,7 +7,7 @@ import axe from "axe-core"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 const { success } = vi.hoisted(() => ({ success: vi.fn() }))
-vi.mock("sonner", () => ({ toast: { success } }))
+vi.mock("@/components/ui/toast", () => ({ toast: { success } }))
 
 import { CopyForMessenger } from "./copy-for-messenger"
 

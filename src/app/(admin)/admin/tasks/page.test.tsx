@@ -106,7 +106,7 @@ function mockReads({
 
 describe("AdminTasksPage", () => {
   it("is titled Tasks", () => {
-    expect(metadata.title).toBe("Tasks · The Pillar Portal")
+    expect(metadata.title).toBe("Tasks")
   })
 
   it("renders the h1, then Needs reassignment, then the review queue, then 'Create a task' and the form", async () => {

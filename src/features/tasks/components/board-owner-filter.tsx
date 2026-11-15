@@ -64,7 +64,7 @@ export function BoardOwnerFilter({
 
   return (
     <div className="flex flex-col gap-2 sm:max-w-xs">
-      <Label htmlFor="board-owner">Section or desk</Label>
+      <Label htmlFor="board-owner">Desk or section</Label>
       <Select value={shown} onValueChange={choose}>
         <SelectTrigger id="board-owner" className="min-h-11 w-full">
           <SelectValue>{shownLabel}</SelectValue>
@@ -83,7 +83,7 @@ export function BoardOwnerFilter({
             All articles
           </SelectItem>
           <SelectGroup>
-            <SelectLabel>Sections</SelectLabel>
+            <SelectLabel>Desks</SelectLabel>
             {sections.map((owner) => (
               <SelectItem
                 key={owner.id}
@@ -95,7 +95,7 @@ export function BoardOwnerFilter({
             ))}
           </SelectGroup>
           <SelectGroup>
-            <SelectLabel>Desks</SelectLabel>
+            <SelectLabel>Sections</SelectLabel>
             {desks.map((owner) => (
               <SelectItem
                 key={owner.id}

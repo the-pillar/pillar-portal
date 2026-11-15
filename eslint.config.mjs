@@ -18,6 +18,9 @@ const ENV_MODULES = ["src/lib/env.server.ts", "src/lib/env.client.ts"]
 const CN_WRAPPER = "src/lib/utils.ts"
 const ENV_MESSAGE =
   "Read environment variables through src/lib/env.server.ts or src/lib/env.client.ts (AD-6)."
+const TOAST_MODULE = "src/components/ui/toast.tsx"
+const SONNER_MESSAGE =
+  "Import toast from @/components/ui/toast, which owns the kinds, timings and pause rules (DESIGN.md › Toast)."
 const GET_SESSION_MESSAGE =
   "Get the caller from supabase.auth.getClaims(), which verifies the token. getSession() trusts the cookie (AD-7)."
 
@@ -100,9 +103,12 @@ function assertKnownSlices(rootDir) {
 
 // `no-restricted-imports` options are replaced, not merged, when two config
 // blocks match one file, so each block states its full list.
-function restrictedImports({ cn, process }) {
+function restrictedImports({ cn, process, sonner = true }) {
   const paths = []
   const patterns = []
+  if (sonner) {
+    paths.push({ name: "sonner", message: SONNER_MESSAGE })
+  }
   if (cn) {
     const message = `Import cn from @/lib/utils, which knows the DESIGN.md tokens.`
     paths.push({ name: "cn", message })
@@ -232,6 +238,19 @@ export function createConfig(rootDir) {
         "no-restricted-imports": restrictedImports({
           cn: false,
           process: true,
+        }),
+      },
+    },
+    {
+      // Only the toast module wraps sonner. The blocks above replace this
+      // rule's options, so this restates them without the sonner entry.
+      name: "pillar/toast-module",
+      files: [TOAST_MODULE],
+      rules: {
+        "no-restricted-imports": restrictedImports({
+          cn: true,
+          process: true,
+          sonner: false,
         }),
       },
     },

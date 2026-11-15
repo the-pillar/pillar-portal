@@ -33,7 +33,7 @@ const OWNERS: TaskOwnerOption[] = [
   { kind: "desk", id: "photo", name: "Photo" },
 ]
 
-const trigger = () => screen.getByRole("combobox", { name: "Section or desk" })
+const trigger = () => screen.getByRole("combobox", { name: "Desk or section" })
 
 describe("BoardOwnerFilter", () => {
   it("is a labelled select showing the current filter", () => {
@@ -58,7 +58,7 @@ describe("BoardOwnerFilter", () => {
     expect(doc.getElementById("board-owner")?.textContent).toBe(label)
   })
 
-  it("lists All, All articles, then Sections and Desks groups", async () => {
+  it("lists All, All articles, then Desks and Sections groups", async () => {
     const user = userEvent.setup()
     render(<BoardOwnerFilter owners={OWNERS} value="all" />)
 
@@ -85,8 +85,8 @@ describe("BoardOwnerFilter", () => {
         ]
       })
     ).toEqual([
-      ["Sections", ["News", "Sports"]],
-      ["Desks", ["Layout", "Photo"]],
+      ["Desks", ["News", "Sports"]],
+      ["Sections", ["Layout", "Photo"]],
     ])
   })
 

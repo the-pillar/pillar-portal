@@ -15,21 +15,22 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import type { ReassignOptions } from "../queries/reassign"
 import { ReassignSlot } from "./reassign-slot"
 
-const { reassignSlotAction, refresh, toastSuccess, toastError, toastPlain } =
+const { reassignSlotAction, refresh, toastSuccess, toastError, toastNotice } =
   vi.hoisted(() => ({
     reassignSlotAction: vi.fn(),
     refresh: vi.fn(),
     toastSuccess: vi.fn(),
     toastError: vi.fn(),
-    toastPlain: vi.fn(),
+    toastNotice: vi.fn(),
   }))
 
 vi.mock("../actions", () => ({ reassignSlotAction }))
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }))
-vi.mock("sonner", () => ({
-  toast: Object.assign(toastPlain, {
+vi.mock("@/components/ui/toast", () => ({
+  toast: Object.assign(vi.fn(), {
     success: toastSuccess,
     error: toastError,
+    notice: toastNotice,
   }),
 }))
 vi.mock("@/lib/env.client", () => ({
@@ -298,7 +299,9 @@ describe("ReassignSlot", () => {
     )
 
     expect(
-      within(dialog()).getByText("No one on this desk yet — showing everyone.")
+      within(dialog()).getByText(
+        "No one in this section yet — showing everyone."
+      )
     ).toBeInTheDocument()
     expect(listed()).toEqual([
       "Staff Cartoonist · 0 active",
@@ -312,7 +315,9 @@ describe("ReassignSlot", () => {
     ).toBeNull()
     expect(
       within(dialog()).getByRole("radiogroup", { name: "Reassign Writer" })
-    ).toHaveAccessibleDescription("No one on this desk yet — showing everyone.")
+    ).toHaveAccessibleDescription(
+      "No one in this section yet — showing everyone."
+    )
   })
 
   it("offers no Show everyone when the desk is everyone", async () => {
@@ -516,7 +521,7 @@ describe("ReassignSlot", () => {
     })
     await toastSuccess.mock.calls[0][1].action.onClick()
 
-    expect(toastPlain).toHaveBeenCalledWith(
+    expect(toastNotice).toHaveBeenCalledWith(
       "Copy this and paste it in Messenger.",
       expect.objectContaining({
         description: expect.stringContaining("Lay out the spread — Cartoonist"),

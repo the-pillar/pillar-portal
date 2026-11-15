@@ -24,7 +24,9 @@ const { moveTaskAction, refresh, toastError } = vi.hoisted(() => ({
 
 vi.mock("../actions", () => ({ moveTaskAction }))
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }))
-vi.mock("sonner", () => ({ toast: { error: toastError, success: vi.fn() } }))
+vi.mock("@/components/ui/toast", () => ({
+  toast: { error: toastError, success: vi.fn() },
+}))
 
 const TASK_ID = "00000000-0000-4000-8000-000000000021"
 

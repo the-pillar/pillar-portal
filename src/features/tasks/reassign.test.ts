@@ -180,7 +180,7 @@ describe("copy", () => {
 
   it("has the empty desk line, the success toast and the duplicate message", () => {
     expect(REASSIGN_EMPTY_DESK).toBe(
-      "No one on this desk yet — showing everyone."
+      "No one in this section yet — showing everyone."
     )
     expect(reassignedMessage("Staff Writer")).toBe(
       "Reassigned to Staff Writer."

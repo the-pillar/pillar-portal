@@ -71,7 +71,7 @@ async function renderCards() {
 
 describe("AdminHomePage", () => {
   it("is titled Admin home", () => {
-    expect(metadata).toEqual({ title: "Admin home · The Pillar Portal" })
+    expect(metadata).toEqual({ title: "Admin home" })
   })
 
   it("checks for an admin, then renders the h1 and the cards inside a Suspense boundary with the skeleton", async () => {
