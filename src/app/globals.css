@@ -166,6 +166,12 @@
   --avatar-handed-back-opacity: 0.4;
 }
 
+/* The app header's height: its 56px row (`min-h-14`) and the 3px gold rule
+   (`border-b-3`) in app-header.tsx. Phone toasts sit just below it. */
+:root {
+  --app-header-height: 59px;
+}
+
 /* The member bottom tab bar (DESIGN.md › Bottom tab bar): at least 56px plus
    the home-indicator inset. Content and scrollers clear it by that and 8px. */
 :root {

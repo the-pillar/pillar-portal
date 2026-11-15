@@ -270,12 +270,15 @@ describe("toast", () => {
     expect(screen.getAllByText("Same")).toHaveLength(1)
   })
 
-  it("sits at the top below md and bottom-right from md", async () => {
+  it("sits at the top below md, under the app header, and bottom-right from md", async () => {
     await show(() => toast.error("Where"))
-    expect(document.querySelector("[data-sonner-toaster]")).toHaveAttribute(
-      "data-y-position",
-      "top"
-    )
+    const top = document.querySelector<HTMLElement>("[data-sonner-toaster]")
+    expect(top).toHaveAttribute("data-y-position", "top")
+    for (const v of ["--offset-top", "--mobile-offset-top"]) {
+      expect(top?.style.getPropertyValue(v)).toBe(
+        "calc(var(--app-header-height) + 8px)"
+      )
+    }
     cleanup()
 
     stubMatchMedia((query) => query === "(min-width: 768px)")

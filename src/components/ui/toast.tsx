@@ -291,6 +291,8 @@ function useDesktop() {
 const OPEN_LAYER =
   '[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"], [role="menu"][data-state="open"]'
 
+const BELOW_HEADER = "calc(var(--app-header-height) + 8px)"
+
 /** The one toaster, mounted in the root layout. */
 export function Toaster(): ReactNode {
   const desktop = useDesktop()
@@ -312,6 +314,12 @@ export function Toaster(): ReactNode {
     <Sonner
       theme="light"
       position={desktop ? "bottom-right" : "top-center"}
+      // Below md the toast drops in under the app header, never over it, so
+      // the logo and the avatar menu stay usable while it shows (the owner's
+      // call, 2026-11-15). Sonner reads `mobileOffset` up to 600px wide and
+      // `offset` above that, and `md` starts at 768px, so both are set.
+      offset={desktop ? undefined : { top: BELOW_HEADER }}
+      mobileOffset={desktop ? undefined : { top: BELOW_HEADER }}
       visibleToasts={3}
     />
   )
