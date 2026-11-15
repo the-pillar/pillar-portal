@@ -107,3 +107,11 @@ authenticated private.has_approved_member()
 authenticated public.record_onboarding(onboarding_step)
 authenticated public.reset_first_run()
 authenticated public.my_onboarding()
+
+# tasks_versioned_moves: the versioned move and the one definition of who may
+# create a task (private.can_create_task is called by public.can_create_task,
+# which runs with the caller's rights; private.stamp_task_row has no grant:
+# only the triggers call it)
+authenticated public.move_task(uuid, task_column, timestamp with time zone)
+authenticated private.can_create_task()
+authenticated public.can_create_task()

@@ -311,6 +311,7 @@ select ok(
 create temp table task_commands (signature regprocedure primary key);
 insert into task_commands values
   ('public.move_task(uuid, public.task_column)'),
+  ('public.move_task(uuid, public.task_column, timestamp with time zone)'),
   ('public.mark_done(uuid)'),
   ('public.send_back_task(uuid, text)'),
   ('public.reopen_task(uuid)'),
@@ -321,7 +322,7 @@ select is_empty(
      where pg_get_functiondef(signature)
              !~* 'from\s+public\.tasks\s+t\s+where\s+t\.id\s*=\s*\w+\.task_id\s+and\s+t\.deleted_at\s+is\s+null\s+for\s+update\s*;'
         or (select count(*) from regexp_matches(pg_get_functiondef(signature), 'for\s+update', 'gi')) <> 1 $$,
-  'move_task, mark_done, send_back_task, reopen_task and delete_task each lock the live task FOR UPDATE, once'
+  'both move_task overloads, mark_done, send_back_task, reopen_task and delete_task each lock the live task FOR UPDATE, once'
 );
 select is_empty(
   $$ select signature::text from task_commands

@@ -700,8 +700,8 @@ select lives_ok(
 
 select results_eq(
   $$ select t.id, t.deleted_at = now(), t.updated_at = now(),
-            (to_jsonb(t) - 'deleted_at' - 'updated_at')
-              = (select to_jsonb(b) - 'deleted_at' - 'updated_at'
+            (to_jsonb(t) - 'deleted_at' - 'updated_at' - 'updated_by')
+              = (select to_jsonb(b) - 'deleted_at' - 'updated_at' - 'updated_by'
                  from rows_before b where b.id = t.id)
      from public.tasks t
      where t.id in (select id from rows_before)
