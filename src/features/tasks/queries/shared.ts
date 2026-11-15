@@ -70,6 +70,15 @@ export type TaskCardData = {
    * every slot they hold on the task.
    */
   assignees: TaskCardAssignee[]
+  /**
+   * The owning section's or desk's id, which colors the owner label
+   * (`data-owner`). Empty for a read that doesn't select it.
+   */
+  ownerId?: string
+  /** The viewer holds an open slot on it (Board reads only; default false). */
+  yours?: boolean
+  /** When it was marked Done, as PostgREST returned it; null before then. */
+  doneAt?: string | null
 }
 
 export function byDueThenId(
@@ -89,6 +98,10 @@ type CardTask = {
   revision_note_at: string | null
   sections: { name: string } | null
   desks: { name: string } | null
+  // Only the Board's and the Planner's select carry these.
+  owning_section_id?: string | null
+  owning_desk_id?: string | null
+  done_at?: string | null
 }
 
 /** One task card's data, from the task, its slots (in slot order) and the names. */
@@ -132,6 +145,8 @@ export function toTaskCard(
       (slot) => slot.state === "needs_reassignment"
     ),
     assignees,
+    ownerId: task.owning_section_id ?? task.owning_desk_id ?? "",
+    doneAt: task.done_at ?? null,
   }
 }
 
@@ -156,7 +171,7 @@ export function taskCardsQuery(supabase: ServerClient) {
   return supabase
     .from("tasks")
     .select(
-      "id, title, due_at, column, revision_note_at, sections(name), desks(name), task_assignments(member_id, state)"
+      "id, title, due_at, column, revision_note_at, owning_section_id, owning_desk_id, moved_at, moved_by, created_by, done_at, sections(name), desks(name), task_assignments(member_id, state)"
     )
     .order("due_at")
     .order("id")
@@ -166,10 +181,14 @@ export function taskCardsQuery(supabase: ServerClient) {
 
 type TaskCardsQuery = ReturnType<typeof taskCardsQuery>
 
-/** Narrows a card query to the tasks an owner filter names. */
+/**
+ * Narrows a card query to the tasks an owner filter names. `mine` is decided
+ * by the viewer's open slots, never by a column of `tasks`, so only the Board
+ * (which filters in the client) uses it and this takes the owner kinds only.
+ */
 export function withOwnerFilter(
   query: TaskCardsQuery,
-  filter: OwnerFilter
+  filter: Exclude<OwnerFilter, { kind: "mine" }>
 ): TaskCardsQuery {
   switch (filter.kind) {
     case "section":

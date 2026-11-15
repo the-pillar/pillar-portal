@@ -28,6 +28,7 @@ vi.mock("@/components/ui/toast", () => ({
   toast: { error: toastError, success: vi.fn() },
 }))
 
+const MOVED_AT = "2026-11-15T01:02:03.123456+00:00"
 const TASK_ID = "00000000-0000-4000-8000-000000000021"
 
 // jsdom implements neither PointerEvent capture nor scrollIntoView, which
@@ -86,6 +87,7 @@ describe("TaskColumnControl", () => {
     const { container } = render(
       <TaskColumnControl
         taskId={TASK_ID}
+        movedAt={MOVED_AT}
         column={column}
         sentBack={false}
         allowedMoves={[]}
@@ -103,6 +105,7 @@ describe("TaskColumnControl", () => {
     const { container } = render(
       <TaskColumnControl
         taskId={TASK_ID}
+        movedAt={MOVED_AT}
         column="doing"
         sentBack
         allowedMoves={["to_do", "for_review"]}
@@ -121,6 +124,7 @@ describe("TaskColumnControl", () => {
     const { container } = render(
       <TaskColumnControl
         taskId={TASK_ID}
+        movedAt={MOVED_AT}
         column="doing"
         sentBack
         allowedMoves={["to_do", "for_review"]}
@@ -143,6 +147,7 @@ describe("TaskColumnControl", () => {
     const { container } = render(
       <TaskColumnControl
         taskId={TASK_ID}
+        movedAt={MOVED_AT}
         column="to_do"
         sentBack={false}
         allowedMoves={[]}
@@ -161,6 +166,7 @@ describe("TaskColumnControl", () => {
     render(
       <TaskColumnControl
         taskId={TASK_ID}
+        movedAt={MOVED_AT}
         column="done"
         sentBack={false}
         allowedMoves={[]}
@@ -175,6 +181,7 @@ describe("TaskColumnControl", () => {
     render(
       <TaskColumnControl
         taskId={TASK_ID}
+        movedAt={MOVED_AT}
         column="doing"
         sentBack={false}
         allowedMoves={["to_do", "for_review"]}
@@ -198,6 +205,7 @@ describe("TaskColumnControl", () => {
     const { container } = render(
       <TaskColumnControl
         taskId={TASK_ID}
+        movedAt={MOVED_AT}
         column="to_do"
         sentBack={false}
         allowedMoves={["doing", "for_review"]}
@@ -209,6 +217,7 @@ describe("TaskColumnControl", () => {
     expect(moveTaskAction).toHaveBeenCalledExactlyOnceWith({
       taskId: TASK_ID,
       toColumn: "for_review",
+      expectedMovedAt: MOVED_AT,
     })
     await waitFor(() =>
       expect(status(container)).toHaveTextContent("Status: For Review")
@@ -235,6 +244,7 @@ describe("TaskColumnControl", () => {
     const { rerender } = render(
       <TaskColumnControl
         taskId={TASK_ID}
+        movedAt={MOVED_AT}
         column="to_do"
         sentBack={false}
         allowedMoves={["doing"]}
@@ -247,6 +257,7 @@ describe("TaskColumnControl", () => {
     rerender(
       <TaskColumnControl
         taskId={TASK_ID}
+        movedAt={MOVED_AT}
         column="doing"
         sentBack={false}
         allowedMoves={["to_do", "for_review"]}
@@ -262,6 +273,7 @@ describe("TaskColumnControl", () => {
     const { container, rerender } = render(
       <TaskColumnControl
         taskId={TASK_ID}
+        movedAt={MOVED_AT}
         column="to_do"
         sentBack={false}
         allowedMoves={["doing"]}
@@ -274,6 +286,7 @@ describe("TaskColumnControl", () => {
     rerender(
       <TaskColumnControl
         taskId={TASK_ID}
+        movedAt={MOVED_AT}
         column="doing"
         sentBack={false}
         allowedMoves={[]}
@@ -291,6 +304,7 @@ describe("TaskColumnControl", () => {
         <button type="button">Elsewhere</button>
         <TaskColumnControl
           taskId={TASK_ID}
+          movedAt={MOVED_AT}
           column="to_do"
           sentBack={false}
           allowedMoves={["doing"]}
@@ -305,6 +319,7 @@ describe("TaskColumnControl", () => {
         <button type="button">Elsewhere</button>
         <TaskColumnControl
           taskId={TASK_ID}
+          movedAt={MOVED_AT}
           column="doing"
           sentBack={false}
           allowedMoves={[]}
@@ -321,6 +336,7 @@ describe("TaskColumnControl", () => {
     const { container } = render(
       <TaskColumnControl
         taskId={TASK_ID}
+        movedAt={MOVED_AT}
         column="to_do"
         sentBack={false}
         allowedMoves={["doing"]}
@@ -347,6 +363,7 @@ describe("TaskColumnControl", () => {
     const { container } = render(
       <TaskColumnControl
         taskId={TASK_ID}
+        movedAt={MOVED_AT}
         column="to_do"
         sentBack={false}
         allowedMoves={["doing"]}
@@ -371,6 +388,7 @@ describe("TaskColumnControl", () => {
     const { container, rerender } = render(
       <TaskColumnControl
         taskId={TASK_ID}
+        movedAt={MOVED_AT}
         column="to_do"
         sentBack={false}
         allowedMoves={["doing"]}
@@ -381,6 +399,7 @@ describe("TaskColumnControl", () => {
     rerender(
       <TaskColumnControl
         taskId={TASK_ID}
+        movedAt={MOVED_AT}
         column="done"
         sentBack={false}
         allowedMoves={[]}

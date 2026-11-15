@@ -47,7 +47,7 @@ export async function getWhatsMine(): Promise<WhatsMine> {
     supabase
       .from("tasks")
       .select(
-        "id, title, due_at, column, revision_note_at, sections(name), desks(name)"
+        "id, title, due_at, column, revision_note_at, owning_section_id, owning_desk_id, sections(name), desks(name)"
       )
       .in("id", taskIds),
     supabase

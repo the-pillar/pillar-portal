@@ -303,7 +303,7 @@ describe("getTaskDetail", () => {
     const tasks = calls.find((c) => c.table === "tasks")!
     expect(tasks.calls).toContainEqual([
       "select",
-      "id, title, description, due_at, reference_url, column, revision_note, revision_note_by, revision_note_at, updated_at, sections(name), desks(name)",
+      "id, title, description, due_at, reference_url, column, revision_note, revision_note_by, revision_note_at, updated_at, moved_at, sections(name), desks(name)",
     ])
     expect(tasks.calls).toContainEqual(["eq", "id", TASK_ID])
     const slots = calls.find((c) => c.table === "task_assignments")!
@@ -746,7 +746,7 @@ describe("getWhatsMine", () => {
     const tasks = calls.find((c) => c.table === "tasks")!
     expect(tasks.calls).toContainEqual([
       "select",
-      "id, title, due_at, column, revision_note_at, sections(name), desks(name)",
+      "id, title, due_at, column, revision_note_at, owning_section_id, owning_desk_id, sections(name), desks(name)",
     ])
     expect(tasks.calls).toContainEqual(["in", "id", [T1, T2, T3]])
     const slots = calls.find((c) => c.table === "task_assignments")!

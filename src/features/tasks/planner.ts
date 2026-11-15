@@ -6,8 +6,8 @@ import { formatInPht, phtDayKey } from "@/lib/time"
 import type { OwnerFilter, TaskOwnerOption } from "./board"
 import { SENT_BACK_LABEL, TASK_COLUMN_LABELS, type TaskColumn } from "./status"
 
-/** A home scope the Planner's toggle can add: anything but All. */
-export type PlannerScope = Exclude<OwnerFilter, { kind: "all" }>
+/** A home scope the Planner's toggle can add: a section, a desk or all articles. */
+export type PlannerScope = Exclude<OwnerFilter, { kind: "all" | "mine" }>
 
 /** The toggle's name: "<desk or section> too", or "All articles too". */
 export function plannerScopeLabel(

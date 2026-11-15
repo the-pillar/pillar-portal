@@ -11,6 +11,8 @@ export type TaskOwnerOption = {
 
 export type OwnerFilter =
   | { kind: "all" }
+  /** Cards where the viewer holds an open slot (the Board's Mine chip). */
+  | { kind: "mine" }
   | { kind: "articles" }
   | { kind: "section"; id: string }
   | { kind: "desk"; id: string }
@@ -20,6 +22,8 @@ export function ownerFilterParam(filter: OwnerFilter): string {
   switch (filter.kind) {
     case "all":
       return "all"
+    case "mine":
+      return "mine"
     case "articles":
       return "articles"
     case "section":
@@ -40,6 +44,7 @@ export function parseOwnerFilterParam(
 ): OwnerFilter | null {
   if (typeof value !== "string") return null
   if (value === "all") return { kind: "all" }
+  if (value === "mine") return { kind: "mine" }
   if (value === "articles") return { kind: "articles" }
 
   const separator = value.indexOf(":")
@@ -65,6 +70,8 @@ export function boardEmptyMessage(
   switch (filter.kind) {
     case "all":
       return null
+    case "mine":
+      return "Nothing's assigned to you right now."
     case "articles":
       return "No tasks in any desk right now."
     case "section":
@@ -91,9 +98,83 @@ export function boardDoneCutoff(now: Date): string {
 }
 
 /**
- * The Board row's height, shared by the Board and its skeleton so the swap
- * between them doesn't jump: the rest of the viewport under the header, h1
- * and filter (tuned at 375, 800 and 1280px), and never so short that a column
- * is unusable (the page scrolls instead).
+ * What a filter needs to know about a card: whose it is and whether the
+ * viewer holds an open slot on it.
  */
-export const BOARD_ROW_HEIGHT = "h-[calc(100dvh-20rem)] min-h-96"
+export type FilterableCard = {
+  ownerKind: "section" | "desk"
+  ownerId: string
+  yours: boolean
+}
+
+/** Whether a card shows under a filter. Pure, so the client filters with it. */
+export function matchesFilter(
+  card: FilterableCard,
+  filter: OwnerFilter
+): boolean {
+  switch (filter.kind) {
+    case "all":
+      return true
+    case "mine":
+      return card.yours
+    case "articles":
+      return card.ownerKind === "section"
+    case "section":
+    case "desk":
+      return card.ownerKind === filter.kind && card.ownerId === filter.id
+  }
+}
+
+export type FilterChip = {
+  /** The `owner` parameter value; also the chip's key. */
+  value: string
+  filter: OwnerFilter
+  label: string
+  count: number
+}
+
+/**
+ * The Board's filter chips: All, Mine, All articles only when it is the
+ * viewer's home scope (`showArticles`) or the URL's choice, then each owner
+ * that has cards in the window. The URL's own owner is always listed, even at
+ * zero, so the active chip never disappears. Counts come from the whole
+ * window, never from the filtered cards.
+ */
+export function boardFilterChips(
+  cards: readonly FilterableCard[],
+  owners: readonly TaskOwnerOption[],
+  active: OwnerFilter,
+  showArticles: boolean
+): FilterChip[] {
+  const chip = (filter: OwnerFilter, label: string): FilterChip => ({
+    value: ownerFilterParam(filter),
+    filter,
+    label,
+    count: cards.filter((card) => matchesFilter(card, filter)).length,
+  })
+  const activeValue = ownerFilterParam(active)
+
+  const chips: FilterChip[] = [
+    chip({ kind: "all" }, "All"),
+    chip({ kind: "mine" }, "Mine"),
+  ]
+  if (showArticles || active.kind === "articles") {
+    chips.push(chip({ kind: "articles" }, "All articles"))
+  }
+  for (const owner of owners) {
+    const filter: OwnerFilter = { kind: owner.kind, id: owner.id }
+    const next = chip(filter, owner.name)
+    if (next.count > 0 || next.value === activeValue) chips.push(next)
+  }
+  return chips
+}
+
+/**
+ * The Board row's height, shared by the Board and its skeleton so the swap
+ * between them doesn't jump: it fills the rest of the viewport under the
+ * header, h1, filter chips and (below lg) the column switcher, never under
+ * DESIGN.md's row-min-height, max(320px, 60svh). Below 560px of viewport
+ * height the columns grow to their content and the page scrolls instead.
+ */
+export const BOARD_ROW_HEIGHT =
+  "h-[calc(100dvh-22rem)] min-h-[max(320px,60svh)] lg:h-[calc(100dvh-18rem)] [@media(max-height:559px)]:h-auto [@media(max-height:559px)]:min-h-0"

@@ -129,6 +129,7 @@ const TASK: TaskDetail = {
   canManage: false,
   canReassign: false,
   updatedAt: "2026-10-30T02:15:42.123456+00:00",
+  movedAt: "2026-10-30T02:15:42.000034+00:00",
   roleLabels: {
     writer: "Writer",
     layout_artist: "Layout Artist",

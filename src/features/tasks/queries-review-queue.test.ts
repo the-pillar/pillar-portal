@@ -159,7 +159,7 @@ describe("getReviewQueue", () => {
       {
         method: "select",
         args: [
-          "id, title, due_at, column, revision_note_at, sections(name), desks(name), task_assignments(member_id, state)",
+          "id, title, due_at, column, revision_note_at, owning_section_id, owning_desk_id, moved_at, moved_by, created_by, done_at, sections(name), desks(name), task_assignments(member_id, state)",
         ],
       },
       { method: "order", args: ["due_at"] },
@@ -197,6 +197,8 @@ describe("getReviewQueue", () => {
         sentBack: false,
         hasAwaitingResponse: false,
         hasNeedsReassignment: false,
+        ownerId: "",
+        doneAt: null,
         assignees: [
           {
             id: LAYOUT,
@@ -216,6 +218,8 @@ describe("getReviewQueue", () => {
         sentBack: false,
         hasAwaitingResponse: false,
         hasNeedsReassignment: false,
+        ownerId: "",
+        doneAt: null,
         assignees: [
           {
             id: WRITER,

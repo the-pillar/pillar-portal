@@ -166,7 +166,10 @@ const VALID_REASSIGN = {
 
 describe("respondToSlotAction", () => {
   it("rejects invalid input without calling the database", async () => {
-    const result = await respondToSlotAction({ slotId: "abc", response: "on_it" })
+    const result = await respondToSlotAction({
+      slotId: "abc",
+      response: "on_it",
+    })
 
     expect(result).toEqual({ ok: false, code: "tasks.save_failed" })
     expect(createClient).not.toHaveBeenCalled()
@@ -185,7 +188,10 @@ describe("respondToSlotAction", () => {
       slot_id: SLOT_ID,
       response: "on_it",
     })
-    expect(revalidatePath).toHaveBeenCalledExactlyOnceWith("/(member)/dashboard", "layout")
+    expect(revalidatePath).toHaveBeenCalledExactlyOnceWith(
+      "/(member)/dashboard",
+      "layout"
+    )
     expect(result).toEqual({ ok: true, data: { state: "on_it" } })
   })
 
@@ -237,7 +243,10 @@ describe("respondToSlotAction", () => {
     async (message) => {
       rpc.mockResolvedValue({ data: null, error: { message } })
 
-      const result = await respondToSlotAction({ slotId: SLOT_ID, response: "on_it" })
+      const result = await respondToSlotAction({
+        slotId: SLOT_ID,
+        response: "on_it",
+      })
 
       expect(result).toEqual({ ok: false, code: message })
       expect(revalidatePath).not.toHaveBeenCalled()
@@ -251,7 +260,10 @@ describe("respondToSlotAction", () => {
   ])("maps any other error (%s) to tasks.save_failed", async (message) => {
     rpc.mockResolvedValue({ data: null, error: { message } })
 
-    const result = await respondToSlotAction({ slotId: SLOT_ID, response: "on_it" })
+    const result = await respondToSlotAction({
+      slotId: SLOT_ID,
+      response: "on_it",
+    })
 
     expect(result).toEqual({ ok: false, code: "tasks.save_failed" })
   })
@@ -259,23 +271,87 @@ describe("respondToSlotAction", () => {
 
 describe("moveTaskAction", () => {
   it("rejects invalid input without calling the database", async () => {
-    const result = await moveTaskAction({ taskId: TASK_ID, toColumn: "archived" })
+    const result = await moveTaskAction({
+      taskId: TASK_ID,
+      toColumn: "archived",
+      expectedMovedAt: "2026-11-15T01:02:03.123456+00:00",
+    })
 
     expect(result).toEqual({ ok: false, code: "tasks.save_failed" })
     expect(createClient).not.toHaveBeenCalled()
   })
 
   it("calls move_task, then revalidates the dashboard and returns the new column", async () => {
-    rpc.mockResolvedValue({ data: null, error: null })
+    rpc.mockResolvedValue({
+      data: "2026-11-15T02:00:00.654321+00:00",
+      error: null,
+    })
 
-    const result = await moveTaskAction({ taskId: TASK_ID, toColumn: "for_review" })
+    const result = await moveTaskAction({
+      taskId: TASK_ID,
+      toColumn: "for_review",
+      expectedMovedAt: "2026-11-15T01:02:03.123456+00:00",
+    })
 
     expect(rpc).toHaveBeenCalledExactlyOnceWith("move_task", {
       task_id: TASK_ID,
       to_column: "for_review",
+      expected_moved_at: "2026-11-15T01:02:03.123456+00:00",
     })
-    expect(revalidatePath).toHaveBeenCalledExactlyOnceWith("/(member)/dashboard", "layout")
-    expect(result).toEqual({ ok: true, data: { column: "for_review" } })
+    expect(revalidatePath).toHaveBeenCalledExactlyOnceWith(
+      "/(member)/dashboard",
+      "layout"
+    )
+    // The version comes back exactly as the database wrote it.
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        column: "for_review",
+        movedAt: "2026-11-15T02:00:00.654321+00:00",
+      },
+    })
+  })
+
+  it("maps tasks.stale with the column and the mover's name from the error's details", async () => {
+    rpc.mockResolvedValue({
+      data: null,
+      error: {
+        message: "tasks.stale",
+        details: JSON.stringify({
+          column: "for_review",
+          moved_by: TASK_ID,
+          moved_by_name: "Ben Baker",
+        }),
+      },
+    })
+
+    const result = await moveTaskAction({
+      taskId: TASK_ID,
+      toColumn: "doing",
+      expectedMovedAt: "2026-11-15T01:02:03.123456+00:00",
+    })
+
+    expect(result).toEqual({
+      ok: false,
+      code: "tasks.stale",
+      params: { column: "for_review", movedByName: "Ben Baker" },
+    })
+    expect(after).not.toHaveBeenCalled()
+  })
+
+  it("maps tasks.stale with unreadable details to no params", async () => {
+    rpc.mockResolvedValue({
+      data: null,
+      error: { message: "tasks.stale", details: "not json" },
+    })
+
+    const result = await moveTaskAction({
+      taskId: TASK_ID,
+      toColumn: "doing",
+      expectedMovedAt: "2026-11-15T01:02:03.123456+00:00",
+    })
+
+    expect(result).toEqual({ ok: false, code: "tasks.stale" })
   })
 
   it.each(["auth.not_active", "tasks.not_found", "tasks.not_allowed"])(
@@ -283,7 +359,11 @@ describe("moveTaskAction", () => {
     async (message) => {
       rpc.mockResolvedValue({ data: null, error: { message } })
 
-      const result = await moveTaskAction({ taskId: TASK_ID, toColumn: "doing" })
+      const result = await moveTaskAction({
+        taskId: TASK_ID,
+        toColumn: "doing",
+        expectedMovedAt: "2026-11-15T01:02:03.123456+00:00",
+      })
 
       expect(result).toEqual({ ok: false, code: message })
       expect(revalidatePath).not.toHaveBeenCalled()
@@ -293,7 +373,11 @@ describe("moveTaskAction", () => {
   it("maps any other error to tasks.save_failed", async () => {
     rpc.mockResolvedValue({ data: null, error: { message: "fetch failed" } })
 
-    const result = await moveTaskAction({ taskId: TASK_ID, toColumn: "doing" })
+    const result = await moveTaskAction({
+      taskId: TASK_ID,
+      toColumn: "doing",
+      expectedMovedAt: "2026-11-15T01:02:03.123456+00:00",
+    })
 
     expect(result).toEqual({ ok: false, code: "tasks.save_failed" })
   })
@@ -305,7 +389,8 @@ describe("error copy", () => {
     expect(TASK_ERROR_COPY).toEqual({
       "auth.not_active": "Sign in to do that.",
       "tasks.not_admin": "Only the Editorial Board can create tasks.",
-      "tasks.duplicate_slot": "The same member already has that role — remove one.",
+      "tasks.duplicate_slot":
+        "The same member already has that role — remove one.",
       // EXPERIENCE.md's Save failed line, as every other save shows it.
       "tasks.create_failed": "Couldn't save — try again.",
       "tasks.not_found": "This task was deleted or the link is wrong.",
@@ -351,7 +436,10 @@ describe("handBackSlotAction", () => {
       slot_id: SLOT_ID,
       reason: "Out sick",
     })
-    expect(revalidatePath).toHaveBeenCalledExactlyOnceWith("/(member)/dashboard", "layout")
+    expect(revalidatePath).toHaveBeenCalledExactlyOnceWith(
+      "/(member)/dashboard",
+      "layout"
+    )
     expect(result).toEqual({ ok: true, data: { state: "needs_reassignment" } })
   })
 
@@ -370,14 +458,17 @@ describe("handBackSlotAction", () => {
     ["tasks.not_found", "tasks.not_found"],
     ["tasks.not_allowed", "tasks.not_allowed"],
     ["something unexpected", "tasks.save_failed"],
-  ])("maps the database error %s to %s without revalidating", async (message, code) => {
-    rpc.mockResolvedValue({ data: null, error: { message } })
+  ])(
+    "maps the database error %s to %s without revalidating",
+    async (message, code) => {
+      rpc.mockResolvedValue({ data: null, error: { message } })
 
-    const result = await handBackSlotAction({ slotId: SLOT_ID })
+      const result = await handBackSlotAction({ slotId: SLOT_ID })
 
-    expect(result).toEqual({ ok: false, code })
-    expect(revalidatePath).not.toHaveBeenCalled()
-  })
+      expect(result).toEqual({ ok: false, code })
+      expect(revalidatePath).not.toHaveBeenCalled()
+    }
+  )
 })
 
 describe.each([
@@ -412,14 +503,17 @@ describe.each([
     ["tasks.stale", "tasks.stale"],
     ["tasks.not_allowed", "tasks.save_failed"],
     ["fetch failed", "tasks.save_failed"],
-  ])("maps the database error %s to %s without revalidating", async (message, code) => {
-    rpc.mockResolvedValue({ data: null, error: { message } })
+  ])(
+    "maps the database error %s to %s without revalidating",
+    async (message, code) => {
+      rpc.mockResolvedValue({ data: null, error: { message } })
 
-    const result = await action({ taskId: TASK_ID })
+      const result = await action({ taskId: TASK_ID })
 
-    expect(result).toEqual({ ok: false, code })
-    expect(revalidatePath).not.toHaveBeenCalled()
-  })
+      expect(result).toEqual({ ok: false, code })
+      expect(revalidatePath).not.toHaveBeenCalled()
+    }
+  )
 })
 
 describe("sendBackTaskAction", () => {
@@ -466,14 +560,17 @@ describe("sendBackTaskAction", () => {
     ["tasks.stale", "tasks.stale"],
     ["tasks.invalid_note", "tasks.save_failed"],
     ["something unexpected", "tasks.save_failed"],
-  ])("maps the database error %s to %s without revalidating", async (message, code) => {
-    rpc.mockResolvedValue({ data: null, error: { message } })
+  ])(
+    "maps the database error %s to %s without revalidating",
+    async (message, code) => {
+      rpc.mockResolvedValue({ data: null, error: { message } })
 
-    const result = await sendBackTaskAction({ taskId: TASK_ID, note: "Fix" })
+      const result = await sendBackTaskAction({ taskId: TASK_ID, note: "Fix" })
 
-    expect(result).toEqual({ ok: false, code })
-    expect(revalidatePath).not.toHaveBeenCalled()
-  })
+      expect(result).toEqual({ ok: false, code })
+      expect(revalidatePath).not.toHaveBeenCalled()
+    }
+  )
 })
 
 describe("deleteTaskAction", () => {
@@ -592,7 +689,10 @@ describe("updateTaskAction", () => {
         ],
       },
     ],
-    ["a due date that can't convert", { ...EDIT_INPUT, dueAt: "2026-02-30T10:00" }],
+    [
+      "a due date that can't convert",
+      { ...EDIT_INPUT, dueAt: "2026-02-30T10:00" },
+    ],
   ])("rejects %s without calling the database", async (_name, input) => {
     const result = await updateTaskAction(input)
 
@@ -622,9 +722,7 @@ describe("updateTaskAction", () => {
       ],
     })
     expect(rpc.mock.calls[0][1].slots[1]).not.toHaveProperty("id")
-    expect(rpc.mock.calls[0][1].slots[1]).not.toHaveProperty(
-      "loaded_member_id"
-    )
+    expect(rpc.mock.calls[0][1].slots[1]).not.toHaveProperty("loaded_member_id")
     expect(revalidatePath.mock.calls).toEqual([
       ["/(member)/dashboard", "layout"],
       ["/(admin)/admin", "layout"],
@@ -797,7 +895,12 @@ describe("recording unexpected errors", () => {
     ],
     [
       "moveTaskAction",
-      () => moveTaskAction({ taskId: TASK_ID, toColumn: "doing" }),
+      () =>
+        moveTaskAction({
+          taskId: TASK_ID,
+          toColumn: "doing",
+          expectedMovedAt: "2026-11-15T01:02:03.123456+00:00",
+        }),
       { route: "action moveTaskAction", entityType: "task", entityId: TASK_ID },
     ],
     [
@@ -817,7 +920,11 @@ describe("recording unexpected errors", () => {
     [
       "reopenTaskAction",
       () => reopenTaskAction({ taskId: TASK_ID }),
-      { route: "action reopenTaskAction", entityType: "task", entityId: TASK_ID },
+      {
+        route: "action reopenTaskAction",
+        entityType: "task",
+        entityId: TASK_ID,
+      },
     ],
     [
       "deleteTaskAction",
@@ -826,12 +933,20 @@ describe("recording unexpected errors", () => {
           taskId: TASK_ID,
           expectedUpdatedAt: "2026-10-30T02:15:42.123456+00:00",
         }),
-      { route: "action deleteTaskAction", entityType: "task", entityId: TASK_ID },
+      {
+        route: "action deleteTaskAction",
+        entityType: "task",
+        entityId: TASK_ID,
+      },
     ],
     [
       "updateTaskAction",
       () => updateTaskAction({ ...VALID_EDIT, taskId: TASK_ID }),
-      { route: "action updateTaskAction", entityType: "task", entityId: TASK_ID },
+      {
+        route: "action updateTaskAction",
+        entityType: "task",
+        entityId: TASK_ID,
+      },
     ],
     [
       "reassignSlotAction",
@@ -920,7 +1035,12 @@ describe("recording unexpected errors", () => {
     ],
     [
       "moveTaskAction",
-      () => moveTaskAction({ taskId: TASK_ID, toColumn: "doing" }),
+      () =>
+        moveTaskAction({
+          taskId: TASK_ID,
+          toColumn: "doing",
+          expectedMovedAt: "2026-11-15T01:02:03.123456+00:00",
+        }),
       "auth.not_active",
     ],
     [
@@ -1041,7 +1161,11 @@ describe("recording unexpected errors", () => {
   it("doesn't record a success", async () => {
     rpc.mockResolvedValue({ data: null, error: null })
 
-    await moveTaskAction({ taskId: TASK_ID, toColumn: "doing" })
+    await moveTaskAction({
+      taskId: TASK_ID,
+      toColumn: "doing",
+      expectedMovedAt: "2026-11-15T01:02:03.123456+00:00",
+    })
 
     expect(after).not.toHaveBeenCalled()
   })

@@ -153,6 +153,13 @@ describe("toast", () => {
     expect(screen.queryByText("Task saved.")).not.toBeInTheDocument()
   })
 
+  it("drops the spoken status with announce: false, but still shows the toast", async () => {
+    await show(() => toast.undo("Moved to Doing.", { announce: false }))
+
+    expect(screen.getByText("Moved to Doing.")).toBeInTheDocument()
+    expect(screen.queryByRole("status")).toBeNull()
+  })
+
   it("shows a description under the message", async () => {
     await show(() =>
       toast.notice("Copy it by hand.", { description: "Hello team" })

@@ -62,7 +62,7 @@ export async function PlannerView({
   ])
   const home = parseOwnerFilterParam(ownerFilterParam(homeScope), owners)
   const toggleScope: PlannerScope | null =
-    home && home.kind !== "all" ? home : null
+    home && home.kind !== "all" && home.kind !== "mine" ? home : null
   const includeScope = toggleScope !== null && parseIncludeScope(scope)
 
   return (

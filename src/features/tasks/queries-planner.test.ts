@@ -140,7 +140,7 @@ describe("getPlanner", () => {
       {
         method: "select",
         args: [
-          "id, title, due_at, column, revision_note_at, sections(name), desks(name), task_assignments(member_id, state)",
+          "id, title, due_at, column, revision_note_at, owning_section_id, owning_desk_id, moved_at, moved_by, created_by, done_at, sections(name), desks(name), task_assignments(member_id, state)",
         ],
       },
     ])
@@ -260,6 +260,8 @@ describe("getPlanner", () => {
         sentBack: true,
         hasAwaitingResponse: true,
         hasNeedsReassignment: true,
+        ownerId: "",
+        doneAt: null,
         assignees: [
           { id: ME, name: "Sam Layout", initials: "SL", handedBack: false },
           {

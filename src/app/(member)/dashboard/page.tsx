@@ -30,14 +30,14 @@ export async function generateMetadata({
 export default async function DashboardPage({
   searchParams,
 }: PageProps<"/dashboard">) {
-  await requireActiveMember()
-  const { view, owner, month, scope } = await searchParams
+  const member = await requireActiveMember()
+  const { view, month, scope } = await searchParams
 
   switch (parseDashboardView(view)) {
     case "board":
       return (
         <Suspense key="board" fallback={<BoardSkeleton />}>
-          <BoardView owner={owner} />
+          <BoardView viewerId={member.id} />
         </Suspense>
       )
     case "planner":

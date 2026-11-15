@@ -28,6 +28,12 @@ export type ToastOptions = {
   description?: string
   /** At most one action, in tan. */
   action?: ToastAction
+  /**
+   * `false` drops the toast's `role="status"`, so a screen reader doesn't
+   * hear it: for the toast after a keyboard drag, whose drop announcement
+   * says the same thing. It still shows (and an error stays an alert).
+   */
+  announce?: false
 }
 
 type ToastId = string | number
@@ -63,6 +69,7 @@ function show(kind: ToastKind, message: string, options: ToastOptions = {}) {
         message={message}
         description={options.description}
         action={options.action}
+        announce={options.announce}
       />
     ),
     { id: options.id, duration: Infinity }
@@ -150,12 +157,14 @@ function ToastView({
   message,
   description,
   action,
+  announce,
 }: {
   id: ToastId
   kind: ToastKind
   message: string
   description?: string
   action?: ToastAction
+  announce?: false
 }) {
   const duration = TOAST_DURATIONS[kind]
   const [hovered, setHovered] = useState(false)
@@ -203,7 +212,9 @@ function ToastView({
   return (
     <div
       ref={rootRef}
-      role={kind === "error" ? "alert" : "status"}
+      role={
+        kind === "error" ? "alert" : announce === false ? undefined : "status"
+      }
       data-toast-kind={kind}
       className="relative flex w-full items-start gap-1 overflow-hidden rounded-lg bg-ink py-2 pr-1 pl-4 text-white shadow-lg"
       onPointerEnter={() => setHovered(true)}

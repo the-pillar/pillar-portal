@@ -6,11 +6,14 @@ import { refreshAfterFailure } from "./refresh-after-failure"
 
 /**
  * The part of AD-3's action result the hook reads: `ok`, and on a refusal its
- * `code`. A success reaches `onSuccess` whole, `data` included; a refusal's
- * `params` aren't read, so copy that needs them can't come from this hook.
+ * `code` and `params`, which go to `errorMessage` for copy that names
+ * something (the column a stale card is in now). A success reaches
+ * `onSuccess` whole, `data` included.
  */
+export type CommandParams = Record<string, unknown>
+
 export type CommandResult<TCode extends string> =
-  { ok: true } | { ok: false; code: TCode }
+  { ok: true } | { ok: false; code: TCode; params?: CommandParams }
 
 export type CommandCallbacks<TResult, TCode extends string> = {
   /**
@@ -43,7 +46,7 @@ export function useCommand<TCode extends string>({
   errorMessage,
   thrownCode,
 }: {
-  errorMessage: (code: TCode) => string
+  errorMessage: (code: TCode, params?: CommandParams) => string
   thrownCode: NoInfer<TCode>
 }) {
   const router = useRouter()
@@ -55,8 +58,8 @@ export function useCommand<TCode extends string>({
   ) {
     if (isPending) return
 
-    function fail(code: TCode) {
-      toast.error(errorMessage(code))
+    function fail(code: TCode, params?: CommandParams) {
+      toast.error(errorMessage(code, params))
       refreshAfterFailure(router)
       onFailure?.(code)
     }
@@ -72,7 +75,7 @@ export function useCommand<TCode extends string>({
       }
       const outcome: CommandResult<TCode> = result
       if (!outcome.ok) {
-        fail(outcome.code)
+        fail(outcome.code, outcome.params)
         return
       }
       onSuccess?.(result as Extract<TResult, { ok: true }>)
