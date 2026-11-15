@@ -130,15 +130,23 @@ export type PendingMember = {
   signedInLabel: string
   /** The active member they may be a second account of, else null. */
   lookAlikeName: string | null
+  /** The name Google sent, shown as a hint beside the editor; null if none. */
+  googleName: string | null
+  /** `member_capabilities`' answer: whether Edit name is offered. */
+  canRename: boolean
 }
 
-/** An active member on the read-only roster. */
+/** An active member on the roster. */
 export type RosterMember = {
   id: string
   name: string
   email: string
   /** Their positions' titles, the primary first, then in `sort_order`. */
   positionTitles: string[]
+  /** The name Google sent, shown as a hint beside the editor; null if none. */
+  googleName: string | null
+  /** `member_capabilities`' answer: whether Edit name is offered. */
+  canRename: boolean
 }
 
 export type MemberApprovalsData = {
@@ -159,14 +167,18 @@ const SIGNED_IN_FORMAT = "EEE, MMM d, yyyy 'at' h:mm a 'PHT'"
  * and deactivated members are in neither list. Each pending member's
  * look-alike is matched here against the roster the page already shows, so
  * it adds no query and sends no extra member data: the page gets only the
- * matched member's name. Throws on any query error.
+ * matched member's name. One `member_capabilities` call, when anyone is
+ * listed, says who may be renamed (a missing row means no). Throws on any
+ * query error.
  */
 export async function getMemberApprovals(): Promise<MemberApprovalsData> {
   const supabase = await createClient()
 
   const [pendingResult, activeResult, positionsResult] = await Promise.all([
     whereMemberState(
-      supabase.from("members").select("id, name, email, created_at"),
+      supabase
+        .from("members")
+        .select("id, name, google_name, email, created_at"),
       "pending"
     )
       .order("created_at", { ascending: true })
@@ -174,7 +186,9 @@ export async function getMemberApprovals(): Promise<MemberApprovalsData> {
     whereMemberState(
       supabase
         .from("members")
-        .select("id, name, email, member_positions(position, is_primary)"),
+        .select(
+          "id, name, google_name, email, member_positions(position, is_primary)"
+        ),
       "active"
     )
       .order("name", { ascending: true })
@@ -203,10 +217,31 @@ export async function getMemberApprovals(): Promise<MemberApprovalsData> {
     (positionsResult.data ?? []).map((row) => [row.id, row])
   )
 
+  const ids = [
+    ...(pendingResult.data ?? []).map((member) => member.id),
+    ...(activeResult.data ?? []).map((member) => member.id),
+  ]
+  const canRename = new Set<string>()
+  if (ids.length > 0) {
+    const { data, error } = await supabase.rpc("member_capabilities", { ids })
+    if (error) {
+      throw new Error(
+        "getMemberApprovals: reading member_capabilities failed",
+        {
+          cause: error,
+        }
+      )
+    }
+    for (const row of data ?? [])
+      if (row.can_rename) canRename.add(row.member_id)
+  }
+
   const roster: RosterMember[] = (activeResult.data ?? []).map((member) => ({
     id: member.id,
     name: member.name,
     email: member.email,
+    googleName: member.google_name,
+    canRename: canRename.has(member.id),
     positionTitles: member.member_positions
       .flatMap((held) => {
         const position = positions.get(held.position)
@@ -224,6 +259,8 @@ export async function getMemberApprovals(): Promise<MemberApprovalsData> {
     id: member.id,
     name: member.name,
     email: member.email,
+    googleName: member.google_name,
+    canRename: canRename.has(member.id),
     signedInAt: member.created_at,
     signedInLabel: formatInPht(member.created_at, SIGNED_IN_FORMAT),
     lookAlikeName: findLookAlike(member, roster)?.name ?? null,

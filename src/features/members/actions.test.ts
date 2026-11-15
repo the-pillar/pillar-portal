@@ -472,6 +472,8 @@ describe("error copy", () => {
       "auth.not_active": "Sign in to do that.",
       "members.stale": stale,
       "members.not_found": stale,
+      "members.name_blank": "Add a name.",
+      "members.name_too_long": "Use 100 characters or fewer.",
       "members.save_failed": "Couldn't save — try again.",
     })
   })
@@ -779,5 +781,84 @@ describe("recording unexpected errors", () => {
 
     expect(rpc).not.toHaveBeenCalled()
     expect(after).not.toHaveBeenCalled()
+  })
+})
+
+describe("renameMemberAction", () => {
+  it("calls set_member_name with the trimmed name, revalidates both areas and returns the saved name", async () => {
+    rpc.mockResolvedValue({ data: "Axel Aranzado", error: null })
+    const { renameMemberAction } = await loadActions({ personas: "true" })
+
+    await expect(
+      renameMemberAction({ memberId: MEMBER_ID, name: "  Axel Aranzado " })
+    ).resolves.toEqual({
+      ok: true,
+      data: { memberId: MEMBER_ID, name: "Axel Aranzado" },
+    })
+    expect(rpc).toHaveBeenCalledExactlyOnceWith("set_member_name", {
+      member_id: MEMBER_ID,
+      name: "Axel Aranzado",
+    })
+    expect(revalidatePath).toHaveBeenCalledWith("/(admin)/admin", "layout")
+    expect(revalidatePath).toHaveBeenCalledWith("/(member)/dashboard", "layout")
+  })
+
+  it.each([
+    ["an empty name", "", "members.name_blank"],
+    ["a blank name", " \t ", "members.name_blank"],
+    ["101 characters", "x".repeat(101), "members.name_too_long"],
+  ])(
+    "returns the name code for %s without calling the database",
+    async (_label, name, code) => {
+      const { renameMemberAction } = await loadActions({ personas: "true" })
+
+      await expect(
+        renameMemberAction({ memberId: MEMBER_ID, name })
+      ).resolves.toEqual({ ok: false, code })
+      expect(rpc).not.toHaveBeenCalled()
+      expect(revalidatePath).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each([
+    ["no input", undefined],
+    ["a member id that isn't a uuid", { memberId: "nope", name: "Axel" }],
+    ["a name that isn't text", { memberId: MEMBER_ID, name: 7 }],
+  ])("returns members.save_failed for %s", async (_label, input) => {
+    const { renameMemberAction } = await loadActions({ personas: "true" })
+
+    await expect(renameMemberAction(input)).resolves.toEqual({
+      ok: false,
+      code: "members.save_failed",
+    })
+    expect(rpc).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    "auth.not_active",
+    "members.stale",
+    "members.not_found",
+    "members.name_blank",
+    "members.name_too_long",
+  ])("maps the database's %s straight through", async (message) => {
+    rpc.mockResolvedValue({ data: null, error: { code: "P0001", message } })
+    const { renameMemberAction } = await loadActions({ personas: "true" })
+
+    await expect(
+      renameMemberAction({ memberId: MEMBER_ID, name: "Axel" })
+    ).resolves.toEqual({ ok: false, code: message })
+    expect(revalidatePath).not.toHaveBeenCalled()
+  })
+
+  it("maps members.not_admin to members.save_failed", async () => {
+    rpc.mockResolvedValue({
+      data: null,
+      error: { code: "P0001", message: "members.not_admin" },
+    })
+    const { renameMemberAction } = await loadActions({ personas: "true" })
+
+    await expect(
+      renameMemberAction({ memberId: MEMBER_ID, name: "Axel" })
+    ).resolves.toEqual({ ok: false, code: "members.save_failed" })
   })
 })

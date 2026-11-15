@@ -12,7 +12,7 @@ import {
   type ErrorEventWhere,
   recordErrorEvent,
 } from "@/lib/record-error-event"
-import { ADMIN_AREA } from "@/lib/revalidate-paths"
+import { ADMIN_AREA, MEMBER_AREA } from "@/lib/revalidate-paths"
 import { createClient } from "@/lib/supabase/server"
 
 import type { MemberErrorCode } from "./errors"
@@ -21,6 +21,7 @@ import { loginPath, safeReturnPath } from "./return-path"
 import {
   memberApproveSchema,
   memberDeclineSchema,
+  memberRenameSchema,
   personaSignInSchema,
 } from "./schemas"
 
@@ -179,8 +180,10 @@ export type MemberCommandState =
   | { ok: true; data: { memberId: string } }
   | { ok: false; code: MemberErrorCode; params?: Record<string, unknown> }
 
-// The codes approve_member and decline_member raise that the page has copy
-// for. Anything else (members.not_admin, the position backstops, a raw
+// The codes approve_member, decline_member and set_member_name raise that the
+// page has copy for (set_member_name also raises members.name_blank and
+// members.name_too_long, shown under the field; the client checks first).
+// Anything else (members.not_admin, the position backstops, a raw
 // database or network error) is members.save_failed, and mapCommandError
 // records it in error_events after the response (code, action, member id
 // only). A parse failure never gets there: anyone can send one, so it isn't
@@ -189,6 +192,8 @@ const COMMAND_ERROR_CODES: ReadonlySet<MemberErrorCode> = new Set([
   "auth.not_active",
   "members.stale",
   "members.not_found",
+  "members.name_blank",
+  "members.name_too_long",
 ])
 
 /**
@@ -254,4 +259,55 @@ export async function declineMemberAction(
 
   revalidatePath(ADMIN_AREA, "layout")
   return { ok: true, data: { memberId } }
+}
+
+/** What the name editor gets back: the member and the name as saved. */
+export type MemberRenameState =
+  | { ok: true; data: { memberId: string; name: string } }
+  | { ok: false; code: MemberErrorCode; params?: Record<string, unknown> }
+
+/**
+ * Renames a pending or active member (AD-3, AD-4): set_member_name decides
+ * whether the caller may and whether the member can still be renamed, trims
+ * and returns the saved name. A name issue (blank, too long) returns its
+ * code without calling; any other parse failure is members.save_failed. This
+ * only parses, calls it, maps the error and revalidates both areas.
+ */
+export async function renameMemberAction(
+  input: unknown
+): Promise<MemberRenameState> {
+  const parsed = memberRenameSchema.safeParse(input)
+  if (!parsed.success) {
+    const message = parsed.error.issues.find(
+      (issue) => issue.path[0] === "name"
+    )?.message
+    return {
+      ok: false,
+      code:
+        message === "members.name_blank" || message === "members.name_too_long"
+          ? message
+          : "members.save_failed",
+    }
+  }
+  const { memberId, name } = parsed.data
+
+  const supabase = await createClient()
+  const { data, error } = await supabase.rpc("set_member_name", {
+    member_id: memberId,
+    name,
+  })
+  if (error) {
+    return {
+      ok: false,
+      code: mapCommandError(error, COMMAND_ERROR_CODES, "members.save_failed", {
+        route: "action renameMemberAction",
+        entityType: "member",
+        entityId: memberId,
+      }),
+    }
+  }
+
+  revalidatePath(ADMIN_AREA, "layout")
+  revalidatePath(MEMBER_AREA, "layout")
+  return { ok: true, data: { memberId, name: data ?? name } }
 }

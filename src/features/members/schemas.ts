@@ -1,5 +1,6 @@
 import { z } from "zod"
 
+import { displayNameSchema } from "./display-name"
 import { PERSONA_KEYS } from "./personas"
 import {
   EDITOR_IN_CHIEF_POSITION_ID,
@@ -43,3 +44,11 @@ export const memberDeclineSchema = z.object({
 })
 
 export type MemberDeclineInput = z.infer<typeof memberDeclineSchema>
+
+/** A rename from /admin/members: set_member_name checks it all again. */
+export const memberRenameSchema = z.object({
+  memberId: z.uuid(),
+  name: displayNameSchema,
+})
+
+export type MemberRenameInput = z.infer<typeof memberRenameSchema>
