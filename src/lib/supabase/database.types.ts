@@ -388,6 +388,7 @@ export type Database = {
           state: Database["public"]["Enums"]["slot_state"]
           task_id: string
           updated_at: string
+          updated_by: string | null
         }
         Insert: {
           created_at?: string
@@ -397,6 +398,7 @@ export type Database = {
           state?: Database["public"]["Enums"]["slot_state"]
           task_id: string
           updated_at?: string
+          updated_by?: string | null
         }
         Update: {
           created_at?: string
@@ -406,6 +408,7 @@ export type Database = {
           state?: Database["public"]["Enums"]["slot_state"]
           task_id?: string
           updated_at?: string
+          updated_by?: string | null
         }
         Relationships: [
           {
@@ -429,6 +432,20 @@ export type Database = {
             referencedRelation: "tasks"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "task_assignments_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "member_directory"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_assignments_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
         ]
       }
       tasks: {
@@ -441,6 +458,8 @@ export type Database = {
           done_at: string | null
           due_at: string
           id: string
+          moved_at: string
+          moved_by: string | null
           owning_desk_id: string | null
           owning_section_id: string | null
           reference_url: string | null
@@ -449,6 +468,7 @@ export type Database = {
           revision_note_by: string | null
           title: string
           updated_at: string
+          updated_by: string | null
         }
         Insert: {
           column?: Database["public"]["Enums"]["task_column"]
@@ -459,6 +479,8 @@ export type Database = {
           done_at?: string | null
           due_at: string
           id?: string
+          moved_at?: string
+          moved_by?: string | null
           owning_desk_id?: string | null
           owning_section_id?: string | null
           reference_url?: string | null
@@ -467,6 +489,7 @@ export type Database = {
           revision_note_by?: string | null
           title: string
           updated_at?: string
+          updated_by?: string | null
         }
         Update: {
           column?: Database["public"]["Enums"]["task_column"]
@@ -477,6 +500,8 @@ export type Database = {
           done_at?: string | null
           due_at?: string
           id?: string
+          moved_at?: string
+          moved_by?: string | null
           owning_desk_id?: string | null
           owning_section_id?: string | null
           reference_url?: string | null
@@ -485,6 +510,7 @@ export type Database = {
           revision_note_by?: string | null
           title?: string
           updated_at?: string
+          updated_by?: string | null
         }
         Relationships: [
           {
@@ -497,6 +523,20 @@ export type Database = {
           {
             foreignKeyName: "tasks_created_by_fkey"
             columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_moved_by_fkey"
+            columns: ["moved_by"]
+            isOneToOne: false
+            referencedRelation: "member_directory"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_moved_by_fkey"
+            columns: ["moved_by"]
             isOneToOne: false
             referencedRelation: "members"
             referencedColumns: ["id"]
@@ -529,6 +569,20 @@ export type Database = {
             referencedRelation: "members"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "tasks_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "member_directory"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
         ]
       }
     }
@@ -553,6 +607,7 @@ export type Database = {
         Returns: undefined
       }
       begin_job_run: { Args: { job: string }; Returns: number }
+      can_create_task: { Args: never; Returns: boolean }
       create_task: {
         Args: {
           description: string
@@ -598,13 +653,22 @@ export type Database = {
           open_slots: number
         }[]
       }
-      move_task: {
-        Args: {
-          task_id: string
-          to_column: Database["public"]["Enums"]["task_column"]
-        }
-        Returns: undefined
-      }
+      move_task:
+        | {
+            Args: {
+              task_id: string
+              to_column: Database["public"]["Enums"]["task_column"]
+            }
+            Returns: undefined
+          }
+        | {
+            Args: {
+              expected_moved_at: string
+              task_id: string
+              to_column: Database["public"]["Enums"]["task_column"]
+            }
+            Returns: string
+          }
       my_onboarding: {
         Args: never
         Returns: {
@@ -628,6 +692,7 @@ export type Database = {
           state: Database["public"]["Enums"]["slot_state"]
           task_id: string
           updated_at: string
+          updated_by: string | null
         }[]
         SetofOptions: {
           from: "*"
