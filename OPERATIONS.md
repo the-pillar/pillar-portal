@@ -180,7 +180,8 @@ then checked.
    (`PROTOTYPE_PERSONAS`, `PROTOTYPE_PERSONA_PASSWORD`). Add the app hostname
    as the project's domain and its DNS record in Cloudflare (DNS only, not
    proxied). A missing or malformed server variable fails the Vercel build
-   and leaves the live deployment as it was; for the key the build log says
+   at `pnpm check:env`, before `next build`, and leaves the live deployment
+   as it was; for the key the build log says
    `SUPABASE_SECRET_KEY: must be a secret key (sb_secret_…)`. Check: `main`
    deploys to production in `sin1`; `https://<app host>/api/health` returns
    200; `vercel env ls production` shows no `PROTOTYPE_PERSONAS`; `EMAIL_MODE`

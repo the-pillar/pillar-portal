@@ -2,10 +2,12 @@
 // the token). No runtime imports (only the generated role type): pure, so
 // client and server code can both use it.
 //
-// It mirrors `private.is_member_active` (the database's one definition of
-// active): a role other than `pending`, with neither `declined_at` nor
-// `deactivated_at` set. Routing uses it; RLS and the commands still decide
-// what anyone can read or do.
+// It mirrors the database's definitions of active (`private.is_member_active`:
+// a role other than `pending`, with neither `declined_at` nor `deactivated_at`
+// set) and pending (`private.is_member_pending`: role `pending`, with neither
+// set). `memberStateOf` gives the state of a row already held;
+// `whereMemberState` filters a query to pending or active members. Routing
+// uses them; RLS and the commands still decide what anyone can read or do.
 
 import type { Enums } from "@/lib/supabase/database.types"
 
@@ -31,6 +33,27 @@ export function memberStateOf({
   if (declinedAt !== null) return "declined"
   if (role === "pending") return "pending"
   return "active"
+}
+
+/**
+ * Keeps the `members` rows in one state: `pending` is role `pending` with
+ * neither `declined_at` nor `deactivated_at` set (`private.is_member_pending`),
+ * `active` a role other than `pending` with neither
+ * (`private.is_member_active`). The one TS restatement of those predicates for
+ * queries; RLS still decides what a caller reads.
+ */
+export function whereMemberState<
+  Q extends {
+    eq(column: "role", value: "pending"): Q
+    neq(column: "role", value: "pending"): Q
+    is(column: "declined_at" | "deactivated_at", value: null): Q
+  },
+>(query: Q, state: "pending" | "active"): Q {
+  const byRole =
+    state === "pending"
+      ? query.eq("role", "pending")
+      : query.neq("role", "pending")
+  return byRole.is("declined_at", null).is("deactivated_at", null)
 }
 
 /** What /login shows for each state but active (EXPERIENCE.md, UX-DR52). */

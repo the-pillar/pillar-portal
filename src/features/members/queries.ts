@@ -7,7 +7,11 @@ import type { Enums } from "@/lib/supabase/database.types"
 import { createClient } from "@/lib/supabase/server"
 import { formatInPht } from "@/lib/time"
 
-import { memberStateOf, type MemberState } from "./account-state"
+import {
+  memberStateOf,
+  whereMemberState,
+  type MemberState,
+} from "./account-state"
 import { homeScopeOf, type HomeScope } from "./home-scope"
 import { findLookAlike } from "./look-alike"
 import { groupOfferedPositions, type PositionGroup } from "./position-groups"
@@ -150,32 +154,29 @@ const SIGNED_IN_FORMAT = "EEE, MMM d, yyyy 'at' h:mm a 'PHT'"
  * admin reads every `members` and `member_positions` row; anyone else would
  * get only their own): the members awaiting approval, oldest first; the
  * active roster by name; and the positions the picker offers, grouped.
- * Pending means role `pending` with neither `declined_at` nor
- * `deactivated_at`, active a role other than `pending` with neither, as in
- * `private.is_member_active`, so declined and deactivated members are in
- * neither list. Each pending member's look-alike is matched here against the
- * roster the page already shows, so it adds no query and sends no extra
- * member data: the page gets only the matched member's name. Throws on any
- * query error.
+ * Pending and active are `whereMemberState`'s (the TS side of
+ * `private.is_member_pending` and `private.is_member_active`), so declined
+ * and deactivated members are in neither list. Each pending member's
+ * look-alike is matched here against the roster the page already shows, so
+ * it adds no query and sends no extra member data: the page gets only the
+ * matched member's name. Throws on any query error.
  */
 export async function getMemberApprovals(): Promise<MemberApprovalsData> {
   const supabase = await createClient()
 
   const [pendingResult, activeResult, positionsResult] = await Promise.all([
-    supabase
-      .from("members")
-      .select("id, name, email, created_at")
-      .eq("role", "pending")
-      .is("declined_at", null)
-      .is("deactivated_at", null)
+    whereMemberState(
+      supabase.from("members").select("id, name, email, created_at"),
+      "pending"
+    )
       .order("created_at", { ascending: true })
       .order("id", { ascending: true }),
-    supabase
-      .from("members")
-      .select("id, name, email, member_positions(position, is_primary)")
-      .neq("role", "pending")
-      .is("declined_at", null)
-      .is("deactivated_at", null)
+    whereMemberState(
+      supabase
+        .from("members")
+        .select("id, name, email, member_positions(position, is_primary)"),
+      "active"
+    )
       .order("name", { ascending: true })
       .order("id", { ascending: true }),
     supabase
@@ -245,12 +246,10 @@ export async function countPendingApprovalsForViewer(): Promise<number> {
   if (member?.state !== "active" || member.role !== "editorial_admin") return 0
 
   const supabase = await createClient()
-  const { count, error } = await supabase
-    .from("members")
-    .select("id", { count: "exact", head: true })
-    .eq("role", "pending")
-    .is("declined_at", null)
-    .is("deactivated_at", null)
+  const { count, error } = await whereMemberState(
+    supabase.from("members").select("id", { count: "exact", head: true }),
+    "pending"
+  )
   if (error) {
     throw new Error(
       "countPendingApprovalsForViewer: counting pending members failed",

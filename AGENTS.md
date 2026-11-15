@@ -53,7 +53,7 @@ Internal portal for The Pillar, a university student publication: a task board f
 
 - Postgres decides: RLS governs every read, every state change is one `security definer` command (empty `search_path`, its target locked `FOR UPDATE`), and clients write no table directly. A Server Action only Zod-parses, calls one RPC, maps the error and revalidates.
 - Offer only what `task_capabilities` returns; TypeScript never decides permissions or filters slots by state or column.
-- "Active" is `private.is_member_active`; call it, never restate the predicate.
+- "Active" is `private.is_member_active` and "pending" is `private.is_member_pending`; call them, never restate the predicate. In TS queries use `whereMemberState`.
 - Hosted Supabase grants `service_role` every new `public` table, which the local `auto_expose_new_tables = false` hides: revoke it on sensitive tables, and grant it explicitly when a story needs it.
 - Only `ADMIN_CLIENT_IMPORTERS` in `eslint.config.mjs` may import `src/lib/supabase/admin.ts` (the secret key, which bypasses RLS); add an importer only when the spine's AD-6 names it.
 - Call `requireActiveMember()` (member pages) or `requireAdmin()` (admin pages) first, before any `Suspense`: a layout doesn't stop its page rendering, and a redirect inside a streamed boundary becomes a client meta refresh.
