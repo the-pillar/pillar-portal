@@ -99,7 +99,7 @@ describe.each(["header", "bar"] as const)("DashboardTabs (%s)", (variant) => {
   it("marks Planner current, and no other tab, on /dashboard?view=planner", () => {
     usePathname.mockReturnValue("/dashboard")
     useSearchParams.mockReturnValue(
-      new URLSearchParams("view=planner&month=2026-11&scope=home")
+      new URLSearchParams("view=planner&month=2026-11&owner=mine")
     )
     renderTabs()
 

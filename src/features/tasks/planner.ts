@@ -1,51 +1,112 @@
 // The Planner's URL and copy. Client-safe: no `server-only`, and no values
-// from @/features/members (the toggle's scope is the Board's OwnerFilter).
+// from @/features/members (the filter is the Board's OwnerFilter).
 
 import { formatInPht, phtDayKey } from "@/lib/time"
 
-import type { OwnerFilter, TaskOwnerOption } from "./board"
+import {
+  matchesFilter,
+  ownerFilterParam,
+  type FilterableCard,
+  type FilterChip,
+  type OwnerFilter,
+  type TaskOwnerOption,
+} from "./board"
 import { SENT_BACK_LABEL, TASK_COLUMN_LABELS, type TaskColumn } from "./status"
-
-/** A home scope the Planner's toggle can add: a section, a desk or all articles. */
-export type PlannerScope = Exclude<OwnerFilter, { kind: "all" | "mine" }>
-
-/** The toggle's name: "<desk or section> too", or "All articles too". */
-export function plannerScopeLabel(
-  scope: PlannerScope,
-  owners: TaskOwnerOption[]
-): string {
-  if (scope.kind === "articles") return "All articles too"
-  const name =
-    owners.find((owner) => owner.kind === scope.kind && owner.id === scope.id)
-      ?.name ?? scope.id
-  return `${name} too`
-}
-
-/**
- * Whether the `scope` parameter asks for the home scope's tasks: only
- * `home`, never a repeated parameter. The page still turns it off when the
- * viewer has no toggle.
- */
-export function parseIncludeScope(value: unknown): boolean {
-  return value === "home"
-}
 
 /**
  * The Planner's URL: `month` when one is given (Today leaves it out, so the
- * page resolves the current Manila month), and `scope=home` while the toggle
- * is on.
+ * page resolves the current Manila month) and `owner` when the viewer chose a
+ * filter, both kept across the month links.
  */
 export function plannerHref({
   month,
-  includeScope,
+  owner,
 }: {
   month?: string
-  includeScope: boolean
-}): string {
+  owner?: string
+} = {}): string {
   const params = new URLSearchParams({ view: "planner" })
   if (month) params.set("month", month)
-  if (includeScope) params.set("scope", "home")
+  if (owner) params.set("owner", owner)
   return `/dashboard?${params}`
+}
+
+/**
+ * The Planner's filter chips: All, Mine, then the viewer's home scope when it
+ * names a section, a desk or all articles. Top editors and management (home
+ * scope all) get All and Mine. Counts are within the month's cards.
+ */
+export function plannerFilterChips(
+  cards: readonly FilterableCard[],
+  home: OwnerFilter | null,
+  owners: readonly TaskOwnerOption[]
+): FilterChip[] {
+  const chip = (filter: OwnerFilter, label: string): FilterChip => ({
+    value: ownerFilterParam(filter),
+    filter,
+    label,
+    count: cards.filter((card) => matchesFilter(card, filter)).length,
+  })
+  const chips = [chip({ kind: "all" }, "All"), chip({ kind: "mine" }, "Mine")]
+  if (home && home.kind !== "all" && home.kind !== "mine") {
+    chips.push(
+      chip(
+        home,
+        home.kind === "articles" ? "All articles" : ownerName(home, owners)
+      )
+    )
+  }
+  return chips
+}
+
+function ownerName(
+  filter: { kind: "section" | "desk"; id: string },
+  owners: readonly TaskOwnerOption[]
+): string {
+  return (
+    owners.find(
+      (option) => option.kind === filter.kind && option.id === filter.id
+    )?.name ?? filter.id
+  )
+}
+
+/**
+ * The filter an `owner` parameter names for the Planner: Mine, All, or the
+ * viewer's home scope; anything else (another desk, a bad value, a missing
+ * one) means All.
+ */
+export function parsePlannerFilter(
+  value: unknown,
+  home: OwnerFilter | null
+): OwnerFilter {
+  if (value === "mine") return { kind: "mine" }
+  if (
+    home &&
+    home.kind !== "all" &&
+    home.kind !== "mine" &&
+    value === ownerFilterParam(home)
+  ) {
+    return home
+  }
+  return { kind: "all" }
+}
+
+/** The line shown when the month has nothing under the active filter. */
+export function plannerEmptyMessage(
+  filter: OwnerFilter,
+  owners: readonly TaskOwnerOption[]
+): string {
+  switch (filter.kind) {
+    case "all":
+      return "No deadlines this month."
+    case "mine":
+      return "None of your tasks are due this month."
+    case "articles":
+      return "No deadlines in any desk this month."
+    case "section":
+    case "desk":
+      return `No ${ownerName(filter, owners)} deadlines this month.`
+  }
 }
 
 /**
@@ -74,6 +135,7 @@ export function deadlineCount(count: number): string {
 export type PlannerChipStatusKind = TaskColumn | "overdue" | "sent_back"
 
 type ChipTask = {
+  ownerName: string
   title: string
   dueAt: string
   column: TaskColumn
@@ -96,10 +158,11 @@ export function plannerChipStatus(
   return { kind: task.column, label: TASK_COLUMN_LABELS[task.column] }
 }
 
-const CHIP_DUE_FORMAT = "EEE, MMM d 'at' h:mm a"
+const DUE_FORMAT = "EEE, MMM d, h:mm a"
 
-/** "<title>, <status>, due Sat, Oct 10 at 5:00 PM" (PHT): the chip's name. */
+/** "Layout: <title>, <status>, due Sat, Oct 10, 5:00 PM" (PHT): the chip's name. */
 export function plannerChipLabel(task: ChipTask): string {
   const { label } = plannerChipStatus(task)
-  return `${task.title}, ${label}, due ${formatInPht(task.dueAt, CHIP_DUE_FORMAT)}`
+  const owner = task.ownerName ? `${task.ownerName}: ` : ""
+  return `${owner}${task.title}, ${label}, due ${formatInPht(task.dueAt, DUE_FORMAT)}`
 }

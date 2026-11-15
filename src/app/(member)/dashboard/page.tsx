@@ -31,7 +31,7 @@ export default async function DashboardPage({
   searchParams,
 }: PageProps<"/dashboard">) {
   const member = await requireActiveMember()
-  const { view, month, scope } = await searchParams
+  const { view, month } = await searchParams
 
   switch (parseDashboardView(view)) {
     case "board":
@@ -43,7 +43,7 @@ export default async function DashboardPage({
     case "planner":
       return (
         <Suspense key="planner" fallback={<PlannerSkeleton />}>
-          <PlannerView month={month} scope={scope} />
+          <PlannerView month={month} />
         </Suspense>
       )
     case "whats-mine":

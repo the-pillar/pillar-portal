@@ -1,13 +1,14 @@
 import { describe, expect, it } from "vitest"
 
-import type { TaskOwnerOption } from "./board"
+import type { FilterableCard, TaskOwnerOption } from "./board"
 import {
   deadlineCount,
-  parseIncludeScope,
+  parsePlannerFilter,
   plannerChipLabel,
   plannerChipStatus,
+  plannerEmptyMessage,
+  plannerFilterChips,
   plannerHref,
-  plannerScopeLabel,
   tasksByDay,
 } from "./planner"
 
@@ -17,51 +18,103 @@ const OWNERS: TaskOwnerOption[] = [
   { kind: "desk", id: "layout", name: "Layout" },
 ]
 
-describe("plannerScopeLabel", () => {
+const card = (overrides: Partial<FilterableCard> = {}): FilterableCard => ({
+  ownerKind: "desk",
+  ownerId: "layout",
+  yours: false,
+  ...overrides,
+})
+
+describe("plannerFilterChips", () => {
+  const cards = [
+    card({ yours: true }),
+    card(),
+    card({ ownerKind: "section", ownerId: "news" }),
+    card({ ownerKind: "section", ownerId: "feature", yours: true }),
+  ]
+  const summary = (home: Parameters<typeof plannerFilterChips>[1]) =>
+    plannerFilterChips(cards, home, OWNERS).map((chip) => [
+      chip.value,
+      chip.label,
+      chip.count,
+    ])
+
+  it("gives a desk's staff All, Mine and the desk, counted within the month", () => {
+    expect(summary({ kind: "desk", id: "layout" })).toEqual([
+      ["all", "All", 4],
+      ["mine", "Mine", 2],
+      ["desk:layout", "Layout", 2],
+    ])
+  })
+
+  it("names a section by its owner row", () => {
+    expect(summary({ kind: "section", id: "feature" })).toEqual([
+      ["all", "All", 4],
+      ["mine", "Mine", 2],
+      ["section:feature", "Feature", 1],
+    ])
+  })
+
+  it("gives all articles' staff All articles", () => {
+    expect(summary({ kind: "articles" })).toEqual([
+      ["all", "All", 4],
+      ["mine", "Mine", 2],
+      ["articles", "All articles", 2],
+    ])
+  })
+
   it.each([
-    [
-      "a desk (Staff Layout Artist)",
-      { kind: "desk", id: "layout" },
-      "Layout too",
-    ],
-    [
-      "a section (Feature Editor)",
-      { kind: "section", id: "feature" },
-      "Feature too",
-    ],
-    ["all articles (Staff Writer)", { kind: "articles" }, "All articles too"],
-  ] as const)("names %s", (_label, scope, expected) => {
-    expect(plannerScopeLabel(scope, OWNERS)).toBe(expected)
+    ["top editors and management (all)", { kind: "all" } as const],
+    ["a home the Board doesn't know", null],
+  ])("gives %s All and Mine only", (_label, home) => {
+    expect(summary(home).map(([value]) => value)).toEqual(["all", "mine"])
   })
 })
 
-describe("parseIncludeScope", () => {
-  it("is on for scope=home", () => {
-    expect(parseIncludeScope("home")).toBe(true)
+describe("parsePlannerFilter", () => {
+  const home = { kind: "desk", id: "layout" } as const
+
+  it.each([
+    ["mine", home, { kind: "mine" }],
+    ["all", home, { kind: "all" }],
+    ["desk:layout", home, home],
+    ["articles", { kind: "articles" } as const, { kind: "articles" }],
+  ])("reads %s", (value, scope, expected) => {
+    expect(parsePlannerFilter(value, scope)).toEqual(expected)
   })
 
   it.each([
-    ["missing", undefined],
-    ["empty", ""],
-    ["another value", "all"],
-    ["a different case", "Home"],
-    ["repeated", ["home", "home"]],
-  ])("is off when the value is %s", (_label, value) => {
-    expect(parseIncludeScope(value)).toBe(false)
+    ["missing", null, home],
+    ["another desk", "desk:photo", home],
+    ["the home scope when there is none", "desk:layout", null],
+    ["articles when home is a desk", "articles", home],
+    ["garbage", "nope", home],
+    ["repeated", ["mine", "mine"], home],
+  ])("means All for %s", (_label, value, scope) => {
+    expect(parsePlannerFilter(value, scope)).toEqual({ kind: "all" })
+  })
+})
+
+describe("plannerEmptyMessage", () => {
+  it.each([
+    [{ kind: "all" }, "No deadlines this month."],
+    [{ kind: "mine" }, "None of your tasks are due this month."],
+    [{ kind: "desk", id: "layout" }, "No Layout deadlines this month."],
+    [{ kind: "section", id: "news" }, "No News deadlines this month."],
+    [{ kind: "articles" }, "No deadlines in any desk this month."],
+  ] as const)("says %j as %s", (filter, expected) => {
+    expect(plannerEmptyMessage(filter, OWNERS)).toBe(expected)
   })
 })
 
 describe("plannerHref", () => {
   it.each([
-    [{ includeScope: false }, "/dashboard?view=planner"],
-    [{ includeScope: true }, "/dashboard?view=planner&scope=home"],
+    [{}, "/dashboard?view=planner"],
+    [{ owner: "mine" }, "/dashboard?view=planner&owner=mine"],
+    [{ month: "2025-12" }, "/dashboard?view=planner&month=2025-12"],
     [
-      { month: "2025-12", includeScope: false },
-      "/dashboard?view=planner&month=2025-12",
-    ],
-    [
-      { month: "2027-01", includeScope: true },
-      "/dashboard?view=planner&month=2027-01&scope=home",
+      { month: "2027-01", owner: "desk:layout" },
+      "/dashboard?view=planner&month=2027-01&owner=desk%3Alayout",
     ],
   ])("builds %j as %s", (input, expected) => {
     expect(plannerHref(input)).toBe(expected)
@@ -133,6 +186,7 @@ describe("plannerChipStatus", () => {
 describe("plannerChipLabel", () => {
   // Sat, Oct 10 2026, 5:00 PM in Manila.
   const TASK = {
+    ownerName: "Layout",
     title: "Masthead brief",
     dueAt: "2026-10-10T09:00:00Z",
     column: "to_do",
@@ -142,19 +196,25 @@ describe("plannerChipLabel", () => {
 
   it("names the title, the status and the PHT due time", () => {
     expect(plannerChipLabel(TASK)).toBe(
-      "Masthead brief, To Do, due Sat, Oct 10 at 5:00 PM"
+      "Layout: Masthead brief, To Do, due Sat, Oct 10, 5:00 PM"
     )
   })
 
   it("says Overdue for an overdue task", () => {
     expect(plannerChipLabel({ ...TASK, overdue: true })).toBe(
-      "Masthead brief, Overdue, due Sat, Oct 10 at 5:00 PM"
+      "Layout: Masthead brief, Overdue, due Sat, Oct 10, 5:00 PM"
+    )
+  })
+
+  it("leaves the prefix out when the owner has no name", () => {
+    expect(plannerChipLabel({ ...TASK, ownerName: "" })).toBe(
+      "Masthead brief, To Do, due Sat, Oct 10, 5:00 PM"
     )
   })
 
   it("says Sent back for a sent-back task", () => {
     expect(plannerChipLabel({ ...TASK, column: "doing", sentBack: true })).toBe(
-      "Masthead brief, Sent back, due Sat, Oct 10 at 5:00 PM"
+      "Layout: Masthead brief, Sent back, due Sat, Oct 10, 5:00 PM"
     )
   })
 })
