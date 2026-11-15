@@ -143,6 +143,22 @@ async function chooseMove(
   )
 }
 
+/**
+ * Presses a toast action until the Board takes it: one move saves at a time,
+ * and a press while the last save is still finishing is ignored. Done once
+ * `action` has been called `times` times in all.
+ */
+async function pressOnceIdle(
+  press: () => unknown,
+  action: ReturnType<typeof vi.fn>,
+  times: number
+) {
+  await waitFor(async () => {
+    if (action.mock.calls.length < times) await press()
+    expect(action).toHaveBeenCalledTimes(times)
+  })
+}
+
 const MOVED = {
   ok: true,
   data: { column: "doing", movedAt: "2026-11-15T09:00:00.987654+00:00" },
@@ -441,7 +457,15 @@ describe("TaskBoard", () => {
 
     it("moves at once with the card's version, offers Undo and focuses the card", async () => {
       const user = userEvent.setup()
-      moveTaskAction.mockResolvedValue(MOVED)
+      // Held open, so the optimistic column is checked while the move saves:
+      // once it resolves, the card falls back to these props (the refresh
+      // that would carry the new column never comes in a test).
+      let save: (result: typeof MOVED) => void = () => {}
+      moveTaskAction.mockReturnValue(
+        new Promise((resolve) => {
+          save = resolve
+        })
+      )
       render(board())
 
       await chooseMove(user, "Lay out the spread", "Doing")
@@ -452,11 +476,12 @@ describe("TaskBoard", () => {
         expectedMovedAt: SPREAD.movedAt,
       })
       expect(
-        within(column("Doing")).getByRole("heading", {
+        await within(column("Doing")).findByRole("heading", {
           level: 3,
           name: "Lay out the spread",
         })
       ).toBeInTheDocument()
+      save(MOVED)
       await waitFor(() =>
         expect(toastUndo).toHaveBeenCalledWith(
           "Moved to Doing.",
@@ -484,9 +509,7 @@ describe("TaskBoard", () => {
         data: { column: "to_do", movedAt: "later" },
       })
 
-      // Let the first save finish: one move saves at a time.
-      await new Promise((resolve) => setTimeout(resolve, 50))
-      await action.onClick()
+      await pressOnceIdle(action.onClick, moveTaskAction, 2)
 
       await waitFor(() =>
         expect(moveTaskAction).toHaveBeenLastCalledWith({
@@ -521,8 +544,7 @@ describe("TaskBoard", () => {
         data: { column: "doing", movedAt: "2026-11-15T09:00:02+00:00" },
       })
 
-      await new Promise((resolve) => setTimeout(resolve, 50))
-      await action.onClick()
+      await pressOnceIdle(action.onClick, moveTaskAction, 2)
 
       await waitFor(() =>
         expect(toastInfo).toHaveBeenCalledWith("Moved back to Doing.")
@@ -553,9 +575,7 @@ describe("TaskBoard", () => {
         params: { column: "for_review", movedByName: "Ben Baker" },
       })
 
-      // Let the first save finish: one move saves at a time.
-      await new Promise((resolve) => setTimeout(resolve, 50))
-      await action.onClick()
+      await pressOnceIdle(action.onClick, moveTaskAction, 2)
 
       await waitFor(() =>
         expect(toastError).toHaveBeenCalledWith(
@@ -583,7 +603,11 @@ describe("TaskBoard", () => {
         ok: true,
         data: { column: "doing" },
       })
-      await toastSuccess.mock.calls[0][1].action.onClick()
+      await pressOnceIdle(
+        toastSuccess.mock.calls[0][1].action.onClick,
+        reopenTaskAction,
+        1
+      )
       await waitFor(() =>
         expect(reopenTaskAction).toHaveBeenCalledWith({ taskId: REVIEWED.id })
       )
