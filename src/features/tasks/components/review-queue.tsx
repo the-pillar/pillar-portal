@@ -23,7 +23,10 @@ export function ReviewQueue({
 
   return (
     <section aria-labelledby="review-queue-heading" className="mt-6 max-w-2xl">
-      <h2 id="review-queue-heading" className="text-heading-sm text-navy">
+      <h2
+        id="review-queue-heading"
+        className="font-heading text-heading-sm text-navy"
+      >
         Waiting for your review ({tasks.length})
       </h2>
       <ul className="mt-3 flex flex-col gap-3">

@@ -41,7 +41,10 @@ export function HandedBackQueue({
       aria-labelledby="handed-back-queue-heading"
       className="mt-6 max-w-2xl"
     >
-      <h2 id="handed-back-queue-heading" className="text-heading-sm text-navy">
+      <h2
+        id="handed-back-queue-heading"
+        className="font-heading text-heading-sm text-navy"
+      >
         Needs reassignment ({slots.length})
       </h2>
       <ul className="mt-3 flex flex-col gap-3">
