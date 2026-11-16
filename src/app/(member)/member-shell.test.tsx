@@ -207,3 +207,29 @@ describe("MemberShell", () => {
     await waitFor(() => expect(signOutAction).toHaveBeenCalledOnce())
   })
 })
+
+describe("MemberShell's New task slot", () => {
+  it("shows the button it is given in the header action slot, and nothing without one", () => {
+    const { container, rerender } = render(
+      <MemberShell
+        member={{ name: "Head Layout Artist", role: "editorial_admin" }}
+        newTask={<button type="button">New task</button>}
+      >
+        <h1>Page</h1>
+      </MemberShell>
+    )
+    expect(
+      container.querySelector("[data-slot='header-action']")
+    ).toContainElement(screen.getByRole("button", { name: "New task" }))
+
+    rerender(
+      <MemberShell
+        member={{ name: "Head Layout Artist", role: "editorial_admin" }}
+      >
+        <h1>Page</h1>
+      </MemberShell>
+    )
+    expect(container.querySelector("[data-slot='header-action']")).toBeNull()
+    expect(screen.queryByRole("button", { name: "New task" })).toBeNull()
+  })
+})

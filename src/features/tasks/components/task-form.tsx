@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, useSyncExternalStore } from "react"
 import { useRouter } from "next/navigation"
 import { zodResolver } from "@hookform/resolvers/zod"
 import {
@@ -44,6 +44,7 @@ import {
   type CreateTaskState,
   type UpdateTaskState,
 } from "../actions"
+import { duePresets, type DuePreset } from "../due-presets"
 import { taskErrorMessage, type TaskErrorCode } from "../errors"
 import { buildMessengerMessage } from "../messenger"
 import type { TaskEdit, TaskEditSlot } from "../queries/task-edit"
@@ -55,7 +56,10 @@ import {
   type TaskCreateInput,
   type TaskUpdateSlotInput,
 } from "../schemas"
+import { reassignRowLabel } from "../reassign"
 import { copyForMessengerAction } from "./messenger-toast"
+
+const noSubscription = () => () => {}
 
 const EMPTY_SLOT = { role: PRODUCTION_ROLES[0], memberId: "" } as const
 
@@ -75,15 +79,30 @@ type OwnerDefaults = {
   owningDeskId: string | null
 }
 
-function emptyValues(owner?: OwnerDefaults): TaskFormValues {
+function emptyValues(
+  owner?: OwnerDefaults,
+  dueAt: string = ""
+): TaskFormValues {
   return {
     title: "",
     description: null,
     owningSectionId: owner?.owningSectionId ?? null,
     owningDeskId: owner?.owningDeskId ?? null,
-    dueAt: "",
+    dueAt,
     referenceUrl: null,
     slots: [{ ...EMPTY_SLOT }],
+  }
+}
+
+/** `section:<id>` / `desk:<id>` as the form's two owner fields. */
+function ownerDefaults(owner: string | undefined): OwnerDefaults | undefined {
+  if (!owner) return undefined
+  const sep = owner.indexOf(":")
+  const kind = owner.slice(0, sep)
+  const id = owner.slice(sep + 1)
+  return {
+    owningSectionId: kind === "section" ? id : null,
+    owningDeskId: kind === "desk" ? id : null,
   }
 }
 
@@ -178,9 +197,37 @@ function messengerMessage(
 export function TaskForm({
   options,
   task,
+  defaultValues,
+  onCreated,
+  onDirtyChange,
+  onPendingChange,
+  formId,
+  hideSubmit = false,
+  idPrefix = "task",
 }: {
   options: TaskFormOptions
   task?: TaskEdit
+  /** Create mode's prefills: an owner (`section:<id>` / `desk:<id>`) and a due value. */
+  defaultValues?: { owner?: string; dueAt?: string }
+  /**
+   * Create mode, the New task sheet's: called with the new id and the
+   * Messenger text (null when it can't be built) in place of the form's own
+   * "Task created" toast and reset.
+   */
+  onCreated?: (id: string, message: string | null) => void
+  /** Whether the form now differs from its prefills. */
+  onDirtyChange?: (dirty: boolean) => void
+  /** Whether a save is in flight (the sheet's footer button waits on it). */
+  onPendingChange?: (pending: boolean) => void
+  /** The form's id, so a button outside it can submit it with `form=`. */
+  formId?: string
+  /** Leaves the submit button to that outside button. */
+  hideSubmit?: boolean
+  /**
+   * Prefixes every field id (`<prefix>-title`, `<prefix>-owner`…), so two
+   * forms on one page (the New task sheet over the edit page) never share ids.
+   */
+  idPrefix?: string
 }) {
   const router = useRouter()
   // Set once an edit is saved, so nothing resends it while the page leaves.
@@ -192,7 +239,7 @@ export function TaskForm({
     setValue,
     trigger,
     reset,
-    formState: { errors, isSubmitting, isSubmitted },
+    formState: { errors, isSubmitting, isSubmitted, isDirty },
   } = useForm<TaskFormValues>({
     // A field shows its error once it is left, then re-checks as it is
     // typed in. Only the registered inputs blur into validation: the Selects
@@ -204,8 +251,26 @@ export function TaskForm({
     // been submitted.
     mode: "onTouched",
     resolver: task ? updateResolver : createResolver,
-    defaultValues: task ? editValues(task) : emptyValues(),
+    defaultValues: task
+      ? editValues(task)
+      : emptyValues(ownerDefaults(defaultValues?.owner), defaultValues?.dueAt),
   })
+
+  useEffect(() => {
+    onDirtyChange?.(isDirty)
+  }, [isDirty, onDirtyChange])
+  useEffect(() => {
+    onPendingChange?.(isSubmitting)
+  }, [isSubmitting, onPendingChange])
+
+  // Computed after mount: the server's clock may sit on the other side of
+  // midnight from the browser's, and a mismatch would break hydration.
+  const mounted = useSyncExternalStore(
+    noSubscription,
+    () => true,
+    () => false
+  )
+  const presets: DuePreset[] = mounted ? duePresets(new Date()) : []
 
   const { fields, append, remove } = useFieldArray({ control, name: "slots" })
 
@@ -234,8 +299,12 @@ export function TaskForm({
     // Set both, then check both. Validating on each setValue would check
     // "exactly one owner" between the two, while both are null, and pin that
     // error on the owner field; setting the desk only re-checks the desk.
-    setValue("owningSectionId", kind === "section" ? id : null)
-    setValue("owningDeskId", kind === "desk" ? id : null)
+    setValue("owningSectionId", kind === "section" ? id : null, {
+      shouldDirty: true,
+    })
+    setValue("owningDeskId", kind === "desk" ? id : null, {
+      shouldDirty: true,
+    })
     void trigger(["owningSectionId", "owningDeskId"])
   }
 
@@ -252,6 +321,10 @@ export function TaskForm({
       return
     }
     const text = messengerMessage(result.data.id, data, options.roleLabels)
+    if (onCreated) {
+      onCreated(result.data.id, text)
+      return
+    }
     toast.success(
       "Task created",
       text === null ? undefined : copyForMessengerAction(text)
@@ -293,15 +366,16 @@ export function TaskForm({
 
   return (
     <form
+      id={formId}
       onSubmit={handleSubmit(task ? onUpdate : onCreate)}
       noValidate
       className="flex flex-col gap-6"
     >
       <FieldGroup>
         <Field data-invalid={!!errors.title || undefined}>
-          <FieldLabel htmlFor="task-title">Title</FieldLabel>
+          <FieldLabel htmlFor={`${idPrefix}-title`}>Title</FieldLabel>
           <Input
-            id="task-title"
+            id={`${idPrefix}-title`}
             aria-invalid={!!errors.title}
             {...register("title")}
           />
@@ -309,9 +383,11 @@ export function TaskForm({
         </Field>
 
         <Field data-invalid={!!errors.description || undefined}>
-          <FieldLabel htmlFor="task-description">Description</FieldLabel>
+          <FieldLabel htmlFor={`${idPrefix}-description`}>
+            Description
+          </FieldLabel>
           <Textarea
-            id="task-description"
+            id={`${idPrefix}-description`}
             aria-invalid={!!errors.description}
             {...register("description", { setValueAs: blankToNull })}
           />
@@ -320,16 +396,16 @@ export function TaskForm({
 
         {task ? (
           // Fixed at creation: shown, never sent.
-          <Field aria-labelledby="task-owner-label">
-            <FieldTitle id="task-owner-label">Owner</FieldTitle>
+          <Field aria-labelledby={`${idPrefix}-owner-label`}>
+            <FieldTitle id={`${idPrefix}-owner-label`}>Owner</FieldTitle>
             <p className="flex min-h-8 items-center">{task.ownerName}</p>
           </Field>
         ) : (
           <Field data-invalid={!!errors.owningSectionId || undefined}>
-            <FieldLabel htmlFor="task-owner">Owner</FieldLabel>
+            <FieldLabel htmlFor={`${idPrefix}-owner`}>Owner</FieldLabel>
             <Select value={ownerValue} onValueChange={handleOwnerChange}>
               <SelectTrigger
-                id="task-owner"
+                id={`${idPrefix}-owner`}
                 aria-invalid={!!errors.owningSectionId}
               >
                 <SelectValue placeholder="Choose an owner" />
@@ -350,20 +426,42 @@ export function TaskForm({
         )}
 
         <Field data-invalid={!!errors.dueAt || undefined}>
-          <FieldLabel htmlFor="task-due-at">Due date</FieldLabel>
+          <FieldLabel htmlFor={`${idPrefix}-due-at`}>Due date</FieldLabel>
           <Input
-            id="task-due-at"
+            id={`${idPrefix}-due-at`}
             type="datetime-local"
             aria-invalid={!!errors.dueAt}
             {...register("dueAt")}
           />
+          {presets.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {presets.map((preset) => (
+                <button
+                  key={preset.label}
+                  type="button"
+                  onClick={() =>
+                    setValue("dueAt", preset.value, {
+                      shouldValidate: true,
+                      shouldDirty: true,
+                      shouldTouch: true,
+                    })
+                  }
+                  className="inline-flex min-h-11 items-center rounded-full border border-chip-edge bg-card px-3 text-sm font-medium text-navy focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:min-h-9"
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+          )}
           <FieldError errors={[errors.dueAt]} />
         </Field>
 
         <Field data-invalid={!!errors.referenceUrl || undefined}>
-          <FieldLabel htmlFor="task-reference-url">Reference link</FieldLabel>
+          <FieldLabel htmlFor={`${idPrefix}-reference-url`}>
+            Reference link
+          </FieldLabel>
           <Input
-            id="task-reference-url"
+            id={`${idPrefix}-reference-url`}
             type="url"
             aria-invalid={!!errors.referenceUrl}
             {...register("referenceUrl", { setValueAs: blankToNull })}
@@ -377,6 +475,7 @@ export function TaskForm({
             {fields.map((field, index) => (
               <SlotRow
                 key={field.id}
+                idPrefix={idPrefix}
                 index={index}
                 options={options}
                 existingSlots={existingSlots}
@@ -406,14 +505,29 @@ export function TaskForm({
         </FieldSet>
       </FieldGroup>
 
-      <Button type="submit" disabled={isSubmitting || leaving}>
-        {task ? "Save changes" : "Create task"}
-      </Button>
+      {!hideSubmit && (
+        <Button type="submit" disabled={isSubmitting || leaving}>
+          {task ? "Save changes" : "Create task"}
+        </Button>
+      )}
     </form>
   )
 }
 
+// With the load read in, a member shows as the reassign picker lists them.
+function memberLabel(member: SlotMemberOption): string {
+  return member.openSlots === undefined
+    ? member.name
+    : reassignRowLabel({
+        id: member.id,
+        name: member.name,
+        openSlots: member.openSlots,
+        current: false,
+      })
+}
+
 function SlotRow({
+  idPrefix,
   index,
   options,
   existingSlots,
@@ -424,6 +538,7 @@ function SlotRow({
   showErrors,
   onRemove,
 }: {
+  idPrefix: string
   index: number
   options: TaskFormOptions
   /** Edit mode's slots as loaded, by id; empty when creating. */
@@ -489,23 +604,27 @@ function SlotRow({
       {existing ? (
         <Field
           className="flex-1"
-          aria-labelledby={`task-slot-${index}-role-label`}
+          aria-labelledby={`${idPrefix}-slot-${index}-role-label`}
         >
-          <FieldTitle id={`task-slot-${index}-role-label`}>Role</FieldTitle>
+          <FieldTitle id={`${idPrefix}-slot-${index}-role-label`}>
+            Role
+          </FieldTitle>
           <p className="flex min-h-8 items-center">
             {options.roleLabels[existing.role]}
           </p>
         </Field>
       ) : (
         <Field className="flex-1" data-invalid={!!rowErrors?.role || undefined}>
-          <FieldLabel htmlFor={`task-slot-${index}-role`}>Role</FieldLabel>
+          <FieldLabel htmlFor={`${idPrefix}-slot-${index}-role`}>
+            Role
+          </FieldLabel>
           <Controller
             control={control}
             name={`slots.${index}.role`}
             render={({ field }) => (
               <Select value={field.value} onValueChange={field.onChange}>
                 <SelectTrigger
-                  id={`task-slot-${index}-role`}
+                  id={`${idPrefix}-slot-${index}-role`}
                   aria-invalid={!!rowErrors?.role}
                 >
                   <SelectValue />
@@ -527,9 +646,11 @@ function SlotRow({
       {readOnly && existing ? (
         <Field
           className="flex-1"
-          aria-labelledby={`task-slot-${index}-member-label`}
+          aria-labelledby={`${idPrefix}-slot-${index}-member-label`}
         >
-          <FieldTitle id={`task-slot-${index}-member-label`}>Member</FieldTitle>
+          <FieldTitle id={`${idPrefix}-slot-${index}-member-label`}>
+            Member
+          </FieldTitle>
           <p className="flex min-h-8 items-center">{existing.memberName}</p>
         </Field>
       ) : (
@@ -537,14 +658,16 @@ function SlotRow({
           className="flex-1"
           data-invalid={!!rowErrors?.memberId || undefined}
         >
-          <FieldLabel htmlFor={`task-slot-${index}-member`}>Member</FieldLabel>
+          <FieldLabel htmlFor={`${idPrefix}-slot-${index}-member`}>
+            Member
+          </FieldLabel>
           <Controller
             control={control}
             name={`slots.${index}.memberId`}
             render={({ field }) => (
               <Select value={field.value} onValueChange={field.onChange}>
                 <SelectTrigger
-                  id={`task-slot-${index}-member`}
+                  id={`${idPrefix}-slot-${index}-member`}
                   aria-invalid={!!rowErrors?.memberId}
                 >
                   <SelectValue placeholder="Choose a member" />
@@ -552,7 +675,7 @@ function SlotRow({
                 <SelectContent>
                   {memberOptions.map((member) => (
                     <SelectItem key={member.id} value={member.id}>
-                      {member.name}
+                      {memberLabel(member)}
                     </SelectItem>
                   ))}
                 </SelectContent>

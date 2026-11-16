@@ -2,16 +2,16 @@
 import "@testing-library/jest-dom/vitest"
 
 import { cleanup, render, screen } from "@testing-library/react"
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-const { getBoard, getBoardOwners, getMyHomeScope, TaskBoard } = vi.hoisted(
-  () => ({
+const { getBoard, getBoardOwners, getMyHomeScope, canCreateTask, TaskBoard } =
+  vi.hoisted(() => ({
     getBoard: vi.fn(),
+    canCreateTask: vi.fn(),
     getBoardOwners: vi.fn(),
     getMyHomeScope: vi.fn(),
     TaskBoard: vi.fn(() => <p>board</p>),
-  })
-)
+  }))
 
 vi.mock("@/features/members", () => ({ getMyHomeScope }))
 vi.mock("@/features/tasks", async () => {
@@ -25,11 +25,16 @@ vi.mock("@/features/tasks", async () => {
     parseOwnerFilterParam: board.parseOwnerFilterParam,
     getBoard,
     getBoardOwners,
+    canCreateTask,
     TaskBoard,
   }
 })
 
 import { BoardColumns } from "./board-columns"
+
+beforeEach(() => {
+  canCreateTask.mockResolvedValue(true)
+})
 
 afterEach(() => {
   cleanup()
@@ -60,7 +65,19 @@ describe("BoardColumns", () => {
       owners: OWNERS,
       viewerId: "me",
       homeFilter: { kind: "desk", id: "layout" },
+      canCreate: true,
     })
+  })
+
+  it("hands canCreate false when can_create_task says no", async () => {
+    canCreateTask.mockResolvedValue(false)
+    getBoardOwners.mockResolvedValue(OWNERS)
+    getMyHomeScope.mockResolvedValue({ kind: "all" })
+    getBoard.mockResolvedValue([])
+
+    render(await BoardColumns({ viewerId: "me" }))
+
+    expect(props().canCreate).toBe(false)
   })
 
   it("falls back to All when the home scope names no listed owner", async () => {

@@ -1,6 +1,7 @@
 import { getMyHomeScope } from "@/features/members"
 import {
   getBoard,
+  canCreateTask,
   getBoardOwners,
   ownerFilterParam,
   parseOwnerFilterParam,
@@ -14,10 +15,11 @@ import {
 // through the same check, so one naming no listed section or desk falls back
 // to All rather than leaving the filter blank.
 export async function BoardColumns({ viewerId }: { viewerId: string }) {
-  const [owners, scope, cards] = await Promise.all([
+  const [owners, scope, cards, canCreate] = await Promise.all([
     getBoardOwners(),
     getMyHomeScope(),
     getBoard(),
+    canCreateTask(),
   ])
   const homeFilter: OwnerFilter = parseOwnerFilterParam(
     ownerFilterParam(scope),
@@ -30,6 +32,7 @@ export async function BoardColumns({ viewerId }: { viewerId: string }) {
       owners={owners}
       viewerId={viewerId}
       homeFilter={homeFilter}
+      canCreate={canCreate}
     />
   )
 }

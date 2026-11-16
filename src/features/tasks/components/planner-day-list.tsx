@@ -8,6 +8,7 @@ import { monthWeeks, phtDayLabel } from "@/lib/time"
 
 import { deadlineCount, tasksByDay } from "../planner"
 import type { PlannerCard } from "../queries/planner"
+import { NewTaskLink } from "./new-task-button"
 import { PlannerChip } from "./planner-chip"
 
 /**
@@ -17,12 +18,16 @@ import { PlannerChip } from "./planner-chip"
  * " · Today" on today, and a count pill; its tasks are full-width 44px chip
  * rows. A day with nothing is one plain line, "Sun, Nov 15 · No deadlines".
  * The 44px trigger is named "<day>, <n deadlines>"; the day's h3 is Radix's
- * accordion header. No directive: the Accordion is the client part.
+ * accordion header. For a caller who can create tasks, "+ Add a task" ends
+ * each open day and sits on each empty day's line. No directive: the Accordion
+ * is the client part.
  */
 export function PlannerDayList({
   month,
   today,
   tasks,
+  canCreate = false,
+  highlightId = null,
 }: {
   /** `YYYY-MM`, a Manila month. */
   month: string
@@ -30,6 +35,10 @@ export function PlannerDayList({
   today: string
   /** The month's tasks under the active filter, ordered by due date then id. */
   tasks: PlannerCard[]
+  /** `can_create_task()`: "+ Add a task" at the foot of each open day and on empty days. */
+  canCreate?: boolean
+  /** The task just created, whose chip highlights once. */
+  highlightId?: string | null
 }) {
   const byDay = tasksByDay(tasks)
   const days = monthWeeks(month)
@@ -46,14 +55,22 @@ export function PlannerDayList({
       {days.map((day) => {
         const dayTasks = byDay.get(day) ?? []
         const label = `${phtDayLabel(day)}${day === today ? " · Today" : ""}`
+        const add = canCreate && (
+          <NewTaskLink
+            due={day}
+            ariaLabel={`Add a task due ${phtDayLabel(day)}`}
+            className="inline-flex min-h-11 items-center rounded-lg px-2 text-sm font-medium text-navy focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          />
+        )
         if (dayTasks.length === 0) {
           return (
-            <p
+            <div
               key={day}
-              className="rounded-lg bg-card px-3 py-2 text-sm text-muted-foreground shadow-card"
+              className="flex items-center justify-between gap-2 rounded-lg bg-card px-3 py-0.5 text-sm text-muted-foreground shadow-card"
             >
-              {label} · No deadlines
-            </p>
+              <p className="py-2">{label} · No deadlines</p>
+              {add}
+            </div>
           )
         }
         const count = deadlineCount(dayTasks.length)
@@ -82,11 +99,15 @@ export function PlannerDayList({
             <AccordionContent className="h-auto px-1 pt-1 pb-3 [&_a]:no-underline">
               <ul className="flex flex-col gap-2">
                 {dayTasks.map((task) => (
-                  <li key={task.id}>
+                  <li
+                    key={task.id}
+                    data-highlight={task.id === highlightId ? "" : undefined}
+                  >
                     <PlannerChip task={task} variant="row" />
                   </li>
                 ))}
               </ul>
+              {add}
             </AccordionContent>
           </AccordionItem>
         )

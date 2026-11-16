@@ -1,5 +1,5 @@
 import { Suspense } from "react"
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 // vi.mock factories run before this file's imports, so what they share with
 // the tests is created in vi.hoisted.
@@ -9,6 +9,9 @@ const {
   AdminBannerSlot,
   NoticeToast,
   OfflineToast,
+  getNewTaskLayoutData,
+  NewTaskButton,
+  NewTaskSheet,
   RedirectError,
 } = vi.hoisted(() => {
   // Like Next's redirect(), which requireAdmin calls, the mock throws.
@@ -23,11 +26,19 @@ const {
     AdminBannerSlot: vi.fn(() => null),
     NoticeToast: vi.fn(() => null),
     OfflineToast: vi.fn(() => null),
+    getNewTaskLayoutData: vi.fn(),
+    NewTaskButton: vi.fn(() => null),
+    NewTaskSheet: vi.fn(() => null),
     RedirectError,
   }
 })
 
 // require-admin.test.ts covers who requireAdmin redirects, and where.
+vi.mock("@/features/tasks", () => ({
+  getNewTaskLayoutData,
+  NewTaskButton,
+  NewTaskSheet,
+}))
 vi.mock("./require-admin", () => ({ requireAdmin }))
 vi.mock("./admin-shell", () => ({ AdminShell }))
 vi.mock("./admin-banners", () => ({ AdminBannerSlot }))
@@ -46,6 +57,15 @@ const MEMBER = {
   role: "editorial_admin",
   state: "active",
 } satisfies CurrentMember
+
+const NEW_TASK = {
+  options: { owners: [], slotMembersByRole: {}, allMembers: [] },
+  homeOwner: null,
+}
+
+beforeEach(() => {
+  getNewTaskLayoutData.mockResolvedValue(null)
+})
 
 afterEach(() => {
   vi.clearAllMocks()
@@ -75,6 +95,7 @@ describe("AdminLayout", () => {
     expect(element.props).toEqual({
       member: MEMBER,
       banners: expect.objectContaining({ type: AdminBannerSlot, props: {} }),
+      newTask: undefined,
       children: [
         expect.objectContaining({
           type: Suspense,
@@ -83,11 +104,34 @@ describe("AdminLayout", () => {
             children: expect.objectContaining({ type: NoticeToast }),
           }),
         }),
+        null,
         expect.objectContaining({ type: OfflineToast }),
         "page",
       ],
     })
     // The slot reads its sources only when React renders it, after the check.
     expect(AdminBannerSlot).not.toHaveBeenCalled()
+  })
+
+  it("mounts the New task button and the sheet in Suspense only when can_create_task allows", async () => {
+    requireAdmin.mockResolvedValue(MEMBER)
+    getNewTaskLayoutData.mockResolvedValue(NEW_TASK)
+
+    const element = await AdminLayout({ children: "page" })
+
+    expect(element.props.newTask).toEqual(
+      expect.objectContaining({ type: NewTaskButton })
+    )
+    expect(element.props.children[1]).toEqual(
+      expect.objectContaining({
+        type: Suspense,
+        props: expect.objectContaining({
+          children: expect.objectContaining({
+            type: NewTaskSheet,
+            props: { options: NEW_TASK.options, homeOwner: null },
+          }),
+        }),
+      })
+    )
   })
 })

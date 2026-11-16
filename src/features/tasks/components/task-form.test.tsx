@@ -1014,4 +1014,121 @@ describe("TaskForm in edit mode", () => {
     const { container } = render(<EditPage />)
     expect(await axeViolations(container)).toEqual([])
   })
+
+  describe("New task sheet support", () => {
+    it("opens on the prefilled owner and due date", () => {
+      render(
+        <TaskForm
+          options={OPTIONS}
+          defaultValues={{ owner: "desk:layout", dueAt: "2026-11-20T17:00" }}
+        />
+      )
+
+      expect(screen.getByRole("combobox", { name: "Owner" })).toHaveTextContent(
+        "Layout"
+      )
+      expect(screen.getByLabelText("Due date")).toHaveValue("2026-11-20T17:00")
+    })
+
+    it("offers three due presets that set the field and clear its error", async () => {
+      vi.useFakeTimers({ toFake: ["Date"] })
+      // Fri Nov 20 2026, 9:00 AM in Manila.
+      vi.setSystemTime(new Date("2026-11-20T01:00:00Z"))
+      const user = userEvent.setup()
+      renderForm()
+
+      expect(
+        screen
+          .getAllByRole("button", { name: /5 PM$/ })
+          .map((b) => b.textContent)
+      ).toEqual(["Today 5 PM", "Tomorrow 5 PM", "Next Friday 5 PM"])
+
+      await user.click(screen.getByRole("button", { name: "Create task" }))
+      expect(await screen.findByText("Add a due date")).toBeInTheDocument()
+
+      await user.click(screen.getByRole("button", { name: "Next Friday 5 PM" }))
+
+      expect(screen.getByLabelText("Due date")).toHaveValue("2026-11-27T17:00")
+      await waitFor(() =>
+        expect(screen.queryByText("Add a due date")).not.toBeInTheDocument()
+      )
+      vi.useRealTimers()
+    })
+
+    it("hands the new id and Messenger text to onCreated instead of toasting and resetting", async () => {
+      createTaskAction.mockResolvedValue({ ok: true, data: { id: "task-1" } })
+      const onCreated = vi.fn()
+      const user = userEvent.setup()
+      render(<TaskForm options={OPTIONS} onCreated={onCreated} />)
+      await fillMinimalValidForm(user)
+
+      await user.click(screen.getByRole("button", { name: "Create task" }))
+
+      await waitFor(() => expect(onCreated).toHaveBeenCalledOnce())
+      expect(onCreated).toHaveBeenCalledWith(
+        "task-1",
+        expect.stringContaining("Lay out the spread")
+      )
+      expect(toastSuccess).not.toHaveBeenCalled()
+      expect(screen.getByLabelText("Title")).toHaveValue("Lay out the spread")
+    })
+
+    it("reports whether it differs from its prefills", async () => {
+      const onDirtyChange = vi.fn()
+      const user = userEvent.setup()
+      render(
+        <TaskForm
+          options={OPTIONS}
+          defaultValues={{ owner: "desk:layout" }}
+          onDirtyChange={onDirtyChange}
+        />
+      )
+      expect(onDirtyChange).toHaveBeenLastCalledWith(false)
+
+      await user.type(screen.getByLabelText("Title"), "x")
+      expect(onDirtyChange).toHaveBeenLastCalledWith(true)
+    })
+
+    it("leaves the submit button to the one outside, which submits it by form id", async () => {
+      createTaskAction.mockResolvedValue({ ok: true, data: { id: "task-1" } })
+      const user = userEvent.setup()
+      render(
+        <>
+          <TaskForm options={OPTIONS} formId="f" hideSubmit />
+          <button type="submit" form="f">
+            Outside
+          </button>
+        </>
+      )
+      expect(
+        screen.queryByRole("button", { name: "Create task" })
+      ).not.toBeInTheDocument()
+      await fillMinimalValidForm(user)
+
+      await user.click(screen.getByRole("button", { name: "Outside" }))
+
+      await waitFor(() => expect(createTaskAction).toHaveBeenCalledOnce())
+    })
+
+    it("labels members with their open slots when the options carry them", async () => {
+      const user = userEvent.setup()
+      renderForm({
+        ...OPTIONS,
+        slotMembersByRole: {
+          layout_artist: [
+            { id: MEMBER_1, name: "Staff Layout Artist", openSlots: 0 },
+          ],
+        },
+      })
+      await chooseOption(user, "Role", "Layout Artist")
+
+      await user.click(screen.getByRole("combobox", { name: "Member" }))
+
+      expect(
+        await screen.findByRole("option", {
+          name: "Staff Layout Artist · 0 active",
+        })
+      ).toBeInTheDocument()
+    })
+  })
 })

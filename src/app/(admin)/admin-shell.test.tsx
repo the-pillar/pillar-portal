@@ -184,3 +184,27 @@ describe("AdminShell", () => {
     expect(screen.getByRole("main")).toHaveTextContent("Create a task")
   })
 })
+
+describe("AdminShell's New task slot", () => {
+  it("shows the button it is given in the header action slot, and nothing without one", () => {
+    const { container, rerender } = render(
+      <AdminShell
+        member={{ name: "Head Layout Artist" }}
+        newTask={<button type="button">New task</button>}
+      >
+        <h1>Page</h1>
+      </AdminShell>
+    )
+    expect(
+      container.querySelector("[data-slot='header-action']")
+    ).toContainElement(screen.getByRole("button", { name: "New task" }))
+
+    rerender(
+      <AdminShell member={{ name: "Head Layout Artist" }}>
+        <h1>Page</h1>
+      </AdminShell>
+    )
+    expect(container.querySelector("[data-slot='header-action']")).toBeNull()
+    expect(screen.queryByRole("button", { name: "New task" })).toBeNull()
+  })
+})

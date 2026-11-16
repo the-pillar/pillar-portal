@@ -1,5 +1,6 @@
 import { getMyHomeScope } from "@/features/members"
 import {
+  canCreateTask,
   getBoardOwners,
   getPlanner,
   ownerFilterParam,
@@ -24,10 +25,11 @@ export async function PlannerView({ month }: { month: unknown }) {
   const previous = parsePhtMonth(shiftMonth(shown, -1))
   const next = parsePhtMonth(shiftMonth(shown, 1))
 
-  const [owners, homeScope, cards] = await Promise.all([
+  const [owners, homeScope, cards, canCreate] = await Promise.all([
     getBoardOwners(),
     getMyHomeScope(),
     getPlanner(shown),
+    canCreateTask(),
   ])
   const home = parseOwnerFilterParam(ownerFilterParam(homeScope), owners)
 
@@ -43,6 +45,7 @@ export async function PlannerView({ month }: { month: unknown }) {
           home={home}
           owners={owners}
           cards={cards}
+          canCreate={canCreate}
         />
       </div>
     </div>

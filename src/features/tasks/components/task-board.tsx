@@ -57,6 +57,7 @@ import {
 } from "../board-dnd"
 import { highlightedIds } from "../board-highlights"
 import { pushBoardParams, replaceBoardParams } from "../board-url"
+import { clearCreatedTask, subscribeCreatedTask } from "../created-task-signal"
 import {
   taskErrorMessage,
   undoStaleMessage,
@@ -66,6 +67,7 @@ import type { BoardCard } from "../queries/board"
 import { TASK_COLUMN_LABELS, TASK_COLUMNS, type TaskColumn } from "../status"
 import { BoardColumnSwitcher } from "./board-column-switcher"
 import { BoardFilterChips } from "./board-filter-chips"
+import { NewTaskLink } from "./new-task-button"
 import { TaskCard } from "./task-card"
 
 type HowMoved = "menu" | "drag" | "keyboard"
@@ -118,12 +120,15 @@ export function TaskBoard({
   owners,
   viewerId,
   homeFilter,
+  canCreate = false,
 }: {
   cards: BoardCard[]
   owners: TaskOwnerOption[]
   viewerId: string
   /** The server-resolved home scope, used when `owner` is missing or invalid. */
   homeFilter: OwnerFilter
+  /** `can_create_task()`: offers Create a task and To Do's + Add a task. */
+  canCreate?: boolean
 }) {
   const searchParams = useSearchParams()
   const urlOwner = searchParams.get("owner")
@@ -215,7 +220,30 @@ export function TaskBoard({
     const ids = highlightedIds(previousCards, cards, viewerId).filter((id) =>
       cards.some((card) => card.id === id && matchesFilter(card, filter))
     )
-    if (ids.length > 0) setHighlighted(new Set([...highlighted, ...ids]))
+    if (ids.length > 0) {
+      setHighlighted((was) => new Set([...was, ...ids]))
+    }
+  }
+
+  // The task this viewer just created in the New task sheet: highlighted
+  // once it is among the cards (their own creations never highlight from a
+  // refetch, so this is the one explicit path).
+  const [createdId, setCreatedId] = useState<string | null>(null)
+  useEffect(
+    () =>
+      subscribeCreatedTask((id) => {
+        clearCreatedTask(id)
+        setCreatedId(id)
+      }),
+    []
+  )
+  if (createdId !== null && cards.some((card) => card.id === createdId)) {
+    setCreatedId(null)
+    if (
+      cards.some((card) => card.id === createdId && matchesFilter(card, filter))
+    ) {
+      setHighlighted((was) => new Set([...was, createdId]))
+    }
   }
 
   // Focus: the card that holds focus, and who is next to it.
@@ -548,7 +576,7 @@ export function TaskBoard({
         {message}
       </p>
       {firstRun ? (
-        <BoardFirstRun />
+        <BoardFirstRun canCreate={canCreate} />
       ) : filterEmpty ? (
         <div className="mt-4 text-muted-foreground">
           <h2 className="text-heading-sm">{emptyMessage}</h2>
@@ -609,6 +637,13 @@ export function TaskBoard({
                 isPending={isPending}
                 landedId={landedId}
                 highlighted={highlighted}
+                addOwner={
+                  canCreate && column === "to_do"
+                    ? filter.kind === "section" || filter.kind === "desk"
+                      ? ownerFilterParam(filter)
+                      : ""
+                    : undefined
+                }
                 onMove={move}
                 onAnimationEnd={(id) => {
                   setHighlighted((set) => {
@@ -641,7 +676,7 @@ export function TaskBoard({
   )
 }
 
-function BoardFirstRun() {
+function BoardFirstRun({ canCreate }: { canCreate: boolean }) {
   return (
     <div className="mt-4 flex flex-col items-center gap-2 rounded-xl bg-muted px-4 py-10 text-center">
       <div
@@ -657,6 +692,11 @@ function BoardFirstRun() {
         Tasks the Editorial Board creates show up here, one card per piece of
         work.
       </p>
+      {canCreate && (
+        <NewTaskLink className="mt-2 inline-flex min-h-11 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+          Create a task
+        </NewTaskLink>
+      )}
     </div>
   )
 }
@@ -669,6 +709,7 @@ function BoardColumn({
   isPending,
   landedId,
   highlighted,
+  addOwner,
   onMove,
   onAnimationEnd,
 }: {
@@ -679,6 +720,11 @@ function BoardColumn({
   isPending: boolean
   landedId: string | null
   highlighted: ReadonlySet<string>
+  /**
+   * To Do's **+ Add a task** (undefined elsewhere, or without
+   * `can_create_task`): the active chip's owner, "" for none.
+   */
+  addOwner: string | undefined
   onMove: (card: BoardCard, toColumn: TaskColumn, how: HowMoved) => void
   onAnimationEnd: (id: string) => void
 }) {
@@ -747,6 +793,12 @@ function BoardColumn({
             />
           ))}
         </ul>
+      )}
+      {addOwner !== undefined && (
+        <NewTaskLink
+          owner={addOwner || undefined}
+          className="mx-2 mb-2 inline-flex min-h-11 shrink-0 items-center rounded-lg px-2 text-sm font-medium text-list-ink hover:bg-white/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        />
       )}
       {column === "done" && (
         // getBoard reads only this window, so the count above is these cards.
