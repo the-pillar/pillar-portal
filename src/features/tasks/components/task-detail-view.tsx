@@ -35,9 +35,12 @@ const NOTE_DATE_FORMAT = "EEE, MMM d, yyyy"
 export function TaskDetailView({
   task,
   reassignOptions,
+  onCopied,
 }: {
   task: TaskDetail
   reassignOptions?: ReassignOptions
+  /** Called after any Copy for Messenger that worked (Story 8.9 records it). */
+  onCopied?: () => void | Promise<unknown>
 }) {
   const respondable = new Set(task.respondableSlotIds)
   const handBackable = new Set(task.handBackSlotIds)
@@ -130,7 +133,7 @@ export function TaskDetailView({
 
       <div className="mt-3 flex flex-wrap items-start gap-3">
         <AddToCalendarMenu taskId={task.id} googleUrl={googleUrl} />
-        <CopyForMessenger message={message} />
+        <CopyForMessenger message={message} onCopied={onCopied} />
       </div>
 
       <dl className="mt-6 flex flex-col gap-3">
@@ -222,6 +225,7 @@ export function TaskDetailView({
                     options={reassignOptions}
                     focusTargetId={rowId}
                     fallbackFocusTargetId={TASK_STATUS_ID}
+                    onCopied={onCopied}
                   />
                 </div>
               )}

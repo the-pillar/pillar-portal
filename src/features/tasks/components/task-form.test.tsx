@@ -579,8 +579,21 @@ const LOADED_SLOTS = [
 
 // As the edit page renders it: keyed with taskEditKey, so a re-read that
 // brings a newer task remounts the form.
-function EditPage({ task = TASK }: { task?: TaskEdit }) {
-  return <TaskForm key={taskEditKey(task)} options={OPTIONS} task={task} />
+function EditPage({
+  task = TASK,
+  onCopied,
+}: {
+  task?: TaskEdit
+  onCopied?: () => void
+}) {
+  return (
+    <TaskForm
+      key={taskEditKey(task)}
+      options={OPTIONS}
+      task={task}
+      onCopied={onCopied}
+    />
+  )
 }
 
 const memberBoxes = () => screen.getAllByRole("combobox", { name: "Member" })
@@ -701,6 +714,27 @@ describe("TaskForm in edit mode", () => {
     expect(refresh).not.toHaveBeenCalled()
     // Nothing resends the save while the page leaves.
     expect(save()).toBeDisabled()
+  })
+
+  it("calls onCopied when the saved toast's Copy for Messenger worked", async () => {
+    updateTaskAction.mockResolvedValue({
+      ok: true,
+      data: { taskId: TASK_ID, newAssignee: true },
+    })
+    const onCopied = vi.fn()
+    const user = userEvent.setup()
+    render(<EditPage onCopied={onCopied} />)
+
+    await choose(user, memberBoxes()[1], "Head Layout Artist")
+    await user.click(save())
+    await waitFor(() => expect(push).toHaveBeenCalledOnce())
+
+    vi.stubGlobal("navigator", {
+      clipboard: { writeText: vi.fn().mockResolvedValue(undefined) },
+    })
+    await toastSuccess.mock.calls[0][1].action.onClick()
+
+    expect(onCopied).toHaveBeenCalledOnce()
   })
 
   it("sends a reassigned slot with its id and the member it loaded, a new one with neither, and offers Copy for Messenger when a slot got a new member", async () => {

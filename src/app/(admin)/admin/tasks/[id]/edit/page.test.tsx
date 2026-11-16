@@ -16,6 +16,7 @@ const {
   TaskNotFound,
   requireAdmin,
   redirect,
+  recordCopiedTaskAction,
 } = vi.hoisted(() => ({
   getTaskEdit: vi.fn(),
   getTaskFormOptionsWithLoad: vi.fn(),
@@ -30,6 +31,7 @@ const {
   // (task-not-found.test.tsx).
   TaskNotFound: vi.fn(() => <h1>Task not found</h1>),
   requireAdmin: vi.fn(),
+  recordCopiedTaskAction: vi.fn(),
   // Like Next's: it throws, so nothing after it renders.
   redirect: vi.fn((href: string) => {
     throw new Error(`NEXT_REDIRECT ${href}`)
@@ -44,6 +46,7 @@ vi.mock("@/features/tasks", () => ({
   TaskNotFound,
 }))
 vi.mock("next/navigation", () => ({ redirect }))
+vi.mock("@/features/members", () => ({ recordCopiedTaskAction }))
 vi.mock("../../../../require-admin", () => ({ requireAdmin }))
 
 import EditTaskPage, { metadata } from "./page"
@@ -156,7 +159,11 @@ describe("EditTaskPage", () => {
     ).toBeInTheDocument()
     expect(screen.getByRole("form", { name: "Task form" })).toBeInTheDocument()
     expect(TaskForm).toHaveBeenCalledOnce()
-    expect(TaskForm.mock.calls[0][0]).toEqual({ options: OPTIONS, task: TASK })
+    expect(TaskForm.mock.calls[0][0]).toEqual({
+      options: OPTIONS,
+      task: TASK,
+      onCopied: recordCopiedTaskAction,
+    })
   })
 
   it("keys the form with taskEditKey, so a re-read keeps it while the key holds and remounts it once the key changes", async () => {

@@ -9,14 +9,17 @@ import { copyText, MESSENGER_COPIED, MESSENGER_HINT } from "../messenger"
  * `onCopied`; one the browser refuses shows the text to copy by hand, until it
  * is closed.
  */
-export function copyForMessengerAction(text: string, onCopied?: () => void) {
+export function copyForMessengerAction(
+  text: string,
+  onCopied?: () => void | Promise<unknown>
+) {
   return {
     action: {
       label: "Copy for Messenger",
       onClick: async () => {
         if (await copyText(text)) {
           toast.success(MESSENGER_COPIED)
-          onCopied?.()
+          void Promise.resolve(onCopied?.()).catch(() => undefined)
         } else toast.notice(MESSENGER_HINT, { description: text })
       },
     },

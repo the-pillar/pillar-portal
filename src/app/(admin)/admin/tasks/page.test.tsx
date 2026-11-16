@@ -13,6 +13,7 @@ const {
   ReviewQueue,
   HandedBackQueue,
   requireAdmin,
+  recordCopiedTaskAction,
 } = vi.hoisted(() => ({
   getTaskFormOptions: vi.fn(),
   getReviewQueue: vi.fn(),
@@ -23,6 +24,7 @@ const {
   ReviewQueue: vi.fn(() => null),
   HandedBackQueue: vi.fn(() => null),
   requireAdmin: vi.fn(),
+  recordCopiedTaskAction: vi.fn(),
 }))
 
 vi.mock("@/features/tasks", () => ({
@@ -36,6 +38,7 @@ vi.mock("@/features/tasks", () => ({
   HandedBackQueue,
 }))
 vi.mock("../../require-admin", () => ({ requireAdmin }))
+vi.mock("@/features/members", () => ({ recordCopiedTaskAction }))
 
 import AdminTasksPage, { metadata } from "./page"
 
@@ -133,6 +136,7 @@ describe("AdminTasksPage", () => {
       slots: HANDED_BACK,
       options: REASSIGN_OPTIONS,
       focusTargetId: h1.props.id,
+      onCopied: recordCopiedTaskAction,
     })
 
     expect(queue.type).toBe(ReviewQueue)
@@ -173,6 +177,7 @@ describe("AdminTasksPage", () => {
       slots: [],
       options: null,
       focusTargetId: "admin-tasks-heading",
+      onCopied: recordCopiedTaskAction,
     })
   })
 

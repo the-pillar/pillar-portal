@@ -16,7 +16,7 @@ export function CopyForMessenger({
 }: {
   message: string
   /** Called after a copy that worked (Story 8.9 records it). */
-  onCopied?: () => void
+  onCopied?: () => void | Promise<unknown>
 }) {
   const [manual, setManual] = useState(false)
   const [failures, setFailures] = useState(0)
@@ -35,7 +35,7 @@ export function CopyForMessenger({
       if (manual) button.current?.focus()
       setManual(false)
       toast.success(MESSENGER_COPIED)
-      onCopied?.()
+      void Promise.resolve(onCopied?.()).catch(() => undefined)
     } else {
       setManual(true)
       setFailures((n) => n + 1)

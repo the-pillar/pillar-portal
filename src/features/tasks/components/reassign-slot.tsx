@@ -71,6 +71,7 @@ export function ReassignSlot({
   focusTargetId,
   fallbackFocusTargetId,
   namedForTask = false,
+  onCopied,
 }: {
   taskId: string
   taskTitle: string
@@ -97,6 +98,8 @@ export function ReassignSlot({
    * Task detail leaves it off.
    */
   namedForTask?: boolean
+  /** Called after a Copy for Messenger from the toast that worked. */
+  onCopied?: () => void | Promise<unknown>
 }) {
   // The member a save was sent for, so a refused pair names them.
   const pickedRef = useRef<ReassignMember | null>(null)
@@ -181,7 +184,7 @@ export function ReassignSlot({
           reset()
           toast.success(
             reassignedMessage(picked.name),
-            copyForMessengerAction(messengerText())
+            copyForMessengerAction(messengerText(), onCopied)
           )
         },
         onFailure: (code) => {

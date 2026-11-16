@@ -4,6 +4,7 @@ import {
   countPendingApprovalsForViewer,
   getCurrentMember,
   getMemberApprovals,
+  getMyOnboarding,
   requireActiveMember,
 } from "./queries"
 
@@ -110,6 +111,12 @@ const { state, createClient, redirect, RedirectError } = vi.hoisted(() => {
 
 vi.mock("@/lib/supabase/server", () => ({ createClient }))
 vi.mock("next/navigation", () => ({ redirect }))
+// after() runs its callback at once here.
+vi.mock("next/server", () => ({
+  after: (callback: () => unknown) => void callback(),
+}))
+const recordErrorEvent = vi.hoisted(() => vi.fn())
+vi.mock("@/lib/record-error-event", () => ({ recordErrorEvent }))
 
 const AT = "2026-10-12T09:00:00+00:00"
 
@@ -708,6 +715,54 @@ describe("countPendingApprovalsForViewer", () => {
 
     await expect(countPendingApprovalsForViewer()).rejects.toThrow(
       "countPendingApprovalsForViewer: counting pending members failed"
+    )
+  })
+})
+
+describe("getMyOnboarding", () => {
+  const ROW = {
+    tour_and_checklist: true,
+    tour_seen: false,
+    copied_task: true,
+    checklist_done: false,
+    first_run_shown: true,
+    first_run_closed: false,
+    two_factor: true,
+    approved_member: false,
+  }
+
+  it("camelCases the one my_onboarding() row, calling the function with no arguments", async () => {
+    state.rpc.mockResolvedValue({ data: [ROW], error: null })
+
+    expect(await getMyOnboarding()).toEqual({
+      tourAndChecklist: true,
+      tourSeen: false,
+      copiedTask: true,
+      checklistDone: false,
+      firstRunShown: true,
+      firstRunClosed: false,
+      twoFactor: true,
+      approvedMember: false,
+    })
+    expect(state.rpc).toHaveBeenCalledExactlyOnceWith("my_onboarding")
+  })
+
+  it("is null with no row (not an active member), recording nothing", async () => {
+    state.rpc.mockResolvedValue({ data: [], error: null })
+
+    expect(await getMyOnboarding()).toBeNull()
+    expect(recordErrorEvent).not.toHaveBeenCalled()
+  })
+
+  it("is null on an error, recorded after the response", async () => {
+    const error = { code: "57014", message: "canceled" }
+    state.rpc.mockResolvedValue({ data: null, error })
+
+    expect(await getMyOnboarding()).toBeNull()
+    await vi.waitFor(() =>
+      expect(recordErrorEvent).toHaveBeenCalledExactlyOnceWith(error, {
+        route: "render my-onboarding",
+      })
     )
   })
 })

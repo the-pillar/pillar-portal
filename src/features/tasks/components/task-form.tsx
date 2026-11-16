@@ -204,6 +204,7 @@ export function TaskForm({
   formId,
   hideSubmit = false,
   idPrefix = "task",
+  onCopied,
 }: {
   options: TaskFormOptions
   task?: TaskEdit
@@ -228,6 +229,8 @@ export function TaskForm({
    * forms on one page (the New task sheet over the edit page) never share ids.
    */
   idPrefix?: string
+  /** Called after a Copy for Messenger from a toast that worked. */
+  onCopied?: () => void | Promise<unknown>
 }) {
   const router = useRouter()
   // Set once an edit is saved, so nothing resends it while the page leaves.
@@ -327,7 +330,7 @@ export function TaskForm({
     }
     toast.success(
       "Task created",
-      text === null ? undefined : copyForMessengerAction(text)
+      text === null ? undefined : copyForMessengerAction(text, onCopied)
     )
     reset(
       emptyValues({
@@ -356,7 +359,7 @@ export function TaskForm({
       : null
     toast.success(
       "Task saved.",
-      text === null ? undefined : copyForMessengerAction(text)
+      text === null ? undefined : copyForMessengerAction(text, onCopied)
     )
     setLeaving(true)
     router.push(`/dashboard/tasks/${taskId}`)

@@ -62,6 +62,7 @@ export { TaskChangesRefresher } from "./components/task-changes-refresher"
 export { TaskDetailView } from "./components/task-detail-view"
 export { NewTaskButton, NewTaskLink } from "./components/new-task-button"
 export { NewTaskSheet } from "./components/new-task-sheet"
+export { NewTaskTrigger } from "./components/new-task-trigger"
 export { TaskForm } from "./components/task-form"
 export { TaskNotFound } from "./components/task-not-found"
 export { WhatsMineTasks } from "./components/whats-mine-tasks"
@@ -95,6 +96,7 @@ export {
   getTaskFormOptionsWithLoad,
 } from "./queries/new-task"
 export type { NewTaskLayoutData } from "./queries/new-task"
+export { hasCreatedTaskForViewer } from "./queries/created-task"
 export { getReassignOptions } from "./queries/reassign"
 export type { ReassignOptions } from "./queries/reassign"
 export {

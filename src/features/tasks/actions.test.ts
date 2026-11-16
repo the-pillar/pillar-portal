@@ -83,11 +83,17 @@ describe("createTaskAction", () => {
       reference_url: null,
       slots: [{ role: "layout_artist", member_id: MEMBER_ID }],
     })
-    expect(revalidatePath).toHaveBeenCalledTimes(2)
+    // Admin home's "Create a task" checklist item ticks live (Story 8.9).
+    expect(revalidatePath).toHaveBeenCalledTimes(3)
     expect(revalidatePath).toHaveBeenNthCalledWith(1, "/admin/tasks")
     expect(revalidatePath).toHaveBeenNthCalledWith(
       2,
       "/(member)/dashboard",
+      "layout"
+    )
+    expect(revalidatePath).toHaveBeenNthCalledWith(
+      3,
+      "/(admin)/admin",
       "layout"
     )
     expect(result).toEqual({ ok: true, data: { id: "task-1" } })

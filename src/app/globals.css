@@ -192,7 +192,11 @@
 }
 
 @media (max-width: 767px) {
-  body:has([role="dialog"], [role="alertdialog"], [role="menu"])
+  body:has(
+      [role="dialog"]:not([data-onboarding-tour]),
+      [role="alertdialog"],
+      [role="menu"]
+    )
     [data-new-task-button] {
     display: none;
   }
@@ -233,6 +237,11 @@
   --motion-first-run-y: 6px;
   --motion-card-leave-y: 8px;
   --motion-tour-scale: 0.96;
+
+  /* The onboarding tour's scrim and popover shadow (DESIGN.md ›
+     onboarding-tour). */
+  --tour-scrim: rgba(16, 16, 16, 0.3);
+  --tour-shadow: 0 14px 28px rgba(16, 16, 16, 0.22);
 }
 
 @theme inline {
@@ -393,6 +402,18 @@
 }
 [data-avatar="8"] {
   --avatar: var(--color-avatar-8);
+}
+
+/* The staff first-run card's tips rise in one after another (DESIGN.md ›
+   Motion: first-run-item, stagger). */
+@keyframes first-run-item-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--motion-first-run-y));
+  }
+}
+.first-run-item {
+  animation: first-run-item-in var(--motion-first-run-item) var(--ease-out) both;
 }
 
 /* prefers-reduced-motion: nothing slides, scales or tilts (EXPERIENCE.md ›

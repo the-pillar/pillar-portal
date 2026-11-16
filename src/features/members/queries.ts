@@ -2,6 +2,7 @@ import "server-only"
 
 import { cache } from "react"
 import { redirect } from "next/navigation"
+import { after } from "next/server"
 
 import type { Enums } from "@/lib/supabase/database.types"
 import { createClient } from "@/lib/supabase/server"
@@ -315,20 +316,70 @@ export async function getMemberApprovals(): Promise<MemberApprovalsData> {
  * approval, for an active editorial_admin. Anyone else, signed out included,
  * gets 0 without the count query. A failed query throws.
  */
-export async function countPendingApprovalsForViewer(): Promise<number> {
-  const member = await getCurrentMember()
-  if (member?.state !== "active" || member.role !== "editorial_admin") return 0
+export const countPendingApprovalsForViewer = cache(
+  async (): Promise<number> => {
+    const member = await getCurrentMember()
+    if (member?.state !== "active" || member.role !== "editorial_admin")
+      return 0
 
-  const supabase = await createClient()
-  const { count, error } = await whereMemberState(
-    supabase.from("members").select("id", { count: "exact", head: true }),
-    "pending"
-  )
-  if (error) {
-    throw new Error(
-      "countPendingApprovalsForViewer: counting pending members failed",
-      { cause: error }
+    const supabase = await createClient()
+    const { count, error } = await whereMemberState(
+      supabase.from("members").select("id", { count: "exact", head: true }),
+      "pending"
     )
+    if (error) {
+      throw new Error(
+        "countPendingApprovalsForViewer: counting pending members failed",
+        { cause: error }
+      )
+    }
+    return count ?? 0
   }
-  return count ?? 0
+)
+
+/** What `my_onboarding()` says about the caller (Story 8.9, AD-23). */
+export type MyOnboarding = {
+  /** True for the tour and checklist (an admin), false for the staff card. */
+  tourAndChecklist: boolean
+  tourSeen: boolean
+  copiedTask: boolean
+  checklistDone: boolean
+  firstRunShown: boolean
+  firstRunClosed: boolean
+  twoFactor: boolean
+  approvedMember: boolean
 }
+
+/**
+ * Which onboarding applies to the caller and what they have seen, from
+ * `my_onboarding()` alone: no role check decides it. Null when there is no
+ * row (the caller isn't active) and on a read error, which is recorded after
+ * the response; the pages then show no tour, checklist or card. Cached per
+ * request, so a layout and its page share one read.
+ */
+export const getMyOnboarding = cache(async (): Promise<MyOnboarding | null> => {
+  const supabase = await createClient()
+  const { data, error } = await supabase.rpc("my_onboarding")
+  if (error) {
+    // Imported only here: record-error-event pulls in the secret-key client
+    // and its env, which every test reaching the members barrel would then
+    // need.
+    after(async () => {
+      const { recordErrorEvent } = await import("@/lib/record-error-event")
+      await recordErrorEvent(error, { route: "render my-onboarding" })
+    })
+    return null
+  }
+  const row = data?.[0]
+  if (!row) return null
+  return {
+    tourAndChecklist: row.tour_and_checklist,
+    tourSeen: row.tour_seen,
+    copiedTask: row.copied_task,
+    checklistDone: row.checklist_done,
+    firstRunShown: row.first_run_shown,
+    firstRunClosed: row.first_run_closed,
+    twoFactor: row.two_factor,
+    approvedMember: row.approved_member,
+  }
+})

@@ -31,6 +31,7 @@ import {
   memberMfaResetSchema,
   memberRenameSchema,
   memberUpdateSchema,
+  onboardingStepSchema,
   personaSignInSchema,
 } from "./schemas"
 
@@ -447,4 +448,67 @@ export async function deactivateMemberAction(
 
   revalidatePath("/", "layout")
   return { ok: true, data: { memberId } }
+}
+
+/**
+ * Records one onboarding step for the caller (Story 8.9, AD-23):
+ * record_onboarding keeps a timestamp already there. This only parses, calls
+ * it, and maps the error. Only `copied_task` revalidates, the admin area, so
+ * Admin home's checklist ticks live; the other steps change nothing the page
+ * is showing. A failure is never shown: the UI carries on, and an unexpected
+ * one is recorded after the response.
+ */
+export async function recordOnboardingAction(
+  step: unknown
+): Promise<{ ok: boolean }> {
+  const parsed = onboardingStepSchema.safeParse(step)
+  if (!parsed.success) return { ok: false }
+
+  const supabase = await createClient()
+  const { error } = await supabase.rpc("record_onboarding", {
+    step: parsed.data,
+  })
+  if (error) {
+    mapCommandError(error, ONBOARDING_ERROR_CODES, "members.save_failed", {
+      route: "action recordOnboardingAction",
+    })
+    return { ok: false }
+  }
+
+  if (parsed.data === "copied_task") revalidatePath(ADMIN_AREA, "layout")
+  // The card's `shown` prop must follow, or a reset leaves it stale.
+  if (parsed.data === "first_run_shown") revalidatePath(MEMBER_AREA, "layout")
+  return { ok: true }
+}
+
+const ONBOARDING_ERROR_CODES: ReadonlySet<MemberErrorCode> = new Set([
+  "auth.not_active",
+])
+
+/**
+ * Records that the caller copied a task for Messenger: the recorder prop the
+ * pages hand to every Copy for Messenger (`onCopied`). It takes no argument,
+ * so no click can name another step.
+ */
+export async function recordCopiedTaskAction(): Promise<void> {
+  await recordOnboardingAction("copied_task")
+}
+
+/**
+ * The avatar menu's **Show tips again** (a form action): reset_first_run
+ * clears the staff card's two timestamps, then the member pages revalidate
+ * and What's mine shows the card. A failed reset is recorded when unexpected
+ * and the page still opens.
+ */
+export async function showTipsAgainAction(): Promise<void> {
+  const supabase = await createClient()
+  const { error } = await supabase.rpc("reset_first_run")
+  if (error) {
+    mapCommandError(error, ONBOARDING_ERROR_CODES, "members.save_failed", {
+      route: "action showTipsAgainAction",
+    })
+  } else {
+    revalidatePath(MEMBER_AREA, "layout")
+  }
+  redirect("/dashboard")
 }

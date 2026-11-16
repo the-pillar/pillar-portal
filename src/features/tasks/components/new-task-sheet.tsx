@@ -77,7 +77,7 @@ export function NewTaskSheet({
   /** The caller's home scope as `section:<id>` / `desk:<id>`, or null. */
   homeOwner: string | null
   /** Called after Copy for Messenger copies (Story 8.9 records it). */
-  onCopied?: () => void
+  onCopied?: () => void | Promise<unknown>
 }) {
   const params = useSearchParams()
   const pathname = usePathname()

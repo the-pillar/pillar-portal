@@ -123,7 +123,9 @@ function Page({
   version = VERSION,
   options = OPTIONS,
   namedForTask,
+  onCopied,
 }: {
+  onCopied?: () => void
   show?: boolean
   showRow?: boolean
   role?: "cartoonist" | "writer" | "layout_artist"
@@ -159,6 +161,7 @@ function Page({
                 focusTargetId={ROW_ID}
                 fallbackFocusTargetId={STATUS_ID}
                 namedForTask={namedForTask}
+                onCopied={onCopied}
               />
             )}
           </li>
@@ -576,6 +579,28 @@ describe("ReassignSlot", () => {
         expectedUpdatedAt: NEWER,
       })
     )
+  })
+
+  it("calls onCopied when the toast's Copy for Messenger worked", async () => {
+    const user = userEvent.setup()
+    const onCopied = vi.fn()
+    reassignSlotAction.mockResolvedValue({
+      ok: true,
+      data: { slotId: SLOT_ID },
+    })
+    render(<Page onCopied={onCopied} />)
+    await openPicker(user)
+    await user.click(radio("Head Cartoonist · 2 active"))
+    await user.click(confirm())
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull())
+    expect(onCopied).not.toHaveBeenCalled()
+
+    vi.stubGlobal("navigator", {
+      clipboard: { writeText: vi.fn().mockResolvedValue(undefined) },
+    })
+    await toastSuccess.mock.calls[0][1].action.onClick()
+
+    expect(onCopied).toHaveBeenCalledOnce()
   })
 
   it("resets the slot when its current member is picked, and still offers Copy for Messenger", async () => {

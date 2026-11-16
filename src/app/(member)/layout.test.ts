@@ -12,6 +12,8 @@ const {
   NewTaskButton,
   NewTaskSheet,
   SharedSessionWatcher,
+  getMyOnboarding,
+  recordCopiedTaskAction,
   RedirectError,
 } = vi.hoisted(() => {
   // Like Next's redirect(), which requireActiveMember calls, the mock throws.
@@ -29,6 +31,8 @@ const {
     NewTaskButton: vi.fn(() => null),
     NewTaskSheet: vi.fn(() => null),
     SharedSessionWatcher: vi.fn(() => null),
+    getMyOnboarding: vi.fn(),
+    recordCopiedTaskAction: vi.fn(),
     RedirectError,
   }
 })
@@ -37,6 +41,8 @@ const {
 vi.mock("@/features/members", () => ({
   requireActiveMember,
   SharedSessionWatcher,
+  getMyOnboarding,
+  recordCopiedTaskAction,
 }))
 vi.mock("@/features/tasks", () => ({
   getNewTaskLayoutData,
@@ -66,6 +72,7 @@ const NEW_TASK = {
 
 beforeEach(() => {
   getNewTaskLayoutData.mockResolvedValue(null)
+  getMyOnboarding.mockResolvedValue(null)
 })
 
 afterEach(() => {
@@ -95,6 +102,7 @@ describe("MemberLayout", () => {
       expect(element.props).toEqual({
         member,
         newTask: undefined,
+        onboarding: undefined,
         children: [
           expect.objectContaining({
             type: Suspense,
@@ -131,10 +139,26 @@ describe("MemberLayout", () => {
             props: {
               options: NEW_TASK.options,
               homeOwner: "desk:layout",
+              onCopied: recordCopiedTaskAction,
             },
           }),
         }),
       })
     )
   })
+
+  it.each([
+    [true, "tour"],
+    [false, "tips"],
+  ] as const)(
+    "offers the avatar menu's %s onboarding item from my_onboarding alone (tourAndChecklist %s)",
+    async (tourAndChecklist, item) => {
+      requireActiveMember.mockResolvedValue({ ...MEMBER, role: "staff" })
+      getMyOnboarding.mockResolvedValue({ tourAndChecklist })
+
+      const element = await MemberLayout({ children: "page" })
+
+      expect(element.props.onboarding).toBe(item)
+    }
+  )
 })

@@ -1,6 +1,11 @@
 import { Suspense } from "react"
 
-import { SharedSessionWatcher, StepUpProvider } from "@/features/members"
+import {
+  getMyOnboarding,
+  recordCopiedTaskAction,
+  SharedSessionWatcher,
+  StepUpProvider,
+} from "@/features/members"
 import {
   getNewTaskLayoutData,
   NewTaskButton,
@@ -30,13 +35,23 @@ export default async function AdminLayout({
   children: React.ReactNode
 }>) {
   const member = await requireAdmin()
-  const newTask = await getNewTaskLayoutData()
+  const [newTask, onboarding] = await Promise.all([
+    getNewTaskLayoutData(),
+    getMyOnboarding(),
+  ])
 
   return (
     <AdminShell
       member={member}
       banners={<AdminBannerSlot />}
       newTask={newTask ? <NewTaskButton /> : undefined}
+      onboarding={
+        onboarding === null
+          ? undefined
+          : onboarding.tourAndChecklist
+            ? "tour"
+            : "tips"
+      }
     >
       <Suspense fallback={null}>
         <NoticeToast />
@@ -46,6 +61,7 @@ export default async function AdminLayout({
           <NewTaskSheet
             options={newTask.options}
             homeOwner={newTask.homeOwner}
+            onCopied={recordCopiedTaskAction}
           />
         </Suspense>
       )}

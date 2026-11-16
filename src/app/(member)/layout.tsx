@@ -1,6 +1,11 @@
 import { Suspense } from "react"
 
-import { requireActiveMember, SharedSessionWatcher } from "@/features/members"
+import {
+  getMyOnboarding,
+  recordCopiedTaskAction,
+  requireActiveMember,
+  SharedSessionWatcher,
+} from "@/features/members"
 import {
   getNewTaskLayoutData,
   NewTaskButton,
@@ -25,12 +30,22 @@ export default async function MemberLayout({
   children: React.ReactNode
 }>) {
   const member = await requireActiveMember()
-  const newTask = await getNewTaskLayoutData()
+  const [newTask, onboarding] = await Promise.all([
+    getNewTaskLayoutData(),
+    getMyOnboarding(),
+  ])
 
   return (
     <MemberShell
       member={member}
       newTask={newTask ? <NewTaskButton /> : undefined}
+      onboarding={
+        onboarding === null
+          ? undefined
+          : onboarding.tourAndChecklist
+            ? "tour"
+            : "tips"
+      }
     >
       <Suspense fallback={null}>
         <NoticeToast />
@@ -40,6 +55,7 @@ export default async function MemberLayout({
           <NewTaskSheet
             options={newTask.options}
             homeOwner={newTask.homeOwner}
+            onCopied={recordCopiedTaskAction}
           />
         </Suspense>
       )}

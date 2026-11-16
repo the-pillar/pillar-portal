@@ -1,5 +1,6 @@
 import type { Metadata } from "next"
 
+import { recordCopiedTaskAction } from "@/features/members"
 import {
   canCreateTask,
   getHandedBackQueue,
@@ -54,6 +55,7 @@ export default async function AdminTasksPage() {
         slots={handedBack}
         options={reassignOptions}
         focusTargetId={HEADING_ID}
+        onCopied={recordCopiedTaskAction}
       />
       <ReviewQueue tasks={reviewQueue} focusTargetId={HEADING_ID} />
       {canCreate && (

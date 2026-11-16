@@ -1,6 +1,6 @@
 import type { Metadata } from "next"
 
-import { requireActiveMember } from "@/features/members"
+import { recordCopiedTaskAction, requireActiveMember } from "@/features/members"
 import {
   getReassignOptions,
   getTaskDetail,
@@ -31,5 +31,11 @@ export default async function TaskPage({
     ? await getReassignOptions()
     : undefined
 
-  return <TaskDetailView task={task} reassignOptions={reassignOptions} />
+  return (
+    <TaskDetailView
+      task={task}
+      reassignOptions={reassignOptions}
+      onCopied={recordCopiedTaskAction}
+    />
+  )
 }

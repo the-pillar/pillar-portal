@@ -183,6 +183,24 @@ describe("TaskDetailView", () => {
     )
   })
 
+  it("calls onCopied after a Copy for Messenger that worked, and not for one that failed", async () => {
+    const onCopied = vi.fn()
+    const user = userEvent.setup({ writeToClipboard: false })
+    render(<TaskDetailView task={TASK} onCopied={onCopied} />)
+
+    vi.stubGlobal("navigator", {
+      clipboard: { writeText: vi.fn().mockRejectedValue(new Error("no")) },
+    })
+    await user.click(screen.getByRole("button", { name: "Copy for Messenger" }))
+    expect(onCopied).not.toHaveBeenCalled()
+
+    vi.stubGlobal("navigator", {
+      clipboard: { writeText: vi.fn().mockResolvedValue(undefined) },
+    })
+    await user.click(screen.getByRole("button", { name: "Copy for Messenger" }))
+    expect(onCopied).toHaveBeenCalledOnce()
+  })
+
   it("shows the title, column, owner, due date in PHT, reference link and description", () => {
     render(<TaskDetailView task={TASK} />)
 

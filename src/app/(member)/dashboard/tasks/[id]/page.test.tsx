@@ -12,6 +12,7 @@ const {
   TaskDetailView,
   TaskNotFound,
   requireActiveMember,
+  recordCopiedTaskAction,
 } = vi.hoisted(() => ({
   getReassignOptions: vi.fn(),
   getTaskDetail: vi.fn(),
@@ -21,6 +22,7 @@ const {
   // Its copy and link have their own tests (task-not-found.test.tsx).
   TaskNotFound: vi.fn(() => <h1>Task not found</h1>),
   requireActiveMember: vi.fn(),
+  recordCopiedTaskAction: vi.fn(),
 }))
 
 vi.mock("@/features/tasks", () => ({
@@ -30,7 +32,10 @@ vi.mock("@/features/tasks", () => ({
   TaskNotFound,
 }))
 // The shared state check has its own tests (members' queries.test.ts).
-vi.mock("@/features/members", () => ({ requireActiveMember }))
+vi.mock("@/features/members", () => ({
+  requireActiveMember,
+  recordCopiedTaskAction,
+}))
 
 import TaskPage, { metadata } from "./page"
 
@@ -87,6 +92,7 @@ describe("TaskPage", () => {
     expect(TaskDetailView.mock.calls[0][0]).toStrictEqual({
       task,
       reassignOptions: undefined,
+      onCopied: recordCopiedTaskAction,
     })
     expect(screen.getByText("Task detail view")).toBeInTheDocument()
   })
@@ -119,6 +125,7 @@ describe("TaskPage", () => {
     expect(TaskDetailView.mock.calls[0][0]).toStrictEqual({
       task,
       reassignOptions,
+      onCopied: recordCopiedTaskAction,
     })
   })
 
