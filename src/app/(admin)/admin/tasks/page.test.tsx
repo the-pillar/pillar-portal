@@ -8,7 +8,8 @@ const {
   getReviewQueue,
   getHandedBackQueue,
   getReassignOptions,
-  TaskForm,
+  canCreateTask,
+  NewTaskLink,
   ReviewQueue,
   HandedBackQueue,
   requireAdmin,
@@ -17,7 +18,8 @@ const {
   getReviewQueue: vi.fn(),
   getHandedBackQueue: vi.fn(),
   getReassignOptions: vi.fn(),
-  TaskForm: vi.fn(() => null),
+  canCreateTask: vi.fn(),
+  NewTaskLink: vi.fn(() => null),
   ReviewQueue: vi.fn(() => null),
   HandedBackQueue: vi.fn(() => null),
   requireAdmin: vi.fn(),
@@ -28,7 +30,8 @@ vi.mock("@/features/tasks", () => ({
   getReviewQueue,
   getHandedBackQueue,
   getReassignOptions,
-  TaskForm,
+  canCreateTask,
+  NewTaskLink,
   ReviewQueue,
   HandedBackQueue,
 }))
@@ -87,6 +90,7 @@ type PageElement = ReactElement<{
   slots?: unknown
   focusTargetId?: string
   options?: unknown
+  label?: string
 }>
 
 afterEach(() => {
@@ -96,12 +100,14 @@ afterEach(() => {
 function mockReads({
   handedBack = HANDED_BACK as unknown[],
   queue = QUEUE as unknown[],
+  canCreate = true,
 } = {}) {
   requireAdmin.mockResolvedValue({ role: "editorial_admin" })
   getHandedBackQueue.mockResolvedValue(handedBack)
   getReviewQueue.mockResolvedValue(queue)
   getTaskFormOptions.mockResolvedValue(OPTIONS)
   getReassignOptions.mockResolvedValue(REASSIGN_OPTIONS)
+  canCreateTask.mockResolvedValue(canCreate)
 }
 
 describe("AdminTasksPage", () => {
@@ -109,12 +115,11 @@ describe("AdminTasksPage", () => {
     expect(metadata.title).toBe("Tasks")
   })
 
-  it("renders the h1, then Needs reassignment, then the review queue, then 'Create a task' and the form", async () => {
+  it("renders the h1, then Needs reassignment, then the review queue, then the New task button", async () => {
     mockReads()
 
     const page = (await AdminTasksPage()) as PageElement
-    const [h1, handedBack, queue, h2, wrapper] = page.props
-      .children as PageElement[]
+    const [h1, handedBack, queue, button] = page.props.children as PageElement[]
 
     expect(h1.type).toBe("h1")
     expect(h1.props.children).toBe("Tasks")
@@ -133,12 +138,17 @@ describe("AdminTasksPage", () => {
     expect(queue.type).toBe(ReviewQueue)
     expect(queue.props).toEqual({ tasks: QUEUE, focusTargetId: h1.props.id })
 
-    expect(h2.type).toBe("h2")
-    expect(h2.props.children).toBe("Create a task")
+    expect(button.type).toBe(NewTaskLink)
+    expect(button.props.label).toBe("New task")
+  })
 
-    const form = wrapper.props.children as PageElement
-    expect(form.type).toBe(TaskForm)
-    expect(form.props).toEqual({ options: OPTIONS })
+  it("offers no New task button without can_create_task", async () => {
+    mockReads({ canCreate: false })
+
+    const page = (await AdminTasksPage()) as PageElement
+    const [, , , button] = page.props.children as PageElement[]
+
+    expect(button).toBeFalsy()
   })
 
   it("builds the picker's options from the form options already read, reading them once", async () => {

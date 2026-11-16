@@ -23,10 +23,13 @@ import { AdminTabs } from "./admin-tabs"
 export function AdminShell({
   member,
   banners,
+  newTask,
   children,
 }: {
   member: Pick<CurrentMember, "name">
   banners?: React.ReactNode
+  /** The New task button, passed only for a caller who can create tasks. */
+  newTask?: React.ReactNode
   children: React.ReactNode
 }) {
   return (
@@ -35,6 +38,7 @@ export function AdminShell({
         homeHref="/admin"
         className="max-w-[1440px]"
         nav={<AdminTabs />}
+        action={newTask}
       >
         <MemberMenu
           name={member.name}

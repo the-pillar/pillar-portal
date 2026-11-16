@@ -22,9 +22,12 @@ import { DashboardTabs } from "./dashboard-tabs"
  */
 export function MemberShell({
   member,
+  newTask,
   children,
 }: {
   member: Pick<CurrentMember, "name" | "role">
+  /** The New task button, passed only for a caller who can create tasks. */
+  newTask?: React.ReactNode
   children: React.ReactNode
 }) {
   return (
@@ -32,6 +35,7 @@ export function MemberShell({
       <AppHeader
         homeHref="/dashboard"
         tabs={<DashboardTabs variant="header" />}
+        action={newTask}
         hasBottomBar
       >
         <MemberMenu

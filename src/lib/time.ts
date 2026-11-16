@@ -183,3 +183,15 @@ export function phtDayLabel(dayKey: string): string {
   const [y, m, d] = dayParts(dayKey)
   return format(calendarDate(y, m, d), "EEE, MMM d")
 }
+
+/** The `YYYY-MM-DD` day `delta` days after `dayKey` (before it when negative). */
+export function shiftDay(dayKey: string, delta: number): string {
+  const [y, m, d] = dayParts(dayKey)
+  return format(calendarDate(y, m, d + delta), "yyyy-MM-dd")
+}
+
+/** The weekday of a `YYYY-MM-DD` day: 0 for Sunday through 6 for Saturday. */
+export function dayOfWeek(dayKey: string): number {
+  const [y, m, d] = dayParts(dayKey)
+  return calendarDate(y, m, d).getDay()
+}

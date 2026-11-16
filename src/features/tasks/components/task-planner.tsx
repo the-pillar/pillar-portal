@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Link, { useLinkStatus } from "next/link"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { useSearchParams } from "next/navigation"
@@ -16,6 +16,7 @@ import {
   type TaskOwnerOption,
 } from "../board"
 import { pushBoardParams } from "../board-url"
+import { clearCreatedTask, subscribeCreatedTask } from "../created-task-signal"
 import {
   parsePlannerFilter,
   plannerEmptyMessage,
@@ -69,6 +70,7 @@ export function TaskPlanner({
   home,
   owners,
   cards,
+  canCreate = false,
 }: {
   /** `YYYY-MM`, a Manila month. */
   month: string
@@ -82,6 +84,8 @@ export function TaskPlanner({
   owners: TaskOwnerOption[]
   /** The month's tasks, Done included, ordered by due date then id. */
   cards: PlannerCard[]
+  /** `can_create_task()`: each day offers a way to add a task due that day. */
+  canCreate?: boolean
 }) {
   const searchParams = useSearchParams()
   const urlOwner = searchParams.get("owner")
@@ -107,6 +111,31 @@ export function TaskPlanner({
     () => plannerFilterChips(cards, home, owners),
     [cards, home, owners]
   )
+
+  // The task this viewer just created in the New task sheet: its chip
+  // highlights once it is among the month's cards (their own creations never
+  // reach a highlight any other way), then lets go after the animation.
+  const [createdId, setCreatedId] = useState<string | null>(null)
+  const [highlightId, setHighlightId] = useState<string | null>(null)
+  useEffect(
+    () =>
+      subscribeCreatedTask((id) => {
+        clearCreatedTask(id)
+        setCreatedId(id)
+      }),
+    []
+  )
+  if (createdId !== null && cards.some((card) => card.id === createdId)) {
+    setCreatedId(null)
+    if (visible.some((card) => card.id === createdId)) {
+      setHighlightId(createdId)
+    }
+  }
+  useEffect(() => {
+    if (highlightId === null) return
+    const timer = setTimeout(() => setHighlightId(null), 3000)
+    return () => clearTimeout(timer)
+  }, [highlightId])
 
   const [seenMonth, setSeenMonth] = useState(month)
   const [announcement, setAnnouncement] = useState("")
@@ -179,10 +208,18 @@ export function TaskPlanner({
                 today={today}
                 tasks={visible}
                 labelledBy={HEADING_ID}
+                canCreate={canCreate}
+                highlightId={highlightId}
               />
             </div>
             <div className="md:not-any-pointer-coarse:hidden">
-              <PlannerDayList month={month} today={today} tasks={visible} />
+              <PlannerDayList
+                month={month}
+                today={today}
+                tasks={visible}
+                canCreate={canCreate}
+                highlightId={highlightId}
+              />
             </div>
           </>
         )}

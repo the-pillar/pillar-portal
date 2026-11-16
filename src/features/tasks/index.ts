@@ -60,6 +60,8 @@ export { ReviewQueue } from "./components/review-queue"
 export { TaskBoard } from "./components/task-board"
 export { TaskChangesRefresher } from "./components/task-changes-refresher"
 export { TaskDetailView } from "./components/task-detail-view"
+export { NewTaskButton, NewTaskLink } from "./components/new-task-button"
+export { NewTaskSheet } from "./components/new-task-sheet"
 export { TaskForm } from "./components/task-form"
 export { TaskNotFound } from "./components/task-not-found"
 export { WhatsMineTasks } from "./components/whats-mine-tasks"
@@ -87,6 +89,12 @@ export {
 export type { HandedBackSlot } from "./queries/handed-back"
 export { getPlanner } from "./queries/planner"
 export type { PlannerCard } from "./queries/planner"
+export {
+  canCreateTask,
+  getNewTaskLayoutData,
+  getTaskFormOptionsWithLoad,
+} from "./queries/new-task"
+export type { NewTaskLayoutData } from "./queries/new-task"
 export { getReassignOptions } from "./queries/reassign"
 export type { ReassignOptions } from "./queries/reassign"
 export {

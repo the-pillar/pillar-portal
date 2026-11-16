@@ -10,7 +10,14 @@ import { copyText, MESSENGER_COPIED, MESSENGER_HINT } from "../messenger"
  * Task detail's Copy for Messenger. Where the clipboard is out of reach
  * (some in-app browsers) the message appears in a selected text box instead.
  */
-export function CopyForMessenger({ message }: { message: string }) {
+export function CopyForMessenger({
+  message,
+  onCopied,
+}: {
+  message: string
+  /** Called after a copy that worked (Story 8.9 records it). */
+  onCopied?: () => void
+}) {
   const [manual, setManual] = useState(false)
   const [failures, setFailures] = useState(0)
   const button = useRef<HTMLButtonElement>(null)
@@ -28,6 +35,7 @@ export function CopyForMessenger({ message }: { message: string }) {
       if (manual) button.current?.focus()
       setManual(false)
       toast.success(MESSENGER_COPIED)
+      onCopied?.()
     } else {
       setManual(true)
       setFailures((n) => n + 1)

@@ -4,17 +4,22 @@ import "@testing-library/jest-dom/vitest"
 import { cleanup, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-const { getMyHomeScope, getBoardOwners, getPlanner, TaskPlanner } = vi.hoisted(
-  () => ({
-    getMyHomeScope: vi.fn(),
-    getBoardOwners: vi.fn(),
-    getPlanner: vi.fn(),
-    // The client Planner is tested on its own: stub it, and check its props.
-    TaskPlanner: vi.fn((props: Record<string, unknown>) => (
-      <p>planner {String(props.month)}</p>
-    )),
-  })
-)
+const {
+  getMyHomeScope,
+  getBoardOwners,
+  getPlanner,
+  canCreateTask,
+  TaskPlanner,
+} = vi.hoisted(() => ({
+  getMyHomeScope: vi.fn(),
+  canCreateTask: vi.fn(),
+  getBoardOwners: vi.fn(),
+  getPlanner: vi.fn(),
+  // The client Planner is tested on its own: stub it, and check its props.
+  TaskPlanner: vi.fn((props: Record<string, unknown>) => (
+    <p>planner {String(props.month)}</p>
+  )),
+}))
 
 vi.mock("@/features/members", () => ({ getMyHomeScope }))
 vi.mock("@/features/tasks", async () => {
@@ -28,6 +33,7 @@ vi.mock("@/features/tasks", async () => {
     parseOwnerFilterParam: board.parseOwnerFilterParam,
     getBoardOwners,
     getPlanner,
+    canCreateTask,
     TaskPlanner,
   }
 })
@@ -47,6 +53,7 @@ beforeEach(() => {
   getBoardOwners.mockResolvedValue(OWNERS)
   getMyHomeScope.mockResolvedValue({ kind: "desk", id: "layout" })
   getPlanner.mockResolvedValue(CARDS)
+  canCreateTask.mockResolvedValue(true)
 })
 
 afterEach(() => {
@@ -84,6 +91,7 @@ describe("PlannerView", () => {
       home: { kind: "desk", id: "layout" },
       owners: OWNERS,
       cards: CARDS,
+      canCreate: true,
     })
   })
 

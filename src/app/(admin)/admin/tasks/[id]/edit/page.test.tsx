@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 // the tests is created in vi.hoisted.
 const {
   getTaskEdit,
-  getTaskFormOptions,
+  getTaskFormOptionsWithLoad,
   TaskForm,
   formMounted,
   taskEditKey,
@@ -18,7 +18,7 @@ const {
   redirect,
 } = vi.hoisted(() => ({
   getTaskEdit: vi.fn(),
-  getTaskFormOptions: vi.fn(),
+  getTaskFormOptionsWithLoad: vi.fn(),
   // Counts its mounts (set up in beforeEach, once React is imported), so a
   // test sees whether a new key remounted it.
   TaskForm: vi.fn<(props: Record<string, unknown>) => React.ReactNode>(),
@@ -38,7 +38,7 @@ const {
 
 vi.mock("@/features/tasks", () => ({
   getTaskEdit,
-  getTaskFormOptions,
+  getTaskFormOptionsWithLoad,
   TaskForm,
   taskEditKey,
   TaskNotFound,
@@ -94,7 +94,7 @@ function renderPage(id = TASK_ID) {
 
 beforeEach(() => {
   requireAdmin.mockResolvedValue({ role: "editorial_admin" })
-  getTaskFormOptions.mockResolvedValue(OPTIONS)
+  getTaskFormOptionsWithLoad.mockResolvedValue(OPTIONS)
   taskEditKey.mockReturnValue("key-1")
   TaskForm.mockImplementation(function TaskFormMock() {
     useEffect(() => {
@@ -121,15 +121,17 @@ describe("EditTaskPage", () => {
     )
 
     const rendering = renderPage()
-    await vi.waitFor(() => expect(getTaskFormOptions).toHaveBeenCalledOnce())
+    await vi.waitFor(() =>
+      expect(getTaskFormOptionsWithLoad).toHaveBeenCalledOnce()
+    )
 
     // Both reads started while the task is still loading.
     expect(getTaskEdit).toHaveBeenCalledExactlyOnceWith(TASK_ID)
     const checkedAt = requireAdmin.mock.invocationCallOrder[0]!
     expect(getTaskEdit.mock.invocationCallOrder[0]).toBeGreaterThan(checkedAt)
-    expect(getTaskFormOptions.mock.invocationCallOrder[0]).toBeGreaterThan(
-      checkedAt
-    )
+    expect(
+      getTaskFormOptionsWithLoad.mock.invocationCallOrder[0]
+    ).toBeGreaterThan(checkedAt)
 
     releaseTask(TASK)
     await expect(rendering).resolves.toBeTruthy()
@@ -141,7 +143,7 @@ describe("EditTaskPage", () => {
 
     await expect(renderPage()).rejects.toBe(redirectError)
     expect(getTaskEdit).not.toHaveBeenCalled()
-    expect(getTaskFormOptions).not.toHaveBeenCalled()
+    expect(getTaskFormOptionsWithLoad).not.toHaveBeenCalled()
   })
 
   it("renders the h1 Edit task and the form in edit mode, keyed on the task's version and each slot's id and member", async () => {

@@ -83,7 +83,13 @@ describe("createTaskAction", () => {
       reference_url: null,
       slots: [{ role: "layout_artist", member_id: MEMBER_ID }],
     })
-    expect(revalidatePath).toHaveBeenCalledExactlyOnceWith("/admin/tasks")
+    expect(revalidatePath).toHaveBeenCalledTimes(2)
+    expect(revalidatePath).toHaveBeenNthCalledWith(1, "/admin/tasks")
+    expect(revalidatePath).toHaveBeenNthCalledWith(
+      2,
+      "/(member)/dashboard",
+      "layout"
+    )
     expect(result).toEqual({ ok: true, data: { id: "task-1" } })
   })
 

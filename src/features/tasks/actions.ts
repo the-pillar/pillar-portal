@@ -213,6 +213,7 @@ export async function createTaskAction(
   }
 
   revalidatePath("/admin/tasks")
+  revalidatePath(MEMBER_AREA, "layout")
   return { ok: true, data: { id: data } }
 }
 

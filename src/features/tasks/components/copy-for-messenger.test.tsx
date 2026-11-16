@@ -31,6 +31,24 @@ describe("CopyForMessenger", () => {
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument()
   })
 
+  it("calls onCopied after a copy that worked, and not after one that did not", async () => {
+    const onCopied = vi.fn()
+    const user = userEvent.setup({ writeToClipboard: false })
+    vi.stubGlobal("navigator", {
+      clipboard: { writeText: vi.fn().mockResolvedValue(undefined) },
+    })
+    render(<CopyForMessenger message={MESSAGE} onCopied={onCopied} />)
+    await user.click(screen.getByRole("button", { name: "Copy for Messenger" }))
+    expect(onCopied).toHaveBeenCalledOnce()
+
+    cleanup()
+    onCopied.mockClear()
+    vi.stubGlobal("navigator", {})
+    render(<CopyForMessenger message={MESSAGE} onCopied={onCopied} />)
+    await user.click(screen.getByRole("button", { name: "Copy for Messenger" }))
+    expect(onCopied).not.toHaveBeenCalled()
+  })
+
   it.each([
     ["no clipboard", {}],
     [

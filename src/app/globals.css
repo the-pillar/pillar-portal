@@ -184,6 +184,41 @@
   }
 }
 
+/* The floating New task button (DESIGN.md › New task button) sits 16px from
+   the edge and is 44px tall. Below md, while it shows, content and scrollers
+   clear it too (Sticky budget); an open sheet, menu or dialog hides it. */
+:root {
+  --new-task-clear: 60px;
+}
+
+@media (max-width: 767px) {
+  body:has([role="dialog"], [role="alertdialog"], [role="menu"])
+    [data-new-task-button] {
+    display: none;
+  }
+  body:has([data-new-task-button]:not([data-hidden])) main {
+    padding-bottom: calc(2rem + var(--new-task-clear));
+  }
+  html:has([data-new-task-button]:not([data-hidden])) {
+    scroll-padding-bottom: calc(var(--new-task-clear) + 8px);
+  }
+}
+
+@media (max-width: 767px) and (min-height: 480px) {
+  html:has([data-bottom-tab-bar]):has(
+      [data-new-task-button]:not([data-hidden])
+    ) {
+    scroll-padding-bottom: calc(
+      var(--bottom-tab-bar-clear) + var(--new-task-clear)
+    );
+  }
+  html:has([data-bottom-tab-bar])
+    body:has([data-new-task-button]:not([data-hidden]))
+    main {
+    padding-bottom: calc(var(--bottom-tab-bar-clear) + var(--new-task-clear));
+  }
+}
+
 /* Motion distances, scales and rotations, kept outside @theme so the
    reduced-motion rule can reset them on every element. */
 :root {
@@ -405,6 +440,68 @@
       text-decoration-color, fill, stroke !important;
     transition-duration: var(--motion-reduced-fade) !important;
     scroll-behavior: auto !important;
+  }
+}
+
+/* The New task sheet (DESIGN.md › Motion): from the bottom below md, from the
+   right from md, in over --motion-sheet-in and out over --motion-sheet-out by
+   the same edge. Reduced motion swaps the slide for a fade. */
+@keyframes new-task-in-y {
+  from {
+    transform: translateY(100%);
+  }
+}
+@keyframes new-task-out-y {
+  to {
+    transform: translateY(100%);
+  }
+}
+@keyframes new-task-in-x {
+  from {
+    transform: translateX(100%);
+  }
+}
+@keyframes new-task-out-x {
+  to {
+    transform: translateX(100%);
+  }
+}
+@keyframes new-task-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes new-task-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+/* A fade by default, which is all reduced motion gets; the slide is for
+   everyone else (written as "not reduce" so the one reduced-motion rule
+   below stays the only one). */
+[data-slot="new-task-sheet"][data-state="open"] {
+  animation: new-task-fade-in var(--motion-sheet-in) var(--ease-drawer) both;
+}
+[data-slot="new-task-sheet"][data-state="closed"] {
+  animation: new-task-fade-out var(--motion-sheet-out) var(--ease-drawer) both;
+}
+@media not all and (prefers-reduced-motion: reduce) {
+  [data-slot="new-task-sheet"][data-state="open"] {
+    animation-name: new-task-in-y;
+  }
+  [data-slot="new-task-sheet"][data-state="closed"] {
+    animation-name: new-task-out-y;
+  }
+}
+@media (min-width: 768px) {
+  @media not all and (prefers-reduced-motion: reduce) {
+    [data-slot="new-task-sheet"][data-state="open"] {
+      animation-name: new-task-in-x;
+    }
+    [data-slot="new-task-sheet"][data-state="closed"] {
+      animation-name: new-task-out-x;
+    }
   }
 }
 

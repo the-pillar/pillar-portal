@@ -3,7 +3,7 @@ import { redirect } from "next/navigation"
 
 import {
   getTaskEdit,
-  getTaskFormOptions,
+  getTaskFormOptionsWithLoad,
   TaskForm,
   taskEditKey,
   TaskNotFound,
@@ -30,7 +30,7 @@ export default async function EditTaskPage({
   const { id } = await params
   const [task, options] = await Promise.all([
     getTaskEdit(id),
-    getTaskFormOptions(),
+    getTaskFormOptionsWithLoad(),
   ])
 
   if (!task) return <TaskNotFound />
