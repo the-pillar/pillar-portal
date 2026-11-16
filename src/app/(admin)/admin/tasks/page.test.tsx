@@ -1,5 +1,12 @@
+// @vitest-environment jsdom
+import "@testing-library/jest-dom/vitest"
+
+import { cleanup, render } from "@testing-library/react"
+import axe from "axe-core"
 import type { ReactElement } from "react"
 import { afterEach, describe, expect, it, vi } from "vitest"
+
+import { Button } from "@/components/ui/button"
 
 // vi.mock factories run before this file's imports, so what they share with
 // the tests is created in vi.hoisted.
@@ -20,7 +27,13 @@ const {
   getHandedBackQueue: vi.fn(),
   getReassignOptions: vi.fn(),
   canCreateTask: vi.fn(),
-  NewTaskLink: vi.fn(() => null),
+  NewTaskLink: vi.fn(
+    ({ label, className }: { label?: string; className?: string }) => (
+      <button type="button" className={className}>
+        {label}
+      </button>
+    )
+  ),
   ReviewQueue: vi.fn(() => null),
   HandedBackQueue: vi.fn(() => null),
   requireAdmin: vi.fn(),
@@ -94,9 +107,11 @@ type PageElement = ReactElement<{
   focusTargetId?: string
   options?: unknown
   label?: string
+  asChild?: boolean
 }>
 
 afterEach(() => {
+  cleanup()
   vi.clearAllMocks()
 })
 
@@ -142,8 +157,24 @@ describe("AdminTasksPage", () => {
     expect(queue.type).toBe(ReviewQueue)
     expect(queue.props).toEqual({ tasks: QUEUE, focusTargetId: h1.props.id })
 
-    expect(button.type).toBe(NewTaskLink)
-    expect(button.props.label).toBe("New task")
+    // A primary Button wrapping the sheet's link (asChild).
+    expect(button.type).toBe(Button)
+    expect(button.props.asChild).toBe(true)
+    const link = button.props.children as PageElement
+    expect(link.type).toBe(NewTaskLink)
+    expect(link.props.label).toBe("New task")
+  })
+
+  it("has no axe violations", async () => {
+    mockReads()
+
+    const { container } = render((await AdminTasksPage()) as ReactElement)
+
+    // color-contrast can't be computed in jsdom (it is always "incomplete").
+    const results = await axe.run(container, {
+      rules: { "color-contrast": { enabled: false } },
+    })
+    expect(results.violations).toEqual([])
   })
 
   it("offers no New task button without can_create_task", async () => {

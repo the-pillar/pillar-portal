@@ -13,28 +13,45 @@ const {
   TaskNotFound,
   requireActiveMember,
   recordCopiedTaskAction,
+  safeReturnPath,
 } = vi.hoisted(() => ({
   getReassignOptions: vi.fn(),
   getTaskDetail: vi.fn(),
   TaskDetailView: vi.fn<
-    (props: { task: unknown; reassignOptions?: unknown }) => React.ReactNode
+    (props: {
+      task: unknown
+      reassignOptions?: unknown
+      returnLink?: unknown
+    }) => React.ReactNode
   >(() => <h1>Task detail view</h1>),
   // Its copy and link have their own tests (task-not-found.test.tsx).
   TaskNotFound: vi.fn(() => <h1>Task not found</h1>),
   requireActiveMember: vi.fn(),
   recordCopiedTaskAction: vi.fn(),
+  // Stands in for the members slice's check (its own tests cover it).
+  safeReturnPath: vi.fn((next: unknown) =>
+    typeof next === "string" && next.startsWith("/") && !next.startsWith("//")
+      ? next
+      : "/dashboard"
+  ),
 }))
 
-vi.mock("@/features/tasks", () => ({
+vi.mock("@/features/tasks", async () => ({
   getReassignOptions,
   getTaskDetail,
   TaskDetailView,
   TaskNotFound,
+  returnLink: (
+    await vi.importActual<typeof import("@/features/tasks/return-link")>(
+      "@/features/tasks/return-link"
+    )
+  ).returnLink,
 }))
 // The shared state check has its own tests (members' queries.test.ts).
 vi.mock("@/features/members", () => ({
   requireActiveMember,
   recordCopiedTaskAction,
+  safeReturnPath,
 }))
 
 import TaskPage, { metadata } from "./page"
@@ -50,11 +67,14 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
-async function renderPage(id: string) {
+async function renderPage(
+  id: string,
+  searchParams: Record<string, string | string[] | undefined> = {}
+) {
   return render(
     await TaskPage({
       params: Promise.resolve({ id }),
-      searchParams: Promise.resolve({}),
+      searchParams: Promise.resolve(searchParams),
     })
   )
 }
@@ -93,9 +113,37 @@ describe("TaskPage", () => {
       task,
       reassignOptions: undefined,
       onCopied: recordCopiedTaskAction,
+      returnLink: { href: "/dashboard", label: "What's mine" },
     })
     expect(screen.getByText("Task detail view")).toBeInTheDocument()
   })
+
+  it.each([
+    [
+      "/dashboard?view=board&owner=layout&column=doing&focus=x",
+      "Board",
+      "/dashboard?view=board&owner=layout&column=doing&focus=x",
+    ],
+    ["/dashboard?view=planner&month=2026-11", "Planner", undefined],
+    ["/admin/tasks", "Tasks", undefined],
+    ["/admin", "Admin home", undefined],
+    ["//evil.example", "What's mine", "/dashboard"],
+    ["https://evil.example/x", "What's mine", "/dashboard"],
+    [undefined, "What's mine", "/dashboard"],
+    [["/admin", "/admin/tasks"], "What's mine", "/dashboard"],
+  ])(
+    "names the view %j as %s after safeReturnPath",
+    async (from, label, href) => {
+      getTaskDetail.mockResolvedValue({ id: TASK_ID, canReassign: false })
+
+      await renderPage(TASK_ID, { from })
+
+      expect(safeReturnPath).toHaveBeenCalledWith(from)
+      expect(TaskDetailView.mock.calls[0][0]).toMatchObject({
+        returnLink: { href: href ?? from, label },
+      })
+    }
+  )
 
   it("reads no reassign options when task_capabilities doesn't offer Reassign", async () => {
     getTaskDetail.mockResolvedValue({ id: TASK_ID, canReassign: false })
@@ -126,6 +174,7 @@ describe("TaskPage", () => {
       task,
       reassignOptions,
       onCopied: recordCopiedTaskAction,
+      returnLink: { href: "/dashboard", label: "What's mine" },
     })
   })
 

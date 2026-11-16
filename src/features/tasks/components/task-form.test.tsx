@@ -165,6 +165,20 @@ describe("TaskForm", () => {
     expect(screen.queryByText("Choose one owner")).not.toBeInTheDocument()
   })
 
+  it("names its slot group Role slots, and draws each slot row as a borderless tan panel", async () => {
+    const user = userEvent.setup()
+    renderForm()
+
+    expect(screen.getByText("Role slots")).toBeInTheDocument()
+    expect(screen.queryByText("Slots")).not.toBeInTheDocument()
+    await chooseOption(user, "Role", "Layout Artist")
+    const row = screen
+      .getByRole("combobox", { name: "Role" })
+      .closest("div.bg-muted")
+    expect(row).not.toBeNull()
+    expect(row!.className).not.toMatch(/\bborder\b/)
+  })
+
   it("clears the owner error a submit left once an owner is chosen", async () => {
     const user = userEvent.setup()
     renderForm()

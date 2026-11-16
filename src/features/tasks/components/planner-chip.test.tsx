@@ -25,6 +25,20 @@ const TASK: PlannerCard = plannerCard({ title: "Masthead brief" })
 const glyphOf = (link: HTMLElement) => link.querySelector("svg")
 
 describe("PlannerChip", () => {
+  it("carries the Planner's month and chip as from", () => {
+    render(
+      <PlannerChip
+        task={TASK}
+        from="/dashboard?view=planner&month=2026-10&owner=mine"
+      />
+    )
+
+    expect(screen.getByRole("link")).toHaveAttribute(
+      "href",
+      `/dashboard/tasks/${TASK.id}?from=${encodeURIComponent("/dashboard?view=planner&month=2026-10&owner=mine")}`
+    )
+  })
+
   it("links to Task detail, named by the title, the status and the PHT due time", () => {
     render(<PlannerChip task={TASK} />)
 

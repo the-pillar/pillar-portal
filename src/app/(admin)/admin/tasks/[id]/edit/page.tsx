@@ -41,7 +41,7 @@ export default async function EditTaskPage({
   return (
     <>
       <h1 className="font-heading text-display text-navy">Edit task</h1>
-      <div className="mt-3 max-w-2xl">
+      <div className="mt-3 max-w-2xl rounded-lg bg-card p-4 shadow-card">
         <TaskForm
           key={taskEditKey(task)}
           options={options}

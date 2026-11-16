@@ -240,7 +240,12 @@ describe("TaskBoard", () => {
     expect(wired("Draw the cartoon")).toBe(false)
     expect(
       screen.getByRole("link", { name: "Draw the cartoon" })
-    ).toHaveAttribute("href", `/dashboard/tasks/${CARTOON.id}`)
+    ).toHaveAttribute(
+      "href",
+      `/dashboard/tasks/${CARTOON.id}?from=${encodeURIComponent(
+        `/dashboard?view=board&owner=all&column=to_do&focus=${CARTOON.id}`
+      )}`
+    )
   })
 
   describe("filter chips", () => {

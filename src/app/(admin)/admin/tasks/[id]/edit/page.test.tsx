@@ -2,6 +2,7 @@
 import "@testing-library/jest-dom/vitest"
 
 import { cleanup, render, screen } from "@testing-library/react"
+import axe from "axe-core"
 import { useEffect } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -217,5 +218,17 @@ describe("EditTaskPage", () => {
     getTaskEdit.mockRejectedValue(failure)
 
     await expect(renderPage()).rejects.toBe(failure)
+  })
+
+  it("has no axe violations", async () => {
+    getTaskEdit.mockResolvedValue(TASK)
+
+    const { container } = render(await renderPage())
+
+    // color-contrast can't be computed in jsdom (it is always "incomplete").
+    const results = await axe.run(container, {
+      rules: { "color-contrast": { enabled: false } },
+    })
+    expect(results.violations).toEqual([])
   })
 })

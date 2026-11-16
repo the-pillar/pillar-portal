@@ -108,3 +108,37 @@ describe("globals.css reduced motion", () => {
     )
   })
 })
+
+describe("globals.css Task detail action bar", () => {
+  // The same query as the tabbar-fixed variant: below md and at least 480px
+  // tall. Shorter, neither bar is fixed, so both flow in place.
+  const FIXED_QUERY = "@media (max-width: 767px) and (min-height: 480px) {"
+  const block = (() => {
+    const start = css.indexOf("body:has([data-action-bar])")
+    if (start === -1) return undefined
+    const open = css.lastIndexOf("@media", start)
+    return { query: css.slice(open, css.indexOf("\n", open)), start, open }
+  })()
+
+  it("hides the tab bar only while an action bar is on the page, under the fixed-bar query", () => {
+    expect(block).toBeDefined()
+    expect(block!.query).toBe(FIXED_QUERY)
+    expect(css).toContain(
+      `@custom-variant tabbar-fixed (${FIXED_QUERY.slice(0, -2)});`
+    )
+    expect(css).toMatch(
+      /body:has\(\[data-action-bar\]\) \[data-bottom-tab-bar\] \{\s*display: none;/
+    )
+    // Nothing else hides the tab bar.
+    expect(css.match(/\[data-bottom-tab-bar\][^{]*\{\s*display: none/g)).toHaveLength(1)
+  })
+
+  it("clears the bar's measured height plus 8px in content and scrollers", () => {
+    expect(css).toMatch(
+      /html:has\(\[data-action-bar\]\) \{\s*scroll-padding-bottom: calc\(var\(--action-bar-height, [^)]+\) \+ 8px\);/
+    )
+    expect(css).toMatch(
+      /html:has\(\[data-action-bar\]\) body main \{\s*padding-bottom: calc\(var\(--action-bar-height, [^)]+\) \+ 8px\);/
+    )
+  })
+})

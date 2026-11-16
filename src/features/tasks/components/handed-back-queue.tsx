@@ -4,6 +4,7 @@ import { formatInPht } from "@/lib/time"
 
 import type { HandedBackSlot } from "../queries/handed-back"
 import type { ReassignOptions } from "../queries/reassign"
+import { taskHref } from "../return-link"
 import { SLOT_STATE_LABELS } from "../status"
 import { ReassignSlot } from "./reassign-slot"
 
@@ -40,7 +41,10 @@ export function HandedBackQueue({
       aria-labelledby="handed-back-queue-heading"
       className="mt-6 max-w-2xl"
     >
-      <h2 id="handed-back-queue-heading" className="text-heading-sm text-navy">
+      <h2
+        id="handed-back-queue-heading"
+        className="font-heading text-heading-sm text-navy"
+      >
         Needs reassignment ({slots.length})
       </h2>
       <ul className="mt-3 flex flex-col gap-3">
@@ -50,7 +54,7 @@ export function HandedBackQueue({
               <div className="relative flex flex-col gap-1">
                 <h3 className="font-semibold break-words">
                   <Link
-                    href={`/dashboard/tasks/${slot.taskId}`}
+                    href={taskHref(slot.taskId, "/admin/tasks")}
                     className="after:absolute after:inset-0 after:rounded-lg focus-visible:outline-hidden"
                   >
                     {slot.taskTitle}

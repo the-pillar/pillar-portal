@@ -90,6 +90,7 @@ export function OnboardingChecklist({
   createTask,
   record,
   fallbackHeadingId,
+  className,
 }: {
   items: ChecklistItems
   /** Members awaiting approval right now. */
@@ -98,6 +99,8 @@ export function OnboardingChecklist({
   record: (step: "checklist_done") => Promise<unknown>
   /** Where focus goes when the card leaves holding it and nothing follows. */
   fallbackHeadingId?: string
+  /** Replaces the card's default `mt-6 max-w-xl`, where a layout sets its own. */
+  className?: string
 }) {
   const router = useRouter()
   const cardRef = useRef<HTMLElement>(null)
@@ -162,7 +165,8 @@ export function OnboardingChecklist({
           aria-labelledby={HEADING_ID}
           aria-hidden={leaving ? true : undefined}
           className={cn(
-            "mt-6 max-w-xl rounded-lg border border-border bg-card p-card-padding transition-[opacity,translate] duration-(--motion-card-leave) ease-(--ease-out)",
+            className ?? "mt-6 max-w-xl",
+            "rounded-lg border border-border bg-card p-card-padding transition-[opacity,translate] duration-(--motion-card-leave) ease-(--ease-out)",
             leaving && "translate-y-(--motion-card-leave-y) opacity-0"
           )}
         >

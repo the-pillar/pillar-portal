@@ -473,7 +473,7 @@ export function TaskForm({
         </Field>
 
         <FieldSet>
-          <FieldLegend>Slots</FieldLegend>
+          <FieldLegend>Role slots</FieldLegend>
           <div className="flex flex-col gap-3">
             {fields.map((field, index) => (
               <SlotRow
@@ -603,7 +603,7 @@ function SlotRow({
   }, [role, index, setValue])
 
   return (
-    <div className="flex flex-col gap-3 rounded-lg border border-border p-3 sm:flex-row sm:items-start">
+    <div className="flex flex-col gap-3 rounded-lg bg-muted p-3 sm:flex-row sm:items-start">
       {existing ? (
         <Field
           className="flex-1"

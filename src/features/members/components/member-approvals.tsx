@@ -1,6 +1,7 @@
 import type { MemberApprovalsData } from "../queries"
 import { MemberDeactivate } from "./member-deactivate"
 import { MemberMfaReset } from "./member-mfa-reset"
+import { MemberAvatar } from "./member-avatar"
 import { MemberNameEditor } from "./member-name-editor"
 import { MemberPositionEditor } from "./member-position-editor"
 import { PendingMemberCard } from "./pending-member-card"
@@ -30,7 +31,7 @@ export function MemberApprovals({
         <h2
           id={AWAITING_HEADING_ID}
           tabIndex={-1}
-          className="rounded-sm text-heading-sm text-navy outline-offset-2 focus-visible:outline-2"
+          className="rounded-sm font-heading text-heading-sm text-navy outline-offset-2 focus-visible:outline-2"
         >
           Awaiting approval
         </h2>
@@ -56,39 +57,42 @@ export function MemberApprovals({
         <h2
           id={ACTIVE_HEADING_ID}
           tabIndex={-1}
-          className="rounded-sm text-heading-sm text-navy outline-offset-2 focus-visible:outline-2"
+          className="rounded-sm font-heading text-heading-sm text-navy outline-offset-2 focus-visible:outline-2"
         >
           Active members
         </h2>
-        <ul className="mt-3 divide-y divide-border rounded-lg bg-card shadow-card">
+        <ul className="mt-3 flex flex-col gap-2">
           {roster.map((member) => (
             <li
               key={member.id}
-              className="flex flex-col gap-0.5 p-card-padding"
+              className="flex gap-3 rounded-lg bg-card p-card-padding shadow-card"
             >
-              <MemberNameEditor
-                member={member}
-                as="p"
-                nameClassName="font-medium break-words"
-              />
-              <p className="text-sm break-all text-muted-foreground">
-                {member.email}
-              </p>
-              <p className="text-sm">{member.positionTitles.join(" · ")}</p>
-              <div className="mt-2 flex flex-wrap items-start gap-3 empty:hidden">
-                <MemberPositionEditor
+              <MemberAvatar id={member.id} name={member.name} />
+              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <MemberNameEditor
                   member={member}
-                  positionGroups={positionGroups}
-                  focusTargetId={ACTIVE_HEADING_ID}
+                  as="p"
+                  nameClassName="font-medium break-words"
                 />
-                <MemberMfaReset
-                  member={member}
-                  focusTargetId={ACTIVE_HEADING_ID}
-                />
-                <MemberDeactivate
-                  member={member}
-                  focusTargetId={ACTIVE_HEADING_ID}
-                />
+                <p className="text-sm break-all text-muted-foreground">
+                  {member.email}
+                </p>
+                <p className="text-sm">{member.positionTitles.join(" · ")}</p>
+                <div className="mt-2 flex flex-wrap items-start gap-3 empty:hidden">
+                  <MemberPositionEditor
+                    member={member}
+                    positionGroups={positionGroups}
+                    focusTargetId={ACTIVE_HEADING_ID}
+                  />
+                  <MemberMfaReset
+                    member={member}
+                    focusTargetId={ACTIVE_HEADING_ID}
+                  />
+                  <MemberDeactivate
+                    member={member}
+                    focusTargetId={ACTIVE_HEADING_ID}
+                  />
+                </div>
               </div>
             </li>
           ))}

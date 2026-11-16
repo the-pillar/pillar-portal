@@ -3,6 +3,7 @@ import type { Metadata } from "next"
 import Link from "next/link"
 import { after } from "next/server"
 
+import { Button } from "@/components/ui/button"
 import { AppHeader } from "@/components/app-header"
 import { getCurrentMember } from "@/features/members"
 import { recordErrorEvent } from "@/lib/record-error-event"
@@ -49,12 +50,9 @@ export default async function NotFound() {
         <h1 className="font-heading text-heading-sm">
           This page doesn&apos;t exist.
         </h1>
-        <Link
-          href={way.href}
-          className="inline-flex min-h-11 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-        >
-          {way.label}
-        </Link>
+        <Button asChild className="min-h-11 px-4">
+          <Link href={way.href}>{way.label}</Link>
+        </Button>
       </main>
     </>
   )

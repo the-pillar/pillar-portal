@@ -37,7 +37,9 @@ describe("GoogleSignIn", () => {
     const button = screen.getByRole("button", { name: "Sign in with Google" })
 
     expect(button).toHaveAttribute("type", "submit")
-    expect(button).toHaveClass("min-h-11", "w-full")
+    // 48px, Google's white branded fill (never the navy primary).
+    expect(button).toHaveClass("min-h-12", "w-full", "bg-card")
+    expect(button).toHaveAttribute("data-variant", "outline")
     const mark = button.querySelector("img")
     expect(mark).toHaveAttribute("src", "/google-g.svg")
     expect(mark).toHaveAttribute("alt", "")

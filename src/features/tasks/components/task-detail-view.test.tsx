@@ -65,6 +65,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  vi.useRealTimers()
   cleanup()
   vi.clearAllMocks()
   vi.unstubAllGlobals()
@@ -87,9 +88,11 @@ const TASK: TaskDetail = {
   title: "Lay out the spread",
   description: "Two pages.\nUse the new grid.",
   ownerName: "Layout",
+  ownerId: "layout",
   // 23:30 PHT on Saturday, October 31, 2026.
   dueAt: "2026-10-31T15:30:00+00:00",
   referenceUrl: "https://example.com/brief",
+  doneAt: null,
   column: "doing",
   revisionNote: null,
   slots: [
@@ -98,6 +101,7 @@ const TASK: TaskDetail = {
       role: "layout_artist",
       memberId: "00000000-0000-4000-8000-000000000001",
       memberName: "Staff Layout Artist",
+      initials: "SA",
       state: "awaiting_response",
       reason: null,
       updatedAt: "2026-10-30T02:15:42.000031+00:00",
@@ -107,6 +111,7 @@ const TASK: TaskDetail = {
       role: "cartoonist",
       memberId: "00000000-0000-4000-8000-000000000001",
       memberName: "Staff Layout Artist",
+      initials: "SA",
       state: "awaiting_response",
       reason: null,
       updatedAt: "2026-10-30T02:15:42.000032+00:00",
@@ -116,6 +121,7 @@ const TASK: TaskDetail = {
       role: "writer",
       memberId: "00000000-0000-4000-8000-000000000002",
       memberName: "Former member",
+      initials: "FM",
       state: "needs_reassignment",
       reason: "Exams all week",
       updatedAt: "2026-10-30T02:15:42.000033+00:00",
@@ -201,23 +207,71 @@ describe("TaskDetailView", () => {
     expect(onCopied).toHaveBeenCalledOnce()
   })
 
-  it("shows the title, column, owner, due date in PHT, reference link and description", () => {
+  it("shows the owner label, title, due chip in PHT, column, description and reference link in the mock's order", () => {
+    vi.useFakeTimers({ toFake: ["Date"] })
+    vi.setSystemTime(new Date("2026-10-01T00:00:00Z"))
     render(<TaskDetailView task={TASK} />)
 
     expect(
       screen.getByRole("heading", { level: 1, name: "Lay out the spread" })
     ).toHaveClass("font-heading")
     expect(screen.getByText("Doing")).toBeInTheDocument()
-    expect(screen.getByText("Owner").nextElementSibling).toHaveTextContent(
-      "Layout"
-    )
-    expect(screen.getByText("Due").nextElementSibling).toHaveTextContent(
-      "Sat, Oct 31, 2026 at 11:30 PM"
-    )
+    const owner = screen.getByText("Layout")
+    expect(owner).toHaveAttribute("data-owner", "layout")
+    expect(owner).toHaveTextContent("Owner: Layout")
+    const due = screen.getByText("Sat, Oct 31, 2026 at 11:30 PM")
+    expect(due.closest("p")).toHaveAttribute("data-due", "open")
     const link = screen.getByRole("link", { name: /example\.com\/brief/ })
     expect(link).toHaveAttribute("href", "https://example.com/brief")
     expect(link).toHaveAttribute("target", "_blank")
     expect(screen.getByText(/Two pages\./)).toHaveClass("whitespace-pre-line")
+    const order = [
+      screen.getByRole("link", { name: /What's mine/ }),
+      owner,
+      screen.getByRole("heading", { level: 1 }),
+      due,
+      screen.getByText(/Two pages\./),
+      screen.getByRole("heading", { level: 2, name: "Role slots" }),
+      screen.getByRole("heading", { level: 2, name: "Reference" }),
+      screen.getByRole("button", { name: "Add to Google Calendar" }),
+      screen.getByRole("button", { name: "Copy for Messenger" }),
+    ]
+    order.slice(1).forEach((node, i) => {
+      expect(
+        order[i].compareDocumentPosition(node) &
+          Node.DOCUMENT_POSITION_FOLLOWING
+      ).not.toBe(0)
+    })
+    expect(
+      screen.getByRole("button", { name: "Add to Google Calendar" })
+    ).toHaveAttribute("data-variant", "outline")
+  })
+
+  it("links back to the view it came from, labelled by the page", () => {
+    render(
+      <TaskDetailView
+        task={TASK}
+        returnLink={{
+          href: "/dashboard?view=board&owner=layout&column=doing&focus=x",
+          label: "Board",
+        }}
+      />
+    )
+
+    const back = screen.getByRole("link", { name: /Board/ })
+    expect(back).toHaveAttribute(
+      "href",
+      "/dashboard?view=board&owner=layout&column=doing&focus=x"
+    )
+    expect(back).toHaveTextContent("‹ Board")
+  })
+
+  it("marks an overdue task's due chip", () => {
+    render(<TaskDetailView task={{ ...TASK, dueAt: "2020-01-01T00:00:00Z" }} />)
+    expect(screen.getByText(/^Overdue ·/).closest("p")).toHaveAttribute(
+      "data-due",
+      "overdue"
+    )
   })
 
   it("shows one row per slot with its role, member and state badge, and a reason only when there is one", () => {
@@ -284,18 +338,97 @@ describe("TaskDetailView", () => {
     expect(layout).toHaveAttribute("tabindex", "-1")
   })
 
-  it("offers respond buttons only on the slots task_capabilities lists, even for the same member", () => {
+  it("puts a viewer's one open slot's response buttons in the action bar, and no bar for none", () => {
+    const { rerender } = render(<TaskDetailView task={TASK} />)
+
+    const bars = document.querySelectorAll("[data-action-bar]")
+    expect(bars).toHaveLength(1)
+    const bar = bars[0] as HTMLElement
+    expect(
+      within(bar).getByRole("button", { name: /^I'm on it/ })
+    ).toHaveAttribute("data-variant", "default")
+    expect(
+      within(bar).getByRole("button", { name: /^Can't take this/ })
+    ).toBeInTheDocument()
+    expect(within(bar).getByRole("combobox", { name: "Move to…" })).toBeTruthy()
+    expect(within(slotRows()[1]).queryByRole("button")).toBeNull()
+
+    rerender(
+      <TaskDetailView
+        task={{ ...TASK, respondableSlotIds: [], handBackSlotIds: [] }}
+      />
+    )
+    expect(document.querySelector("[data-action-bar]")).toBeNull()
+  })
+
+  it("fixes the bar only under the tabbar-fixed variant, so a short phone keeps it in place", () => {
+    render(<TaskDetailView task={TASK} />)
+
+    const bar = document.querySelector<HTMLElement>("[data-action-bar]")!
+    const classes = bar.className.split(/\s+/)
+    expect(classes).toContain("tabbar-fixed:fixed")
+    expect(classes).toContain("tabbar-fixed:bottom-0")
+    // Never fixed, sticky or absolute without the variant (below 480px tall,
+    // and from md, it flows after the status row).
+    expect(
+      classes.filter((c) => /^(fixed|sticky|absolute|bottom-0)$/.test(c))
+    ).toEqual([])
+  })
+
+  it("shows You're on it. above Hand back and Move to… in the bar for an on-it slot", () => {
+    render(
+      <TaskDetailView
+        task={{
+          ...TASK,
+          respondableSlotIds: [],
+          handBackSlotIds: [CARTOON_SLOT],
+        }}
+      />
+    )
+
+    const bar = document.querySelector<HTMLElement>("[data-action-bar]")!
+    expect(within(bar).getByText("You're on it.")).toBeInTheDocument()
+    expect(
+      within(bar).getByRole("button", { name: /^Hand back/ })
+    ).toBeInTheDocument()
+    expect(within(bar).getByRole("combobox", { name: "Move to…" })).toBeTruthy()
+  })
+
+  it("keeps two open slots' actions inline in their rows, with no bar", () => {
+    render(
+      <TaskDetailView
+        task={{
+          ...TASK,
+          respondableSlotIds: [LAYOUT_SLOT],
+          handBackSlotIds: [CARTOON_SLOT],
+        }}
+      />
+    )
+
+    expect(document.querySelector("[data-action-bar]")).toBeNull()
+    const [layout, cartoon] = slotRows()
+    expect(
+      within(layout).getByRole("button", { name: /^I'm on it/ })
+    ).toBeInTheDocument()
+    expect(
+      within(cartoon).getByRole("button", { name: /^Hand back/ })
+    ).toBeInTheDocument()
+  })
+
+  it("offers respond buttons only for the slot task_capabilities lists, even for the same member", () => {
     render(<TaskDetailView task={TASK} />)
 
     const [layout, cartoon, writer] = slotRows()
-    expect(within(layout).queryByRole("button")).toBeNull()
+    for (const row of [layout, cartoon, writer]) {
+      expect(within(row).queryByRole("button")).toBeNull()
+    }
+    const bar = document.querySelector<HTMLElement>("[data-action-bar]")!
     expect(
-      within(cartoon).getByRole("button", { name: /^I'm on it/ })
+      within(bar).getByRole("button", { name: /^I'm on it.*Cartoonist/ })
     ).toBeInTheDocument()
     expect(
-      within(cartoon).getByRole("button", { name: /^Can't take this/ })
+      within(bar).getByRole("button", { name: /^Can't take this.*Cartoonist/ })
     ).toBeInTheDocument()
-    expect(within(writer).queryByRole("button")).toBeNull()
   })
 
   it("offers Google Calendar with the event prefilled and the link back", async () => {
@@ -445,15 +578,14 @@ describe("TaskDetailView", () => {
       "Sent back by Head Layout Artist · Sun, Nov 1, 2026"
     )
     expect(within(byline).getByText("Sent back by")).toHaveClass("sr-only")
-    // Under the status, before the actions: the review buttons, then Hand
-    // back.
+    // Under the status and the viewer's actions, before the review buttons.
     const follows = (a: Node, b: Node) =>
       (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0
     const markDone = screen.getByRole("button", { name: "Mark done" })
     const handBack = screen.getByRole("button", { name: /^Hand back/ })
     expect(follows(status!, block)).toBe(true)
+    expect(follows(status!, handBack)).toBe(true)
     expect(follows(block, markDone)).toBe(true)
-    expect(follows(block, handBack)).toBe(true)
   })
 
   it("shows no revision note, and the column as the status, when the task isn't sent back", () => {
@@ -770,8 +902,54 @@ describe("TaskDetailView", () => {
       <TaskDetailView task={{ ...TASK, referenceUrl: "javascript:alert(1)" }} />
     )
 
-    expect(screen.queryByRole("link")).toBeNull()
+    // Only the return link: the stored URL isn't one.
+    expect(screen.getAllByRole("link")).toHaveLength(1)
     expect(screen.getByText("javascript:alert(1)")).toBeInTheDocument()
+  })
+
+  it("fills a Done task's chip with the date it was marked done, or plain Done without one", () => {
+    const { rerender } = render(
+      <TaskDetailView
+        task={{
+          ...TASK,
+          column: "done",
+          // 09:00 PHT on Sunday, November 1, 2026.
+          doneAt: "2026-11-01T01:00:00+00:00",
+        }}
+      />
+    )
+
+    const chip = document.querySelector("[data-due]")!
+    expect(chip).toHaveAttribute("data-due", "done")
+    expect(chip).toHaveClass("bg-positive-strong", "text-white")
+    expect(chip).toHaveTextContent("Done Nov 1")
+    expect(chip.querySelector("time")).toHaveAttribute(
+      "datetime",
+      "2026-11-01T01:00:00+00:00"
+    )
+
+    rerender(<TaskDetailView task={{ ...TASK, column: "done" }} />)
+    expect(document.querySelector("[data-due]")).toHaveTextContent(/^Done\s*$/)
+    expect(document.querySelector("time")).toBeNull()
+  })
+
+  it("has no axe violations in the on-it action bar with the Hand back form open", async () => {
+    const user = userEvent.setup()
+    const { container } = render(
+      <TaskDetailView
+        task={{
+          ...TASK,
+          respondableSlotIds: [],
+          handBackSlotIds: [CARTOON_SLOT],
+        }}
+      />
+    )
+
+    await user.click(screen.getByRole("button", { name: /^Hand back/ }))
+    expect(
+      await screen.findByLabelText("Reason (optional)")
+    ).toBeInTheDocument()
+    expect(await axeViolations(container)).toEqual([])
   })
 
   it("has no axe violations", async () => {

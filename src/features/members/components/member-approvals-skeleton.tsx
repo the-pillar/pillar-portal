@@ -12,7 +12,7 @@ export function MemberApprovalsSkeleton() {
       <div className="mt-3 flex flex-col gap-3">
         {[0, 1].map((n) => (
           <div key={n} className="flex flex-col gap-3">
-            <Skeleton className="h-20 w-full" />
+            <Skeleton className="h-20 w-full rounded-lg" />
             <div className="flex gap-3">
               <Skeleton className="h-11 w-36" />
               <Skeleton className="h-11 w-24" />
@@ -23,7 +23,7 @@ export function MemberApprovalsSkeleton() {
       <Skeleton className="mt-8 h-5 w-36" />
       <div className="mt-3 flex flex-col gap-2">
         {[0, 1, 2, 3].map((n) => (
-          <Skeleton key={n} className="h-18 w-full" />
+          <Skeleton key={n} className="h-18 w-full rounded-lg" />
         ))}
       </div>
     </div>

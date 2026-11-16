@@ -83,6 +83,26 @@ describe("WhatsMineTasks", () => {
     expect(screen.getByText("Your slot: Cartoonist")).toBeInTheDocument()
   })
 
+  it("heads both groups in the serif and links each card with What's mine as its from", () => {
+    render(
+      <WhatsMineTasks
+        whatsMine={WHATS_MINE}
+        focusTargetId="whats-mine-heading"
+      />
+    )
+
+    for (const name of [/^Waiting for you/, /^My tasks/]) {
+      expect(screen.getByRole("heading", { level: 2, name })).toHaveClass(
+        "font-heading"
+      )
+    }
+    for (const link of screen
+      .getAllByRole("link")
+      .filter((l) => l.getAttribute("href")?.startsWith("/dashboard/tasks/"))) {
+      expect(link.getAttribute("href")).toMatch(/\?from=%2Fdashboard$/)
+    }
+  })
+
   it("offers the answer buttons only for a respondable slot, named for its role and task", () => {
     render(<WhatsMineTasks whatsMine={WHATS_MINE} focusTargetId="h1" />)
 

@@ -35,12 +35,14 @@ export function MoveToSelect({
   onMove,
   label = MOVE_LABEL,
   triggerRef,
+  className,
 }: {
   allowedMoves: readonly TaskColumn[]
   pending: boolean
   onMove: (toColumn: TaskColumn) => void
   label?: string
   triggerRef?: Ref<HTMLButtonElement>
+  className?: string
 }) {
   const [open, setOpen] = useState(false)
 
@@ -62,7 +64,7 @@ export function MoveToSelect({
           if (event.key.length === 1 && event.key !== " ")
             event.preventDefault()
         }}
-        className={cn("min-h-11", PENDING_STYLE)}
+        className={cn("min-h-11", PENDING_STYLE, className)}
       >
         <SelectValue placeholder={MOVE_LABEL} />
       </SelectTrigger>

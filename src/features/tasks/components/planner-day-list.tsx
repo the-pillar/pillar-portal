@@ -28,6 +28,7 @@ export function PlannerDayList({
   tasks,
   canCreate = false,
   highlightId = null,
+  from,
 }: {
   /** `YYYY-MM`, a Manila month. */
   month: string
@@ -39,6 +40,8 @@ export function PlannerDayList({
   canCreate?: boolean
   /** The task just created, whose chip highlights once. */
   highlightId?: string | null
+  /** The Planner's own URL, passed to each chip for Task detail's return link. */
+  from?: string
 }) {
   const byDay = tasksByDay(tasks)
   const days = monthWeeks(month)
@@ -103,7 +106,7 @@ export function PlannerDayList({
                     key={task.id}
                     data-highlight={task.id === highlightId ? "" : undefined}
                   >
-                    <PlannerChip task={task} variant="row" />
+                    <PlannerChip task={task} variant="row" from={from} />
                   </li>
                 ))}
               </ul>

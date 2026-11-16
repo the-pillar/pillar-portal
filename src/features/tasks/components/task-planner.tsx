@@ -152,6 +152,8 @@ export function TaskPlanner({
 
   // The month links keep a chosen filter; without one they leave `owner` out.
   const owner = effectiveOwner === null ? undefined : ownerFilterParam(filter)
+  // Task detail's return link: this month with the chip as shown now.
+  const from = plannerHref({ month, owner: ownerFilterParam(filter) })
 
   return (
     <div>
@@ -210,6 +212,7 @@ export function TaskPlanner({
                 labelledBy={HEADING_ID}
                 canCreate={canCreate}
                 highlightId={highlightId}
+                from={from}
               />
             </div>
             <div className="md:not-any-pointer-coarse:hidden">
@@ -219,6 +222,7 @@ export function TaskPlanner({
                 tasks={visible}
                 canCreate={canCreate}
                 highlightId={highlightId}
+                from={from}
               />
             </div>
           </>
