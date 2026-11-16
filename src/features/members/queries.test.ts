@@ -403,7 +403,7 @@ function answerApprovals(
       { member_id: PENDING_ROWS[0].id, can_rename: true },
       { member_id: PENDING_ROWS[1].id, can_rename: true },
       { member_id: PENDING_ROWS[2].id, can_rename: false },
-      { member_id: ACTIVE_ROWS[0].id, can_rename: true },
+      { member_id: ACTIVE_ROWS[0].id, can_rename: true, can_reset_mfa: true },
     ],
     error: null,
   })
@@ -519,6 +519,7 @@ describe("getMemberApprovals", () => {
         email: "mj.delacruz@gmail.com",
         googleName: "MARÍA JOSÉ",
         canRename: true,
+        canResetMfa: true,
         positionTitles: ["News Editor", "Online Manager"],
       },
       {
@@ -527,6 +528,7 @@ describe("getMemberApprovals", () => {
         email: "staffwriter@example.com",
         googleName: null,
         canRename: false,
+        canResetMfa: false,
         positionTitles: ["Head Cartoonist", "Staff Writer", "Staff Cartoonist"],
       },
     ])

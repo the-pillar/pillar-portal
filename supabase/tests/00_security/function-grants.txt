@@ -115,3 +115,10 @@ authenticated public.my_onboarding()
 authenticated public.move_task(uuid, task_column, timestamp with time zone)
 authenticated private.can_create_task()
 authenticated public.can_create_task()
+
+# members_two_factor: an admin resets another admin's two-factor behind a
+# fresh code (private.recent_mfa has no grant: only the definer command calls
+# it; private.can_reset_member_mfa is called by the command and by
+# member_capabilities, which runs with the caller's rights)
+authenticated private.can_reset_member_mfa(uuid)
+authenticated public.reset_member_mfa(uuid)

@@ -45,6 +45,13 @@ export const memberDeclineSchema = z.object({
 
 export type MemberDeclineInput = z.infer<typeof memberDeclineSchema>
 
+/** A two-factor reset from /admin/members: reset_member_mfa checks it all. */
+export const memberMfaResetSchema = z.object({
+  memberId: z.uuid(),
+})
+
+export type MemberMfaResetInput = z.infer<typeof memberMfaResetSchema>
+
 /** A rename from /admin/members: set_member_name checks it all again. */
 export const memberRenameSchema = z.object({
   memberId: z.uuid(),
