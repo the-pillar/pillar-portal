@@ -12,7 +12,11 @@ import { STALE_COPY } from "@/lib/command-copy"
 // `members.name_too_long`, shown under the field (the client checks first). Any
 // other code (members.not_admin, members.reset_own_factor, and the position backstops the picker never
 // reaches), a parse failure or a thrown call is `members.save_failed`.
-// reset_member_mfa also raises `auth.step_up_required` (no code from the last
+// update_member and deactivate_member also raise `members.last_admin` and
+// `members.sole_editor_in_chief`, whose copy is the guard line the roster
+// shows beside a disabled Deactivate; their other refusals (own row,
+// `members.invalid_position`) are `members.save_failed`.
+// reset_member_mfa, update_member and deactivate_member also raise `auth.step_up_required` (no code from the last
 // 15 minutes): the step-up prompt (AD-22) handles it and retries, so its copy
 // shows only where no prompt is mounted.
 export const MEMBER_ERROR_COPY = {
@@ -22,6 +26,10 @@ export const MEMBER_ERROR_COPY = {
   "auth.step_up_required": "Couldn't save — try again.",
   "members.stale": STALE_COPY,
   "members.not_found": STALE_COPY,
+  "members.last_admin":
+    "You can't demote or deactivate the last Editorial Board admin.",
+  "members.sole_editor_in_chief":
+    "Transfer Editor-in-Chief to someone else first.",
   "members.name_blank": "Add a name.",
   "members.name_too_long": "Use 100 characters or fewer.",
   "members.save_failed": "Couldn't save — try again.",

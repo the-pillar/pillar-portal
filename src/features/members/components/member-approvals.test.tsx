@@ -25,6 +25,8 @@ vi.mock("../actions", () => ({
   declineMemberAction: vi.fn(),
   renameMemberAction: vi.fn(),
   resetMemberMfaAction: vi.fn(),
+  updateMemberAction: vi.fn(),
+  deactivateMemberAction: vi.fn(),
 }))
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }))
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }))
@@ -51,6 +53,16 @@ const ROSTER: MemberApprovalsData["roster"] = [
     googleName: null,
     canRename: true,
     canResetMfa: true,
+    heldPositions: [
+      {
+        id: "head_layout_artist",
+        title: "Head Layout Artist",
+        isPrimary: true,
+      },
+    ],
+    canChangePositions: true,
+    canDeactivate: true,
+    deactivateBlockedBy: null,
   },
   {
     id: "00000000-0000-4000-8000-000000000062",
@@ -60,6 +72,13 @@ const ROSTER: MemberApprovalsData["roster"] = [
     googleName: "NEWS EDITOR",
     canRename: false,
     canResetMfa: false,
+    heldPositions: [
+      { id: "news_editor", title: "News Editor", isPrimary: true },
+      { id: "online_manager", title: "Online Manager", isPrimary: false },
+    ],
+    canChangePositions: false,
+    canDeactivate: false,
+    deactivateBlockedBy: null,
   },
 ]
 
@@ -218,7 +237,7 @@ describe("MemberApprovals", () => {
       screen.getByRole("region", { name: "Active members" })
     ).getAllByRole("listitem")
     expect(rows.map((row) => row.textContent)).toEqual([
-      "Head Layout ArtistEdit namepersona-head_layout_artist@example.comHead Layout ArtistReset two-factor",
+      "Head Layout ArtistEdit namepersona-head_layout_artist@example.comHead Layout ArtistChange positionsReset two-factorDeactivate",
       "News Editor and Online Managerdemo-news_editor@example.comNews Editor · Online Manager",
     ])
     expect(
@@ -227,7 +246,9 @@ describe("MemberApprovals", () => {
         .map((button) => button.getAttribute("aria-label"))
     ).toEqual([
       "Edit name for Head Layout Artist",
+      "Change positions for Head Layout Artist",
       "Reset two-factor for Head Layout Artist",
+      "Deactivate Head Layout Artist",
     ])
   })
 })

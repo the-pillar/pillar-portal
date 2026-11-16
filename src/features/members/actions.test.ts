@@ -564,6 +564,10 @@ describe("error copy", () => {
       "auth.step_up_required": "Couldn't save — try again.",
       "members.stale": stale,
       "members.not_found": stale,
+      "members.last_admin":
+        "You can't demote or deactivate the last Editorial Board admin.",
+      "members.sole_editor_in_chief":
+        "Transfer Editor-in-Chief to someone else first.",
       "members.name_blank": "Add a name.",
       "members.name_too_long": "Use 100 characters or fewer.",
       "members.save_failed": "Couldn't save — try again.",
@@ -1008,4 +1012,129 @@ describe("resetMemberMfaAction", () => {
       ).resolves.toEqual({ ok: false, code: "members.save_failed" })
     }
   )
+})
+
+describe("updateMemberAction", () => {
+  const INPUT = {
+    memberId: MEMBER_ID,
+    positions: ["staff_layout_artist", "head_layout_artist"],
+    primaryPosition: "head_layout_artist",
+  }
+
+  it("calls update_member, revalidates the admin area and returns the member", async () => {
+    rpc.mockResolvedValue({ data: null, error: null })
+    const { updateMemberAction } = await loadActions({ personas: "true" })
+
+    await expect(updateMemberAction(INPUT)).resolves.toEqual({
+      ok: true,
+      data: { memberId: MEMBER_ID },
+    })
+    expect(rpc).toHaveBeenCalledExactlyOnceWith("update_member", {
+      member_id: MEMBER_ID,
+      positions: INPUT.positions,
+      primary_position: "head_layout_artist",
+    })
+    expect(revalidatePath).toHaveBeenCalledWith("/(admin)/admin", "layout")
+  })
+
+  it.each([
+    ["no input", undefined],
+    ["no positions", { ...INPUT, positions: [] }],
+    ["a primary outside the set", { ...INPUT, primaryPosition: "news_editor" }],
+    ["a member id that isn't a uuid", { ...INPUT, memberId: "nope" }],
+  ])("returns members.save_failed for %s", async (_label, input) => {
+    const { updateMemberAction } = await loadActions({ personas: "true" })
+
+    await expect(updateMemberAction(input)).resolves.toEqual({
+      ok: false,
+      code: "members.save_failed",
+    })
+    expect(rpc).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    "auth.not_active",
+    "auth.step_up_required",
+    "members.stale",
+    "members.not_found",
+    "members.last_admin",
+  ])("maps the database's %s straight through", async (message) => {
+    rpc.mockResolvedValue({ data: null, error: { code: "P0001", message } })
+    const { updateMemberAction } = await loadActions({ personas: "true" })
+
+    await expect(updateMemberAction(INPUT)).resolves.toEqual({
+      ok: false,
+      code: message,
+    })
+    expect(revalidatePath).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    "members.not_admin",
+    "members.change_own_positions",
+    "members.invalid_position",
+  ])("maps %s to members.save_failed", async (message) => {
+    rpc.mockResolvedValue({ data: null, error: { code: "P0001", message } })
+    const { updateMemberAction } = await loadActions({ personas: "true" })
+
+    await expect(updateMemberAction(INPUT)).resolves.toEqual({
+      ok: false,
+      code: "members.save_failed",
+    })
+  })
+})
+
+describe("deactivateMemberAction", () => {
+  it("calls deactivate_member, revalidates the root layout and returns the member", async () => {
+    rpc.mockResolvedValue({ data: null, error: null })
+    const { deactivateMemberAction } = await loadActions({ personas: "true" })
+
+    await expect(
+      deactivateMemberAction({ memberId: MEMBER_ID })
+    ).resolves.toEqual({ ok: true, data: { memberId: MEMBER_ID } })
+    expect(rpc).toHaveBeenCalledExactlyOnceWith("deactivate_member", {
+      member_id: MEMBER_ID,
+    })
+    expect(revalidatePath).toHaveBeenCalledWith("/", "layout")
+  })
+
+  it.each([
+    ["no input", undefined],
+    ["a member id that isn't a uuid", { memberId: "nope" }],
+  ])("returns members.save_failed for %s", async (_label, input) => {
+    const { deactivateMemberAction } = await loadActions({ personas: "true" })
+
+    await expect(deactivateMemberAction(input)).resolves.toEqual({
+      ok: false,
+      code: "members.save_failed",
+    })
+    expect(rpc).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    "auth.step_up_required",
+    "members.stale",
+    "members.last_admin",
+    "members.sole_editor_in_chief",
+  ])("maps the database's %s straight through", async (message) => {
+    rpc.mockResolvedValue({ data: null, error: { code: "P0001", message } })
+    const { deactivateMemberAction } = await loadActions({ personas: "true" })
+
+    await expect(
+      deactivateMemberAction({ memberId: MEMBER_ID })
+    ).resolves.toEqual({ ok: false, code: message })
+    expect(revalidatePath).not.toHaveBeenCalled()
+  })
+
+  it("maps members.deactivate_self to members.save_failed", async () => {
+    rpc.mockResolvedValue({
+      data: null,
+      error: { code: "P0001", message: "members.deactivate_self" },
+    })
+    const { deactivateMemberAction } = await loadActions({ personas: "true" })
+
+    await expect(
+      deactivateMemberAction({ memberId: MEMBER_ID })
+    ).resolves.toEqual({ ok: false, code: "members.save_failed" })
+  })
 })

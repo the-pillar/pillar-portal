@@ -403,7 +403,22 @@ function answerApprovals(
       { member_id: PENDING_ROWS[0].id, can_rename: true },
       { member_id: PENDING_ROWS[1].id, can_rename: true },
       { member_id: PENDING_ROWS[2].id, can_rename: false },
-      { member_id: ACTIVE_ROWS[0].id, can_rename: true, can_reset_mfa: true },
+      {
+        member_id: ACTIVE_ROWS[0].id,
+        can_rename: true,
+        can_reset_mfa: true,
+        can_change_positions: true,
+        can_deactivate: true,
+        deactivate_blocked_by: null,
+      },
+      {
+        member_id: ACTIVE_ROWS[1].id,
+        can_rename: false,
+        can_reset_mfa: false,
+        can_change_positions: false,
+        can_deactivate: true,
+        deactivate_blocked_by: "members.sole_editor_in_chief",
+      },
     ],
     error: null,
   })
@@ -520,6 +535,13 @@ describe("getMemberApprovals", () => {
         googleName: "MARÍA JOSÉ",
         canRename: true,
         canResetMfa: true,
+        heldPositions: [
+          { id: "online_manager", title: "Online Manager", isPrimary: false },
+          { id: "news_editor", title: "News Editor", isPrimary: true },
+        ],
+        canChangePositions: true,
+        canDeactivate: true,
+        deactivateBlockedBy: null,
         positionTitles: ["News Editor", "Online Manager"],
       },
       {
@@ -529,6 +551,18 @@ describe("getMemberApprovals", () => {
         googleName: null,
         canRename: false,
         canResetMfa: false,
+        heldPositions: [
+          {
+            id: "staff_cartoonist",
+            title: "Staff Cartoonist",
+            isPrimary: false,
+          },
+          { id: "staff_writer", title: "Staff Writer", isPrimary: false },
+          { id: "head_cartoonist", title: "Head Cartoonist", isPrimary: true },
+        ],
+        canChangePositions: false,
+        canDeactivate: true,
+        deactivateBlockedBy: "members.sole_editor_in_chief",
         positionTitles: ["Head Cartoonist", "Staff Writer", "Staff Cartoonist"],
       },
     ])

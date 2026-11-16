@@ -111,13 +111,15 @@ select is(
 select is(pg_temp.as_auth('select public.renew_shared_session()::text'), null,
   'renew returns null for a personal session');
 
--- End deletes only its own session.
+-- End deletes only its own session. Only this file's sessions are counted:
+-- a linked database can hold real ones.
 select pg_temp.claims('00000000-0000-4000-e100-0000000000b2');
 select pg_temp.as_auth('select public.mark_shared_session()');
 select pg_temp.as_auth('select public.end_shared_session()');
 select is(
   (select array_agg(session_id::text order by session_id)
-   from private.shared_sessions),
+   from private.shared_sessions
+   where session_id::text like '00000000-0000-4000-e100-%'),
   array['00000000-0000-4000-e100-0000000000a1'],
   'end deletes its own row and leaves another session''s');
 

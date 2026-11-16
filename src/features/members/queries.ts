@@ -149,7 +149,19 @@ export type RosterMember = {
   canRename: boolean
   /** `member_capabilities`' answer: whether Reset two-factor is offered. */
   canResetMfa: boolean
+  /** Their positions as held, for the position editor's starting point. */
+  heldPositions: { id: string; title: string; isPrimary: boolean }[]
+  /** `member_capabilities`' answer: whether Change positions is offered. */
+  canChangePositions: boolean
+  /** `member_capabilities`' answer: whether Deactivate is offered. */
+  canDeactivate: boolean
+  /** Why an offered Deactivate is disabled, else null. */
+  deactivateBlockedBy: DeactivateBlocker | null
 }
+
+/** The guards `deactivation_guard` names. */
+export type DeactivateBlocker =
+  "members.last_admin" | "members.sole_editor_in_chief"
 
 export type MemberApprovalsData = {
   pending: PendingMember[]
@@ -225,6 +237,9 @@ export async function getMemberApprovals(): Promise<MemberApprovalsData> {
   ]
   const canRename = new Set<string>()
   const canResetMfa = new Set<string>()
+  const canChangePositions = new Set<string>()
+  const canDeactivate = new Set<string>()
+  const deactivateBlockedBy = new Map<string, DeactivateBlocker>()
   if (ids.length > 0) {
     const { data, error } = await supabase.rpc("member_capabilities", { ids })
     if (error) {
@@ -238,6 +253,14 @@ export async function getMemberApprovals(): Promise<MemberApprovalsData> {
     for (const row of data ?? []) {
       if (row.can_rename) canRename.add(row.member_id)
       if (row.can_reset_mfa) canResetMfa.add(row.member_id)
+      if (row.can_change_positions) canChangePositions.add(row.member_id)
+      if (row.can_deactivate) canDeactivate.add(row.member_id)
+      if (
+        row.deactivate_blocked_by === "members.last_admin" ||
+        row.deactivate_blocked_by === "members.sole_editor_in_chief"
+      ) {
+        deactivateBlockedBy.set(row.member_id, row.deactivate_blocked_by)
+      }
     }
   }
 
@@ -248,6 +271,14 @@ export async function getMemberApprovals(): Promise<MemberApprovalsData> {
     googleName: member.google_name,
     canRename: canRename.has(member.id),
     canResetMfa: canResetMfa.has(member.id),
+    heldPositions: member.member_positions.map((held) => ({
+      id: held.position,
+      title: positions.get(held.position)?.title ?? held.position,
+      isPrimary: held.is_primary,
+    })),
+    canChangePositions: canChangePositions.has(member.id),
+    canDeactivate: canDeactivate.has(member.id),
+    deactivateBlockedBy: deactivateBlockedBy.get(member.id) ?? null,
     positionTitles: member.member_positions
       .flatMap((held) => {
         const position = positions.get(held.position)
