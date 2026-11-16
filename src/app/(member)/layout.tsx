@@ -1,6 +1,6 @@
 import { Suspense } from "react"
 
-import { requireActiveMember } from "@/features/members"
+import { requireActiveMember, SharedSessionWatcher } from "@/features/members"
 
 import { MemberShell } from "./member-shell"
 import { NoticeToast } from "../notice-toast"
@@ -25,6 +25,7 @@ export default async function MemberLayout({
         <NoticeToast />
       </Suspense>
       <OfflineToast />
+      <SharedSessionWatcher />
       {children}
     </MemberShell>
   )

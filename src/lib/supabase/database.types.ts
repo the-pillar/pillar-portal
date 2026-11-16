@@ -608,6 +608,13 @@ export type Database = {
       }
       begin_job_run: { Args: { job: string }; Returns: number }
       can_create_task: { Args: never; Returns: boolean }
+      check_session_idle: {
+        Args: never
+        Returns: {
+          expired: boolean
+          expires_at: string
+        }[]
+      }
       create_task: {
         Args: {
           description: string
@@ -633,12 +640,14 @@ export type Database = {
         }
         Returns: undefined
       }
+      end_shared_session: { Args: never; Returns: undefined }
       hand_back_slot: {
         Args: { reason?: string; slot_id: string }
         Returns: undefined
       }
       health_check: { Args: never; Returns: boolean }
       mark_done: { Args: { task_id: string }; Returns: undefined }
+      mark_shared_session: { Args: never; Returns: string }
       member_capabilities: {
         Args: { ids: string[] }
         Returns: {
@@ -724,6 +733,7 @@ export type Database = {
         Args: { step: Database["public"]["Enums"]["onboarding_step"] }
         Returns: undefined
       }
+      renew_shared_session: { Args: never; Returns: string }
       reopen_task: { Args: { task_id: string }; Returns: undefined }
       reset_first_run: { Args: never; Returns: undefined }
       reset_member_mfa: { Args: { member_id: string }; Returns: undefined }

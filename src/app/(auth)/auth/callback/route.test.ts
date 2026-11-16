@@ -1,25 +1,41 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 // vi.mock factories and vi.hoisted run before this file's imports.
-const { after, createClient, exchangeCodeForSession, recordErrorEvent } =
-  await vi.hoisted(async () => {
-    // Importing next/server throws unless AsyncLocalStorage is on globalThis,
-    // which the Next runtime provides and plain Node doesn't.
-    const { AsyncLocalStorage } = await import("node:async_hooks")
-    globalThis.AsyncLocalStorage ??= AsyncLocalStorage
+const {
+  after,
+  cookieStore,
+  createClient,
+  exchangeCodeForSession,
+  recordErrorEvent,
+  rpc,
+  signOut,
+} = await vi.hoisted(async () => {
+  // Importing next/server throws unless AsyncLocalStorage is on globalThis,
+  // which the Next runtime provides and plain Node doesn't.
+  const { AsyncLocalStorage } = await import("node:async_hooks")
+  globalThis.AsyncLocalStorage ??= AsyncLocalStorage
 
-    const exchangeCodeForSession = vi.fn()
-    return {
-      // Holds each scheduled callback; runAfter() runs them, as Next does
-      // once the response is sent.
-      after: vi.fn<(task: () => unknown) => void>(),
-      exchangeCodeForSession,
-      createClient: vi.fn(async () => ({ auth: { exchangeCodeForSession } })),
-      recordErrorEvent: vi.fn(async () => {}),
-    }
-  })
+  const exchangeCodeForSession = vi.fn()
+  const rpc = vi.fn()
+  const signOut = vi.fn()
+  return {
+    cookieStore: { set: vi.fn(), delete: vi.fn(), get: vi.fn() },
+    rpc,
+    signOut,
+    // Holds each scheduled callback; runAfter() runs them, as Next does
+    // once the response is sent.
+    after: vi.fn<(task: () => unknown) => void>(),
+    exchangeCodeForSession,
+    createClient: vi.fn(async () => ({
+      auth: { exchangeCodeForSession, signOut },
+      rpc,
+    })),
+    recordErrorEvent: vi.fn(async () => {}),
+  }
+})
 
 vi.mock("@/lib/supabase/server", () => ({ createClient }))
+vi.mock("next/headers", () => ({ cookies: async () => cookieStore }))
 vi.mock("next/server", async (importOriginal) => ({
   ...(await importOriginal<typeof import("next/server")>()),
   after,
@@ -50,6 +66,9 @@ const FAILED = (next: string) =>
   `https://pillar.example/login?next=${encodeURIComponent(next)}&error=sign-in`
 
 beforeEach(() => {
+  cookieStore.get.mockReturnValue(undefined)
+  rpc.mockResolvedValue({ data: null, error: null })
+  signOut.mockResolvedValue({ error: null })
   exchangeCodeForSession.mockResolvedValue({
     data: { session: {}, user: {} },
     error: null,
@@ -262,5 +281,57 @@ describe("GET /auth/callback", () => {
     const res = await call("?error=access_denied&next=%2F%2Fevil.example")
 
     expect(res.headers.get("location")).toBe(FAILED("/dashboard"))
+  })
+
+  it("marks a shared sign-in and sets the deadline cookie", async () => {
+    rpc.mockResolvedValue({ data: "2026-11-16T10:30:00+00:00", error: null })
+
+    const res = await call("?code=abc&next=%2Fdashboard&shared=1")
+
+    expect(createClient).toHaveBeenCalledWith({ shared: true })
+    expect(rpc).toHaveBeenCalledExactlyOnceWith("mark_shared_session")
+    expect(cookieStore.set).toHaveBeenCalledExactlyOnceWith(
+      "pillar-shared-until",
+      String(Date.parse("2026-11-16T10:30:00Z")),
+      expect.objectContaining({ httpOnly: false, secure: true })
+    )
+    expect(res.headers.get("location")).toBe("https://pillar.example/dashboard")
+  })
+
+  it("clears a stale deadline cookie on a personal sign-in", async () => {
+    await call("?code=abc&next=%2Fdashboard")
+
+    expect(createClient).toHaveBeenCalledWith({ shared: false })
+    expect(rpc).not.toHaveBeenCalled()
+    expect(cookieStore.delete).toHaveBeenCalledWith("pillar-shared-until")
+  })
+
+  it("signs out and goes back to /login when marking fails", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {})
+    rpc.mockResolvedValue({ data: null, error: { message: "boom" } })
+
+    const res = await call("?code=abc&next=%2Fdashboard&shared=1")
+
+    expect(signOut).toHaveBeenCalledWith({ scope: "local" })
+    expect(res.headers.get("location")).toBe(FAILED("/dashboard"))
+    expect(cookieStore.set).not.toHaveBeenCalled()
+  })
+
+  it("treats the pillar-shared-signin cookie as shared, and always deletes it", async () => {
+    cookieStore.get.mockImplementation((name: string) =>
+      name === "pillar-shared-signin" ? { value: "1" } : undefined
+    )
+    rpc.mockResolvedValue({ data: "2026-11-16T10:30:00+00:00", error: null })
+
+    await call("?code=abc&next=%2Fdashboard")
+
+    expect(createClient).toHaveBeenCalledWith({ shared: true })
+    expect(rpc).toHaveBeenCalledWith("mark_shared_session")
+    expect(cookieStore.delete).toHaveBeenCalledWith("pillar-shared-signin")
+  })
+
+  it("deletes the pillar-shared-signin cookie on a failed callback too", async () => {
+    await call("?error=access_denied")
+    expect(cookieStore.delete).toHaveBeenCalledWith("pillar-shared-signin")
   })
 })

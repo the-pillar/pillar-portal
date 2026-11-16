@@ -16,6 +16,7 @@ import type { CurrentMember } from "@/features/members"
 // vi.mock factories run before this file's imports, so what they share with
 // the tests is created in vi.hoisted.
 const {
+  checkIdle,
   copyText,
   env,
   getCurrentMember,
@@ -31,6 +32,7 @@ const {
     }
   }
   return {
+    checkIdle: vi.fn(),
     // Copy link's clipboard write, refused, so a test can read the link from
     // the "Link to copy" field that appears instead.
     copyText: vi.fn(async () => false),
@@ -70,6 +72,7 @@ vi.mock("@/features/members/actions", () => ({
   signOutAction: vi.fn(),
 }))
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }))
+vi.mock("@/lib/supabase/idle", () => ({ checkIdle }))
 vi.mock("@/lib/clipboard", () => ({ copyText }))
 vi.mock("@/lib/env.client", () => ({
   clientEnv: { NEXT_PUBLIC_SITE_URL: "https://pillar.example" },
@@ -142,6 +145,7 @@ const LOGIN_URL =
   "https://pillar.example/login?next=checked%3A%2Fdashboard%2Ftasks%2FX"
 
 beforeEach(() => {
+  checkIdle.mockResolvedValue({ kind: "personal" })
   getCurrentMember.mockResolvedValue(null)
   request.userAgent = UA.safariIos
 })
@@ -149,6 +153,49 @@ beforeEach(() => {
 afterEach(() => {
   cleanup()
   vi.clearAllMocks()
+})
+
+const IDLE_LINE = "You were signed out after 30 minutes on a shared computer."
+
+describe("LoginPage, shared-computer idle sign-out", () => {
+  it("shows the idle line after signed_out=idle, with the unchecked shared box", async () => {
+    await renderLoginPage({
+      personas: undefined,
+      searchParams: { signed_out: "idle" },
+    })
+
+    expect(screen.getByText(IDLE_LINE)).toBeInTheDocument()
+    expect(
+      screen.getByRole("checkbox", { name: "This is a shared computer" })
+    ).not.toBeChecked()
+  })
+
+  it("shows no idle line otherwise", async () => {
+    await renderLoginPage({ personas: undefined })
+    expect(screen.queryByText(IDLE_LINE)).toBeNull()
+  })
+
+  it("renders an active member whose shared session expired as signed out, not a redirect to next", async () => {
+    getCurrentMember.mockResolvedValue(MEMBER)
+    checkIdle.mockResolvedValue({ kind: "expired" })
+
+    await renderLoginPage({
+      personas: undefined,
+      searchParams: { next: "/dashboard/tasks/X" },
+    })
+
+    expect(redirect).not.toHaveBeenCalled()
+    expect(screen.getByText(IDLE_LINE)).toBeInTheDocument()
+    expect(googleButton()).toBeInTheDocument()
+  })
+
+  it("still redirects an active member whose session is active", async () => {
+    getCurrentMember.mockResolvedValue(MEMBER)
+    checkIdle.mockResolvedValue({ kind: "active", expiresAt: Date.now() + 1 })
+
+    const LoginPage = await loadLoginPage({ personas: undefined })
+    await expect(LoginPage({})).rejects.toBeInstanceOf(RedirectError)
+  })
 })
 
 describe("LoginPage, signed out", () => {

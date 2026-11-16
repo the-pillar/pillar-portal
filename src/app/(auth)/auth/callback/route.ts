@@ -1,9 +1,12 @@
+import { cookies } from "next/headers"
 import { after, NextResponse, type NextRequest } from "next/server"
 
 import { loginPath, safeReturnPath } from "@/features/members"
 import { clientEnv } from "@/lib/env.client"
 import { recordErrorEvent } from "@/lib/record-error-event"
+import { finishSignIn } from "@/lib/supabase/idle"
 import { createClient } from "@/lib/supabase/server"
+import { SHARED_SIGN_IN_COOKIE } from "@/lib/supabase/shared-session"
 
 const NO_STORE = "private, no-store"
 
@@ -22,6 +25,10 @@ function redirectTo(path: string) {
 // this writes nothing itself. `next` is checked again before any redirect,
 // and absolute URLs come only from NEXT_PUBLIC_SITE_URL.
 //
+// `shared=1` (the "This is a shared computer" box, forwarded on `redirectTo`)
+// makes the session a browser-session one and marks it in Postgres (AD-22); a
+// mark that fails goes back to /login like a failed exchange.
+//
 // A cancel (`error=access_denied`), any other `error`, no `code`, a refused
 // exchange (a missing verifier included) or a thrown one goes back to /login
 // with "Sign-in didn't finish", keeping `next`. /auth isn't proxied.
@@ -39,6 +46,13 @@ export async function GET(request: NextRequest) {
   const next = safeReturnPath(params.get("next"))
   const didntFinish = () => redirectTo(loginPath({ next, error: true }))
 
+  // The param, or the cookie the Google action set (Supabase can fall back to
+  // the Site URL and drop the param). The cookie never outlives this callback.
+  const cookieStore = await cookies()
+  const shared =
+    params.get("shared") === "1" ||
+    cookieStore.get(SHARED_SIGN_IN_COOKIE)?.value === "1"
+  cookieStore.delete(SHARED_SIGN_IN_COOKIE)
   const authError = params.get("error")
   if (authError !== null) {
     if (authError !== "access_denied") {
@@ -55,7 +69,7 @@ export async function GET(request: NextRequest) {
   if (!code) return didntFinish()
 
   try {
-    const supabase = await createClient()
+    const supabase = await createClient({ shared })
     const { error } = await supabase.auth.exchangeCodeForSession(code)
     if (error) {
       console.error("GET /auth/callback: the code exchange returned an error", {
@@ -64,6 +78,11 @@ export async function GET(request: NextRequest) {
         status: error.status,
         message: error.message,
       })
+      return didntFinish()
+    }
+    // A fresh exchange always mints a new session_id, so the idle check
+    // reduces to marking it shared or clearing a stale deadline cookie.
+    if (!(await finishSignIn(supabase, await cookies(), shared))) {
       return didntFinish()
     }
   } catch (error) {

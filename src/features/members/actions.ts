@@ -13,7 +13,13 @@ import {
   recordErrorEvent,
 } from "@/lib/record-error-event"
 import { ADMIN_AREA, MEMBER_AREA } from "@/lib/revalidate-paths"
+import { finishSignIn } from "@/lib/supabase/idle"
 import { createClient } from "@/lib/supabase/server"
+import {
+  SHARED_SIGN_IN_COOKIE,
+  SHARED_UNTIL_COOKIE,
+  sharedSignInCookieOptions,
+} from "@/lib/supabase/shared-session"
 
 import type { MemberErrorCode } from "./errors"
 import { PERSONAS } from "./personas"
@@ -36,7 +42,8 @@ const GOOGLE_SIGN_IN: ErrorEventWhere = {
  * redirects to (outside the `try`, since redirect() throws). Google sends
  * the member back through Supabase to /auth/callback, the only redirect URL,
  * carrying the form's `next` once `safeReturnPath` has checked it; the
- * callback checks it again.
+ * callback checks it again. A ticked "This is a shared computer" (`shared=1`)
+ * rides along on `redirectTo`, so the callback marks the session (AD-22).
  *
  * `prompt=select_account` makes Google show its account chooser every time:
  * otherwise, after Sign out, Google silently signs the same account in
@@ -54,15 +61,25 @@ export async function signInWithGoogleAction(
   formData: FormData
 ): Promise<void> {
   const next = safeReturnPath(formData.get("next"))
+  const shared = formData.get("shared") === "1"
+
+  // A backup for the callback if Supabase falls back to the Site URL and
+  // drops `shared` from redirectTo: a short-lived cookie says the same.
+  const cookieStore = await cookies()
+  if (shared) {
+    cookieStore.set(SHARED_SIGN_IN_COOKIE, "1", sharedSignInCookieOptions())
+  } else {
+    cookieStore.delete(SHARED_SIGN_IN_COOKIE)
+  }
 
   let url: string | null = null
   try {
-    const supabase = await createClient()
+    const supabase = await createClient({ shared })
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
         redirectTo: new URL(
-          `/auth/callback?next=${encodeURIComponent(next)}`,
+          `/auth/callback?next=${encodeURIComponent(next)}${shared ? "&shared=1" : ""}`,
           clientEnv.NEXT_PUBLIC_SITE_URL
         ).href,
         queryParams: { prompt: "select_account" },
@@ -100,7 +117,9 @@ export type PersonaSignInState = { ok: false; code: MemberErrorCode } | null
  * the server holds (AD-7), then goes to the form's `next` when
  * `safeReturnPath` accepts it, else /dashboard. Refuses without calling Auth
  * unless PROTOTYPE_PERSONAS is on. A bad button value and any Auth failure
- * look the same to the visitor.
+ * look the same to the visitor. A ticked shared-computer box (`shared=1`)
+ * marks the session and sets the deadline cookie, else a stale one goes
+ * (AD-22); a mark that fails counts as a failed sign-in.
  */
 export async function signInAsPersonaAction(
   _previous: PersonaSignInState,
@@ -116,14 +135,17 @@ export async function signInAsPersonaAction(
   })
   if (!parsed.success) return { ok: false, code: "auth.sign_in_failed" }
 
+  const shared = formData.get("shared") === "1"
+
   let signedIn = false
   try {
-    const supabase = await createClient()
+    const supabase = await createClient({ shared })
     const { error } = await supabase.auth.signInWithPassword({
       email: PERSONAS[parsed.data.persona].email,
       password,
     })
-    signedIn = error === null
+    signedIn =
+      error === null && (await finishSignIn(supabase, await cookies(), shared))
   } catch {
     signedIn = false
   }
@@ -151,12 +173,20 @@ export async function signOutAction(formData?: FormData): Promise<void> {
   let failed: boolean
   try {
     const supabase = await createClient()
+    // Forget a shared session's idle row (best effort: a failure must not keep
+    // the person signed in). An idle sign-out never does this.
+    try {
+      await supabase.rpc("end_shared_session")
+    } catch {
+      // Ignored: the sign-out below still runs.
+    }
     const { error } = await supabase.auth.signOut({ scope: "local" })
     failed = error !== null
   } catch {
     failed = true
   }
   if (failed) await deleteAuthCookies()
+  ;(await cookies()).delete(SHARED_UNTIL_COOKIE)
 
   redirect(
     formData?.has("next")

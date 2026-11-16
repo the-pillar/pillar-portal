@@ -122,3 +122,11 @@ authenticated public.can_create_task()
 # member_capabilities, which runs with the caller's rights)
 authenticated private.can_reset_member_mfa(uuid)
 authenticated public.reset_member_mfa(uuid)
+
+# members_shared_sessions: the shared-computer idle clock, for any signed-in
+# user (private.shared_session_limit and private.current_session_id have no
+# grant: only these commands call them)
+authenticated public.mark_shared_session()
+authenticated public.renew_shared_session()
+authenticated public.check_session_idle()
+authenticated public.end_shared_session()
