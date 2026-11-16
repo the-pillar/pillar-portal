@@ -31,6 +31,7 @@ const {
       ].map((name) => ({ name, value: "x" }))
     ),
     delete: vi.fn(),
+    set: vi.fn(),
   }
   // Like Next's redirect(), the mock throws, so nothing after it runs.
   class RedirectError extends Error {
@@ -101,6 +102,7 @@ beforeEach(() => {
   })
   auth.signInWithPassword.mockResolvedValue({ data: {}, error: null })
   auth.signOut.mockResolvedValue({ error: null })
+  rpc.mockResolvedValue({ data: null, error: null })
 })
 
 afterEach(() => {
@@ -364,6 +366,91 @@ describe("signInWithGoogleAction", () => {
   )
 })
 
+describe("shared computer", () => {
+  const DEADLINE = "2026-11-16T10:30:00+00:00"
+
+  it("marks the session and sets the deadline cookie when the box is ticked, creating the client shared", async () => {
+    rpc.mockResolvedValue({ data: DEADLINE, error: null })
+    const { signInAsPersonaAction } = await loadActions({ personas: "true" })
+
+    await expect(
+      signInAsPersonaAction(
+        null,
+        form({ persona: "editor_in_chief", shared: "1" })
+      )
+    ).rejects.toThrow(RedirectError)
+
+    expect(createClient).toHaveBeenCalledWith({ shared: true })
+    expect(rpc).toHaveBeenCalledExactlyOnceWith("mark_shared_session")
+    expect(cookieStore.set).toHaveBeenCalledExactlyOnceWith(
+      "pillar-shared-until",
+      String(Date.parse(DEADLINE)),
+      expect.objectContaining({
+        httpOnly: false,
+        secure: true,
+        sameSite: "lax",
+      })
+    )
+  })
+
+  it("deletes a stale deadline cookie and marks nothing when the box is not ticked", async () => {
+    const { signInAsPersonaAction } = await loadActions({ personas: "true" })
+
+    await expect(
+      signInAsPersonaAction(null, form({ persona: "editor_in_chief" }))
+    ).rejects.toThrow(RedirectError)
+
+    expect(createClient).toHaveBeenCalledWith({ shared: false })
+    expect(rpc).not.toHaveBeenCalled()
+    expect(cookieStore.delete).toHaveBeenCalledExactlyOnceWith(
+      "pillar-shared-until"
+    )
+  })
+
+  it("signs out and reports a failed sign-in when marking fails", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {})
+    rpc.mockResolvedValue({ data: null, error: { message: "boom" } })
+    const { signInAsPersonaAction } = await loadActions({ personas: "true" })
+
+    await expect(
+      signInAsPersonaAction(
+        null,
+        form({ persona: "editor_in_chief", shared: "1" })
+      )
+    ).resolves.toEqual({ ok: false, code: "auth.sign_in_failed" })
+
+    expect(auth.signOut).toHaveBeenCalledWith({ scope: "local" })
+    expect(cookieStore.set).not.toHaveBeenCalled()
+  })
+
+  it("forwards shared=1 on the Google redirectTo only when ticked", async () => {
+    const { signInWithGoogleAction } = await loadActions({ personas: "true" })
+
+    await expect(
+      signInWithGoogleAction(form({ next: "/dashboard", shared: "1" }))
+    ).rejects.toThrow(RedirectError)
+    expect(auth.signInWithOAuth.mock.calls[0][0].options.redirectTo).toBe(
+      "https://pillar.example/auth/callback?next=%2Fdashboard&shared=1"
+    )
+
+    expect(cookieStore.set).toHaveBeenCalledWith(
+      "pillar-shared-signin",
+      "1",
+      expect.objectContaining({ httpOnly: true, secure: true, maxAge: 600 })
+    )
+
+    auth.signInWithOAuth.mockClear()
+    cookieStore.delete.mockClear()
+    await expect(
+      signInWithGoogleAction(form({ next: "/dashboard" }))
+    ).rejects.toThrow(RedirectError)
+    expect(auth.signInWithOAuth.mock.calls[0][0].options.redirectTo).toBe(
+      "https://pillar.example/auth/callback?next=%2Fdashboard"
+    )
+    expect(cookieStore.delete).toHaveBeenCalledWith("pillar-shared-signin")
+  })
+})
+
 describe("signOutAction", () => {
   const AUTH_COOKIES = [
     "sb-127-auth-token.0",
@@ -377,8 +464,10 @@ describe("signOutAction", () => {
     await expect(signOutAction()).rejects.toThrow(RedirectError)
 
     expect(auth.signOut).toHaveBeenCalledExactlyOnceWith({ scope: "local" })
-    // supabase-js cleared the session itself.
-    expect(cookieStore.delete).not.toHaveBeenCalled()
+    // The shared session's idle row goes (best effort), and supabase-js
+    // cleared the session cookies itself: only the deadline cookie is deleted.
+    expect(rpc).toHaveBeenCalledExactlyOnceWith("end_shared_session")
+    expect(cookieStore.delete.mock.calls).toEqual([["pillar-shared-until"]])
     expect(redirect).toHaveBeenCalledExactlyOnceWith("/login")
   })
 
@@ -403,9 +492,10 @@ describe("signOutAction", () => {
       await expect(signOutAction()).rejects.toThrow(RedirectError)
 
       expect(auth.signOut).toHaveBeenCalledExactlyOnceWith({ scope: "local" })
-      expect(cookieStore.delete.mock.calls.map(([name]) => name)).toEqual(
-        AUTH_COOKIES
-      )
+      expect(cookieStore.delete.mock.calls.map(([name]) => name)).toEqual([
+        ...AUTH_COOKIES,
+        "pillar-shared-until",
+      ])
       expect(redirect).toHaveBeenCalledExactlyOnceWith("/login")
     }
   )
@@ -439,9 +529,10 @@ describe("signOutAction", () => {
       signOutAction(form({ next: "/dashboard/tasks/X" }))
     ).rejects.toThrow(RedirectError)
 
-    expect(cookieStore.delete.mock.calls.map(([name]) => name)).toEqual(
-      AUTH_COOKIES
-    )
+    expect(cookieStore.delete.mock.calls.map(([name]) => name)).toEqual([
+      ...AUTH_COOKIES,
+      "pillar-shared-until",
+    ])
     expect(redirect).toHaveBeenCalledExactlyOnceWith(
       "/login?next=%2Fdashboard%2Ftasks%2FX"
     )

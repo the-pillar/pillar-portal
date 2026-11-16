@@ -8,6 +8,7 @@ const {
   MemberShell,
   NoticeToast,
   OfflineToast,
+  SharedSessionWatcher,
   RedirectError,
 } = vi.hoisted(() => {
   // Like Next's redirect(), which requireActiveMember calls, the mock throws.
@@ -21,12 +22,16 @@ const {
     MemberShell: vi.fn(() => null),
     NoticeToast: vi.fn(() => null),
     OfflineToast: vi.fn(() => null),
+    SharedSessionWatcher: vi.fn(() => null),
     RedirectError,
   }
 })
 
 // requireActiveMember's own tests (queries.test.ts) cover who it redirects.
-vi.mock("@/features/members", () => ({ requireActiveMember }))
+vi.mock("@/features/members", () => ({
+  requireActiveMember,
+  SharedSessionWatcher,
+}))
 vi.mock("./member-shell", () => ({ MemberShell }))
 // notice-toast.test.tsx and offline-toast.test.tsx cover what they show.
 vi.mock("../notice-toast", () => ({ NoticeToast }))
@@ -78,6 +83,7 @@ describe("MemberLayout", () => {
             }),
           }),
           expect.objectContaining({ type: OfflineToast }),
+          expect.objectContaining({ type: SharedSessionWatcher }),
           "page",
         ],
       })

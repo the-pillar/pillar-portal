@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { signInAsPersonaAction } from "../actions"
 import { memberErrorMessage } from "../errors"
 import { PERSONA_KEYS, PERSONAS } from "../personas"
+import { SharedComputerField } from "./shared-computer"
 
 /**
  * One button per prototype persona, all in one form: the pressed button's
@@ -26,6 +27,7 @@ export function PersonaSignIn({ next }: { next: string }) {
   return (
     <form action={formAction} className="flex flex-col gap-3">
       <input type="hidden" name="next" value={next} />
+      <SharedComputerField />
       {PERSONA_KEYS.map((key) => (
         <Button
           key={key}

@@ -7,6 +7,10 @@ import axe from "axe-core"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { PersonaSignIn } from "./persona-sign-in"
+import {
+  SharedComputerCheckbox,
+  SharedComputerProvider,
+} from "./shared-computer"
 
 const { signInAsPersonaAction } = vi.hoisted(() => ({
   signInAsPersonaAction: vi.fn(),
@@ -40,6 +44,28 @@ afterEach(() => {
 })
 
 describe("PersonaSignIn", () => {
+  it("mirrors a ticked shared-computer box into a hidden shared field", async () => {
+    const { container } = render(
+      <main>
+        <SharedComputerProvider>
+          <SharedComputerCheckbox />
+          <PersonaSignIn next={NEXT} />
+        </SharedComputerProvider>
+      </main>
+    )
+    expect(
+      container.querySelector('input[type="hidden"][name="shared"]')
+    ).toBeNull()
+
+    await userEvent.click(
+      screen.getByRole("checkbox", { name: "This is a shared computer" })
+    )
+
+    expect(
+      container.querySelector('input[type="hidden"][name="shared"]')
+    ).toHaveValue("1")
+  })
+
   it("has no axe violations", async () => {
     const { container } = renderOnPage()
     expect(await axeViolations(container)).toEqual([])

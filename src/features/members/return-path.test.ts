@@ -72,6 +72,12 @@ describe("loginPath", () => {
     )
   })
 
+  it("adds signed_out=idle after a shared session's idle sign-out", () => {
+    expect(loginPath({ next: "/dashboard", idle: true })).toBe(
+      "/login?next=%2Fdashboard&signed_out=idle"
+    )
+  })
+
   it("round-trips next through the URL parser unchanged", () => {
     const next = "/dashboard?view=board&owner=desk:layout"
     const url = new URL(loginPath({ next, error: true }), "https://x.example")

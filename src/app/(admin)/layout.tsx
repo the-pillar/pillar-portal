@@ -1,6 +1,6 @@
 import { Suspense } from "react"
 
-import { StepUpProvider } from "@/features/members"
+import { SharedSessionWatcher, StepUpProvider } from "@/features/members"
 
 import { NoticeToast } from "../notice-toast"
 import { OfflineToast } from "../offline-toast"
@@ -30,6 +30,7 @@ export default async function AdminLayout({
         <NoticeToast />
       </Suspense>
       <OfflineToast />
+      <SharedSessionWatcher />
       <StepUpProvider>{children}</StepUpProvider>
     </AdminShell>
   )

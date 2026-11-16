@@ -8,12 +8,14 @@ import { PENDING_STYLE } from "@/lib/pending-style"
 import { cn } from "@/lib/utils"
 
 import { signInWithGoogleAction } from "../actions"
+import { SharedComputerCheckbox } from "./shared-computer"
 
 /**
  * Sign in with Google (UX-DR52): one form posting to the Google action, with
  * `next` (already checked by `safeReturnPath`; the action and the callback
  * check it again) in a hidden field. It works before hydration too: the
- * action's redirect is then a 303 the browser follows.
+ * action's redirect is then a 303 the browser follows. The "This is a shared
+ * computer" box (AD-22) is a native input in the same form.
  *
  * Coming Back from Google can restore this page from the back/forward cache
  * with the form's submission still pending, which would leave the button
@@ -34,6 +36,7 @@ export function GoogleSignIn({ next }: { next: string }) {
   return (
     <form key={formKey} action={signInWithGoogleAction}>
       <input type="hidden" name="next" value={next} />
+      <SharedComputerCheckbox />
       <GoogleButton />
     </form>
   )

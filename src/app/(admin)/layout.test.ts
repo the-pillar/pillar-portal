@@ -9,6 +9,7 @@ const {
   AdminBannerSlot,
   NoticeToast,
   OfflineToast,
+  SharedSessionWatcher,
   StepUpProvider,
   RedirectError,
 } = vi.hoisted(() => {
@@ -24,6 +25,7 @@ const {
     AdminBannerSlot: vi.fn(() => null),
     NoticeToast: vi.fn(() => null),
     OfflineToast: vi.fn(() => null),
+    SharedSessionWatcher: vi.fn(() => null),
     StepUpProvider: vi.fn(() => null),
     RedirectError,
   }
@@ -38,7 +40,10 @@ vi.mock("../notice-toast", () => ({ NoticeToast }))
 // offline-toast.test.tsx covers when it toasts.
 vi.mock("../offline-toast", () => ({ OfflineToast }))
 // step-up-provider.test.tsx covers the prompt.
-vi.mock("@/features/members", () => ({ StepUpProvider }))
+vi.mock("@/features/members", () => ({
+  SharedSessionWatcher,
+  StepUpProvider,
+}))
 
 import type { CurrentMember } from "@/features/members"
 
@@ -88,6 +93,7 @@ describe("AdminLayout", () => {
           }),
         }),
         expect.objectContaining({ type: OfflineToast }),
+        expect.objectContaining({ type: SharedSessionWatcher }),
         expect.objectContaining({
           type: StepUpProvider,
           props: { children: "page" },

@@ -5,6 +5,10 @@ import { cookies } from "next/headers"
 
 import { clientEnv } from "@/lib/env.client"
 import type { Database } from "@/lib/supabase/database.types"
+import {
+  authCookieOptions,
+  SHARED_UNTIL_COOKIE,
+} from "@/lib/supabase/shared-session"
 
 /**
  * A Supabase client for Server Components, Server Actions and Route Handlers
@@ -15,9 +19,14 @@ import type { Database } from "@/lib/supabase/database.types"
  * Get the caller's identity from `supabase.auth.getClaims()`, which verifies
  * the access token's signature. `getSession()` returns whatever the cookie
  * says, so lint bans it (AD-7).
+ *
+ * `shared` says whether session writes make browser-session cookies (a shared
+ * computer, AD-22). It defaults to whether the deadline cookie is present; a
+ * sign-in passes it explicitly, since the cookie isn't there yet.
  */
-export async function createClient() {
+export async function createClient({ shared }: { shared?: boolean } = {}) {
   const cookieStore = await cookies()
+  const isShared = shared ?? cookieStore.has(SHARED_UNTIL_COOKIE)
 
   return createServerClient<Database>(
     clientEnv.NEXT_PUBLIC_SUPABASE_URL,
@@ -34,7 +43,7 @@ export async function createClient() {
         setAll(cookiesToSet) {
           try {
             for (const { name, value, options } of cookiesToSet) {
-              cookieStore.set(name, value, options)
+              cookieStore.set(name, value, authCookieOptions(options, isShared))
             }
           } catch {
             // Server Components can't set cookies, so this throws there. Under
