@@ -64,7 +64,7 @@ export function TwoFactorCode({
         : null
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col items-center gap-2">
       <InputOTP
         ref={inputRef}
         maxLength={6}
@@ -96,7 +96,11 @@ export function TwoFactorCode({
           ))}
         </InputOTPGroup>
       </InputOTP>
-      {problem !== null && <FieldError id={problemId}>{problem}</FieldError>}
+      {problem !== null && (
+        <FieldError id={problemId} className="text-center">
+          {problem}
+        </FieldError>
+      )}
     </div>
   )
 }
