@@ -1,5 +1,6 @@
 import { Suspense } from "react"
 
+import { SharedSessionWatcher, StepUpProvider } from "@/features/members"
 import {
   getNewTaskLayoutData,
   NewTaskButton,
@@ -49,7 +50,8 @@ export default async function AdminLayout({
         </Suspense>
       )}
       <OfflineToast />
-      {children}
+      <SharedSessionWatcher />
+      <StepUpProvider>{children}</StepUpProvider>
     </AdminShell>
   )
 }

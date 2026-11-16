@@ -1,0 +1,16 @@
+# Every function whose body calls private.recent_mfa() (AD-22), one per line,
+# written as Postgres prints a signature: schema.name(argument types), comma
+# plus space between types. Lines starting with `#` and blank lines are
+# ignored.
+#
+# supabase/tests/00_security/step_up.test.sql compares this list with the
+# functions in the database and prints the extra and missing lines when they
+# differ. Add a line in the same change as the migration whose command calls
+# recent_mfa.
+
+# members_two_factor
+public.reset_member_mfa(uuid)
+
+# members_lifecycle
+public.update_member(uuid, text[], text)
+public.deactivate_member(uuid)

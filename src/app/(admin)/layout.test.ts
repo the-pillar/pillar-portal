@@ -12,6 +12,8 @@ const {
   getNewTaskLayoutData,
   NewTaskButton,
   NewTaskSheet,
+  SharedSessionWatcher,
+  StepUpProvider,
   RedirectError,
 } = vi.hoisted(() => {
   // Like Next's redirect(), which requireAdmin calls, the mock throws.
@@ -29,6 +31,8 @@ const {
     getNewTaskLayoutData: vi.fn(),
     NewTaskButton: vi.fn(() => null),
     NewTaskSheet: vi.fn(() => null),
+    SharedSessionWatcher: vi.fn(() => null),
+    StepUpProvider: vi.fn(() => null),
     RedirectError,
   }
 })
@@ -46,6 +50,11 @@ vi.mock("./admin-banners", () => ({ AdminBannerSlot }))
 vi.mock("../notice-toast", () => ({ NoticeToast }))
 // offline-toast.test.tsx covers when it toasts.
 vi.mock("../offline-toast", () => ({ OfflineToast }))
+// step-up-provider.test.tsx covers the prompt.
+vi.mock("@/features/members", () => ({
+  SharedSessionWatcher,
+  StepUpProvider,
+}))
 
 import type { CurrentMember } from "@/features/members"
 
@@ -86,7 +95,7 @@ describe("AdminLayout", () => {
     }
   )
 
-  it("renders the admin shell with the banner slot for an active editorial_admin member, with the notice-toast reader and the offline toast mounted before the page", async () => {
+  it("renders the admin shell with the banner slot for an active editorial_admin member, with the notice-toast reader and the offline toast mounted before the page, which sits in the step-up provider", async () => {
     requireAdmin.mockResolvedValue(MEMBER)
 
     const element = await AdminLayout({ children: "page" })
@@ -106,7 +115,11 @@ describe("AdminLayout", () => {
         }),
         null,
         expect.objectContaining({ type: OfflineToast }),
-        "page",
+        expect.objectContaining({ type: SharedSessionWatcher }),
+        expect.objectContaining({
+          type: StepUpProvider,
+          props: { children: "page" },
+        }),
       ],
     })
     // The slot reads its sources only when React renders it, after the check.

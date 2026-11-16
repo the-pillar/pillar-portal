@@ -11,13 +11,17 @@ import {
   GoogleSignIn,
   InAppBrowserNotice,
   LOGIN_ERROR_SIGN_IN,
+  LOGIN_SIGNED_OUT_IDLE,
   loginPath,
   memberErrorMessage,
   PersonaSignIn,
   safeReturnPath,
+  SharedComputerProvider,
 } from "@/features/members"
 import { clientEnv } from "@/lib/env.client"
 import { personasEnabled } from "@/lib/env.server"
+import { checkIdle } from "@/lib/supabase/idle"
+import { createClient } from "@/lib/supabase/server"
 
 // The title names what the page shows (WCAG 2.4.2): a member who isn't
 // active sees their state's title, everyone else "Sign in" (an active member
@@ -44,13 +48,28 @@ export async function generateMetadata(): Promise<Metadata> {
 // - anyone else gets Sign in with Google, or, inside Messenger's or
 //   Facebook's in-app browser (from the user agent), the hand-off to the
 //   phone's browser, since Google refuses sign-in there. `error=sign-in`
-//   (from a sign-in that didn't finish) adds the "didn't finish" line.
+//   (from a sign-in that didn't finish) adds the "didn't finish" line, and
+//   `signed_out=idle` (or a shared session found idle here) the idle line.
 // Persona buttons render below whenever PROTOTYPE_PERSONAS is on.
 export default async function LoginPage({ searchParams }: PageProps<"/login">) {
-  const { next, error } = await searchParams
+  const { next, error, signed_out } = await searchParams
   const returnPath = safeReturnPath(next)
 
-  const member = await getCurrentMember()
+  // A signed-in visitor whose shared session has idled out is signed out: this
+  // page can't write cookies, so it just renders as signed out (the next
+  // sign-in overwrites them) with the idle line.
+  let member = await getCurrentMember()
+  let idleOut = signed_out === LOGIN_SIGNED_OUT_IDLE
+  if (member) {
+    try {
+      if ((await checkIdle(await createClient())).kind === "expired") {
+        member = null
+        idleOut = true
+      }
+    } catch {
+      // The proxy and the authenticated Route Handlers enforce the limit; render as usual.
+    }
+  }
   if (member?.state === "active") redirect(returnPath)
 
   let content: React.ReactNode
@@ -73,6 +92,11 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
           />
         ) : (
           <div className="mt-4 flex flex-col gap-3">
+            {idleOut && (
+              <p role="status" className="text-sm text-muted-foreground">
+                You were signed out after 30 minutes on a shared computer.
+              </p>
+            )}
             {error === LOGIN_ERROR_SIGN_IN && (
               <p role="alert" className="text-sm text-status-attention-text">
                 {memberErrorMessage("auth.sign_in_failed")}
@@ -86,7 +110,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
   }
 
   return (
-    <>
+    <SharedComputerProvider>
       <AppHeader />
       <main className="mx-auto w-full max-w-160 px-page-margin-mobile py-12 md:px-page-margin-desktop">
         <div className="rounded-lg border border-card-edge bg-card p-card-padding shadow-card">
@@ -101,6 +125,6 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
           )}
         </div>
       </main>
-    </>
+    </SharedComputerProvider>
   )
 }

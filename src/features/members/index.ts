@@ -5,6 +5,7 @@ export type { InactiveMemberState, MemberState } from "./account-state"
 export {
   approveMemberAction,
   declineMemberAction,
+  resetMemberMfaAction,
   signInAsPersonaAction,
   signInWithGoogleAction,
   signOutAction,
@@ -14,10 +15,14 @@ export { AccountStateNotice } from "./components/account-state-notice"
 export { GoogleSignIn } from "./components/google-sign-in"
 export { InAppBrowserNotice } from "./components/in-app-browser-notice"
 export { MemberApprovals } from "./components/member-approvals"
+export { StepUpProvider } from "./components/step-up-provider"
+export { TwoFactorSetup } from "./components/two-factor-setup"
 export { MemberApprovalsSkeleton } from "./components/member-approvals-skeleton"
 export { MemberMenu } from "./components/member-menu"
 export type { MemberMenuExtraLink } from "./components/member-menu"
 export { PersonaSignIn } from "./components/persona-sign-in"
+export { SharedComputerProvider } from "./components/shared-computer"
+export { SharedSessionWatcher } from "./components/shared-session-watcher"
 export { MEMBER_ERROR_COPY, memberErrorMessage } from "./errors"
 export type { MemberErrorCode } from "./errors"
 export { homeScopeOf, WRITERS_DESK_ID } from "./home-scope"
@@ -44,10 +49,20 @@ export type {
   PendingMember,
   RosterMember,
 } from "./queries"
-export { LOGIN_ERROR_SIGN_IN, loginPath, safeReturnPath } from "./return-path"
+export {
+  LOGIN_ERROR_SIGN_IN,
+  LOGIN_SIGNED_OUT_IDLE,
+  loginPath,
+  safeReturnPath,
+} from "./return-path"
 export {
   memberApproveSchema,
   memberDeclineSchema,
+  memberMfaResetSchema,
   personaSignInSchema,
 } from "./schemas"
-export type { MemberApproveInput, MemberDeclineInput } from "./schemas"
+export type {
+  MemberApproveInput,
+  MemberDeclineInput,
+  MemberMfaResetInput,
+} from "./schemas"

@@ -39,18 +39,26 @@ export function safeReturnPath(next: unknown): string {
 /** `/login`'s `error` value for a Google sign-in that didn't finish. */
 export const LOGIN_ERROR_SIGN_IN = "sign-in"
 
+/** `/login`'s `signed_out` value after the shared-computer idle limit. */
+export const LOGIN_SIGNED_OUT_IDLE = "idle"
+
 /**
  * The /login path that keeps `next` (already checked by `safeReturnPath`),
- * with `error=sign-in` when a sign-in didn't finish. Relative: callers that
+ * with `error=sign-in` when a sign-in didn't finish, or `signed_out=idle`
+ * after a shared session's idle sign-out. Relative: callers that
  * need an absolute URL resolve it against NEXT_PUBLIC_SITE_URL.
  */
 export function loginPath({
   next,
   error = false,
+  idle = false,
 }: {
   next: string
   error?: boolean
+  idle?: boolean
 }): string {
-  const path = `/login?next=${encodeURIComponent(next)}`
-  return error ? `${path}&error=${LOGIN_ERROR_SIGN_IN}` : path
+  let path = `/login?next=${encodeURIComponent(next)}`
+  if (error) path += `&error=${LOGIN_ERROR_SIGN_IN}`
+  if (idle) path += `&signed_out=${LOGIN_SIGNED_OUT_IDLE}`
+  return path
 }

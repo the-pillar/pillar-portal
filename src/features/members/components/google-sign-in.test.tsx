@@ -54,6 +54,25 @@ describe("GoogleSignIn", () => {
     ).toEqual([])
   })
 
+  it("has an unchecked shared-computer box with its hint, inside the form", () => {
+    renderOnPage()
+    const box = screen.getByRole("checkbox", {
+      name: "This is a shared computer",
+    })
+
+    expect(box).not.toBeChecked()
+    expect(box).toHaveAttribute("name", "shared")
+    expect(box).toHaveAttribute("value", "1")
+    expect(box.closest("form")).toBe(
+      screen
+        .getByRole("button", { name: "Sign in with Google" })
+        .closest("form")
+    )
+    expect(box).toHaveAccessibleDescription(
+      "You'll be signed out when the browser closes, and after 30 minutes idle."
+    )
+  })
+
   it("sends next, then stays focusable but aria-disabled and ignores a second press while pending", async () => {
     let finish: () => void = () => {}
     signInWithGoogleAction.mockImplementation(

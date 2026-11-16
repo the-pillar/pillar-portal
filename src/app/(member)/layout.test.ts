@@ -11,6 +11,7 @@ const {
   getNewTaskLayoutData,
   NewTaskButton,
   NewTaskSheet,
+  SharedSessionWatcher,
   RedirectError,
 } = vi.hoisted(() => {
   // Like Next's redirect(), which requireActiveMember calls, the mock throws.
@@ -27,12 +28,16 @@ const {
     getNewTaskLayoutData: vi.fn(),
     NewTaskButton: vi.fn(() => null),
     NewTaskSheet: vi.fn(() => null),
+    SharedSessionWatcher: vi.fn(() => null),
     RedirectError,
   }
 })
 
 // requireActiveMember's own tests (queries.test.ts) cover who it redirects.
-vi.mock("@/features/members", () => ({ requireActiveMember }))
+vi.mock("@/features/members", () => ({
+  requireActiveMember,
+  SharedSessionWatcher,
+}))
 vi.mock("@/features/tasks", () => ({
   getNewTaskLayoutData,
   NewTaskButton,
@@ -100,6 +105,7 @@ describe("MemberLayout", () => {
           }),
           null,
           expect.objectContaining({ type: OfflineToast }),
+          expect.objectContaining({ type: SharedSessionWatcher }),
           "page",
         ],
       })

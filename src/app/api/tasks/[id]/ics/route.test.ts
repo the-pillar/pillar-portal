@@ -1,15 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-const { after, createClient, getClaims, recordErrorEvent } = vi.hoisted(() => ({
-  // Holds each scheduled callback; runAfter() runs them, as Next does once
-  // the response is sent.
-  after: vi.fn<(task: () => unknown) => void>(),
-  createClient: vi.fn(),
-  getClaims: vi.fn(),
-  recordErrorEvent: vi.fn(async () => {}),
-}))
+const { after, cookieStore, createClient, getClaims, recordErrorEvent, rpc } =
+  vi.hoisted(() => ({
+    cookieStore: { getAll: vi.fn(() => []), delete: vi.fn() },
+    rpc: vi.fn(),
+    // Holds each scheduled callback; runAfter() runs them, as Next does once
+    // the response is sent.
+    after: vi.fn<(task: () => unknown) => void>(),
+    createClient: vi.fn(),
+    getClaims: vi.fn(),
+    recordErrorEvent: vi.fn(async () => {}),
+  }))
 
 vi.mock("@/lib/supabase/server", () => ({ createClient }))
+vi.mock("next/headers", () => ({ cookies: async () => cookieStore }))
 vi.mock("next/server", () => ({ after }))
 vi.mock("@/lib/record-error-event", () => ({ recordErrorEvent }))
 vi.mock("@/lib/env.client", () => ({
@@ -35,7 +39,12 @@ function setup(
   const eq = vi.fn(() => ({ maybeSingle }))
   const select = vi.fn(() => ({ eq }))
   const from = vi.fn(() => ({ select }))
-  createClient.mockResolvedValue({ auth: { getClaims }, from })
+  rpc.mockResolvedValue({ data: [], error: null })
+  createClient.mockResolvedValue({
+    auth: { getClaims, signOut: vi.fn().mockResolvedValue({ error: null }) },
+    from,
+    rpc,
+  })
   return { from }
 }
 
@@ -160,5 +169,19 @@ describe("GET /api/tasks/[id]/ics", () => {
     await call()
 
     expect(after).not.toHaveBeenCalled()
+  })
+
+  it("signs out an expired shared session and answers the same 404 without reading the task", async () => {
+    const { from } = setup({ data: ROW, error: null })
+    rpc.mockResolvedValue({
+      data: [{ expires_at: "2026-11-16T10:00:00+00:00", expired: true }],
+      error: null,
+    })
+
+    const res = await call()
+
+    expect(res.status).toBe(404)
+    expect(from).not.toHaveBeenCalled()
+    expect(cookieStore.delete).toHaveBeenCalledWith("pillar-shared-until")
   })
 })

@@ -31,6 +31,7 @@ const {
       ].map((name) => ({ name, value: "x" }))
     ),
     delete: vi.fn(),
+    set: vi.fn(),
   }
   // Like Next's redirect(), the mock throws, so nothing after it runs.
   class RedirectError extends Error {
@@ -101,6 +102,7 @@ beforeEach(() => {
   })
   auth.signInWithPassword.mockResolvedValue({ data: {}, error: null })
   auth.signOut.mockResolvedValue({ error: null })
+  rpc.mockResolvedValue({ data: null, error: null })
 })
 
 afterEach(() => {
@@ -364,6 +366,91 @@ describe("signInWithGoogleAction", () => {
   )
 })
 
+describe("shared computer", () => {
+  const DEADLINE = "2026-11-16T10:30:00+00:00"
+
+  it("marks the session and sets the deadline cookie when the box is ticked, creating the client shared", async () => {
+    rpc.mockResolvedValue({ data: DEADLINE, error: null })
+    const { signInAsPersonaAction } = await loadActions({ personas: "true" })
+
+    await expect(
+      signInAsPersonaAction(
+        null,
+        form({ persona: "editor_in_chief", shared: "1" })
+      )
+    ).rejects.toThrow(RedirectError)
+
+    expect(createClient).toHaveBeenCalledWith({ shared: true })
+    expect(rpc).toHaveBeenCalledExactlyOnceWith("mark_shared_session")
+    expect(cookieStore.set).toHaveBeenCalledExactlyOnceWith(
+      "pillar-shared-until",
+      String(Date.parse(DEADLINE)),
+      expect.objectContaining({
+        httpOnly: false,
+        secure: true,
+        sameSite: "lax",
+      })
+    )
+  })
+
+  it("deletes a stale deadline cookie and marks nothing when the box is not ticked", async () => {
+    const { signInAsPersonaAction } = await loadActions({ personas: "true" })
+
+    await expect(
+      signInAsPersonaAction(null, form({ persona: "editor_in_chief" }))
+    ).rejects.toThrow(RedirectError)
+
+    expect(createClient).toHaveBeenCalledWith({ shared: false })
+    expect(rpc).not.toHaveBeenCalled()
+    expect(cookieStore.delete).toHaveBeenCalledExactlyOnceWith(
+      "pillar-shared-until"
+    )
+  })
+
+  it("signs out and reports a failed sign-in when marking fails", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {})
+    rpc.mockResolvedValue({ data: null, error: { message: "boom" } })
+    const { signInAsPersonaAction } = await loadActions({ personas: "true" })
+
+    await expect(
+      signInAsPersonaAction(
+        null,
+        form({ persona: "editor_in_chief", shared: "1" })
+      )
+    ).resolves.toEqual({ ok: false, code: "auth.sign_in_failed" })
+
+    expect(auth.signOut).toHaveBeenCalledWith({ scope: "local" })
+    expect(cookieStore.set).not.toHaveBeenCalled()
+  })
+
+  it("forwards shared=1 on the Google redirectTo only when ticked", async () => {
+    const { signInWithGoogleAction } = await loadActions({ personas: "true" })
+
+    await expect(
+      signInWithGoogleAction(form({ next: "/dashboard", shared: "1" }))
+    ).rejects.toThrow(RedirectError)
+    expect(auth.signInWithOAuth.mock.calls[0][0].options.redirectTo).toBe(
+      "https://pillar.example/auth/callback?next=%2Fdashboard&shared=1"
+    )
+
+    expect(cookieStore.set).toHaveBeenCalledWith(
+      "pillar-shared-signin",
+      "1",
+      expect.objectContaining({ httpOnly: true, secure: true, maxAge: 600 })
+    )
+
+    auth.signInWithOAuth.mockClear()
+    cookieStore.delete.mockClear()
+    await expect(
+      signInWithGoogleAction(form({ next: "/dashboard" }))
+    ).rejects.toThrow(RedirectError)
+    expect(auth.signInWithOAuth.mock.calls[0][0].options.redirectTo).toBe(
+      "https://pillar.example/auth/callback?next=%2Fdashboard"
+    )
+    expect(cookieStore.delete).toHaveBeenCalledWith("pillar-shared-signin")
+  })
+})
+
 describe("signOutAction", () => {
   const AUTH_COOKIES = [
     "sb-127-auth-token.0",
@@ -377,8 +464,10 @@ describe("signOutAction", () => {
     await expect(signOutAction()).rejects.toThrow(RedirectError)
 
     expect(auth.signOut).toHaveBeenCalledExactlyOnceWith({ scope: "local" })
-    // supabase-js cleared the session itself.
-    expect(cookieStore.delete).not.toHaveBeenCalled()
+    // The shared session's idle row goes (best effort), and supabase-js
+    // cleared the session cookies itself: only the deadline cookie is deleted.
+    expect(rpc).toHaveBeenCalledExactlyOnceWith("end_shared_session")
+    expect(cookieStore.delete.mock.calls).toEqual([["pillar-shared-until"]])
     expect(redirect).toHaveBeenCalledExactlyOnceWith("/login")
   })
 
@@ -403,9 +492,10 @@ describe("signOutAction", () => {
       await expect(signOutAction()).rejects.toThrow(RedirectError)
 
       expect(auth.signOut).toHaveBeenCalledExactlyOnceWith({ scope: "local" })
-      expect(cookieStore.delete.mock.calls.map(([name]) => name)).toEqual(
-        AUTH_COOKIES
-      )
+      expect(cookieStore.delete.mock.calls.map(([name]) => name)).toEqual([
+        ...AUTH_COOKIES,
+        "pillar-shared-until",
+      ])
       expect(redirect).toHaveBeenCalledExactlyOnceWith("/login")
     }
   )
@@ -439,9 +529,10 @@ describe("signOutAction", () => {
       signOutAction(form({ next: "/dashboard/tasks/X" }))
     ).rejects.toThrow(RedirectError)
 
-    expect(cookieStore.delete.mock.calls.map(([name]) => name)).toEqual(
-      AUTH_COOKIES
-    )
+    expect(cookieStore.delete.mock.calls.map(([name]) => name)).toEqual([
+      ...AUTH_COOKIES,
+      "pillar-shared-until",
+    ])
     expect(redirect).toHaveBeenCalledExactlyOnceWith(
       "/login?next=%2Fdashboard%2Ftasks%2FX"
     )
@@ -470,8 +561,13 @@ describe("error copy", () => {
       "auth.personas_off": "Persona sign-in is off.",
       "auth.sign_in_failed": "Sign-in didn't finish. Try again.",
       "auth.not_active": "Sign in to do that.",
+      "auth.step_up_required": "Couldn't save — try again.",
       "members.stale": stale,
       "members.not_found": stale,
+      "members.last_admin":
+        "You can't demote or deactivate the last Editorial Board admin.",
+      "members.sole_editor_in_chief":
+        "Transfer Editor-in-Chief to someone else first.",
       "members.name_blank": "Add a name.",
       "members.name_too_long": "Use 100 characters or fewer.",
       "members.save_failed": "Couldn't save — try again.",
@@ -859,6 +955,186 @@ describe("renameMemberAction", () => {
 
     await expect(
       renameMemberAction({ memberId: MEMBER_ID, name: "Axel" })
+    ).resolves.toEqual({ ok: false, code: "members.save_failed" })
+  })
+})
+
+describe("resetMemberMfaAction", () => {
+  it("calls reset_member_mfa, revalidates the admin area and returns the member", async () => {
+    rpc.mockResolvedValue({ data: null, error: null })
+    const { resetMemberMfaAction } = await loadActions({ personas: "true" })
+
+    await expect(
+      resetMemberMfaAction({ memberId: MEMBER_ID })
+    ).resolves.toEqual({ ok: true, data: { memberId: MEMBER_ID } })
+    expect(rpc).toHaveBeenCalledExactlyOnceWith("reset_member_mfa", {
+      member_id: MEMBER_ID,
+    })
+    expect(revalidatePath).toHaveBeenCalledWith("/(admin)/admin", "layout")
+  })
+
+  it.each([
+    ["no input", undefined],
+    ["a member id that isn't a uuid", { memberId: "nope" }],
+  ])("returns members.save_failed for %s", async (_label, input) => {
+    const { resetMemberMfaAction } = await loadActions({ personas: "true" })
+
+    await expect(resetMemberMfaAction(input)).resolves.toEqual({
+      ok: false,
+      code: "members.save_failed",
+    })
+    expect(rpc).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    "auth.not_active",
+    "auth.step_up_required",
+    "members.stale",
+    "members.not_found",
+  ])("maps the database's %s straight through", async (message) => {
+    rpc.mockResolvedValue({ data: null, error: { code: "P0001", message } })
+    const { resetMemberMfaAction } = await loadActions({ personas: "true" })
+
+    await expect(
+      resetMemberMfaAction({ memberId: MEMBER_ID })
+    ).resolves.toEqual({ ok: false, code: message })
+    expect(revalidatePath).not.toHaveBeenCalled()
+  })
+
+  it.each(["members.not_admin", "members.reset_own_factor"])(
+    "maps %s to members.save_failed",
+    async (message) => {
+      rpc.mockResolvedValue({ data: null, error: { code: "P0001", message } })
+      const { resetMemberMfaAction } = await loadActions({ personas: "true" })
+
+      await expect(
+        resetMemberMfaAction({ memberId: MEMBER_ID })
+      ).resolves.toEqual({ ok: false, code: "members.save_failed" })
+    }
+  )
+})
+
+describe("updateMemberAction", () => {
+  const INPUT = {
+    memberId: MEMBER_ID,
+    positions: ["staff_layout_artist", "head_layout_artist"],
+    primaryPosition: "head_layout_artist",
+  }
+
+  it("calls update_member, revalidates the admin area and returns the member", async () => {
+    rpc.mockResolvedValue({ data: null, error: null })
+    const { updateMemberAction } = await loadActions({ personas: "true" })
+
+    await expect(updateMemberAction(INPUT)).resolves.toEqual({
+      ok: true,
+      data: { memberId: MEMBER_ID },
+    })
+    expect(rpc).toHaveBeenCalledExactlyOnceWith("update_member", {
+      member_id: MEMBER_ID,
+      positions: INPUT.positions,
+      primary_position: "head_layout_artist",
+    })
+    expect(revalidatePath).toHaveBeenCalledWith("/(admin)/admin", "layout")
+  })
+
+  it.each([
+    ["no input", undefined],
+    ["no positions", { ...INPUT, positions: [] }],
+    ["a primary outside the set", { ...INPUT, primaryPosition: "news_editor" }],
+    ["a member id that isn't a uuid", { ...INPUT, memberId: "nope" }],
+  ])("returns members.save_failed for %s", async (_label, input) => {
+    const { updateMemberAction } = await loadActions({ personas: "true" })
+
+    await expect(updateMemberAction(input)).resolves.toEqual({
+      ok: false,
+      code: "members.save_failed",
+    })
+    expect(rpc).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    "auth.not_active",
+    "auth.step_up_required",
+    "members.stale",
+    "members.not_found",
+    "members.last_admin",
+  ])("maps the database's %s straight through", async (message) => {
+    rpc.mockResolvedValue({ data: null, error: { code: "P0001", message } })
+    const { updateMemberAction } = await loadActions({ personas: "true" })
+
+    await expect(updateMemberAction(INPUT)).resolves.toEqual({
+      ok: false,
+      code: message,
+    })
+    expect(revalidatePath).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    "members.not_admin",
+    "members.change_own_positions",
+    "members.invalid_position",
+  ])("maps %s to members.save_failed", async (message) => {
+    rpc.mockResolvedValue({ data: null, error: { code: "P0001", message } })
+    const { updateMemberAction } = await loadActions({ personas: "true" })
+
+    await expect(updateMemberAction(INPUT)).resolves.toEqual({
+      ok: false,
+      code: "members.save_failed",
+    })
+  })
+})
+
+describe("deactivateMemberAction", () => {
+  it("calls deactivate_member, revalidates the root layout and returns the member", async () => {
+    rpc.mockResolvedValue({ data: null, error: null })
+    const { deactivateMemberAction } = await loadActions({ personas: "true" })
+
+    await expect(
+      deactivateMemberAction({ memberId: MEMBER_ID })
+    ).resolves.toEqual({ ok: true, data: { memberId: MEMBER_ID } })
+    expect(rpc).toHaveBeenCalledExactlyOnceWith("deactivate_member", {
+      member_id: MEMBER_ID,
+    })
+    expect(revalidatePath).toHaveBeenCalledWith("/", "layout")
+  })
+
+  it.each([
+    ["no input", undefined],
+    ["a member id that isn't a uuid", { memberId: "nope" }],
+  ])("returns members.save_failed for %s", async (_label, input) => {
+    const { deactivateMemberAction } = await loadActions({ personas: "true" })
+
+    await expect(deactivateMemberAction(input)).resolves.toEqual({
+      ok: false,
+      code: "members.save_failed",
+    })
+    expect(rpc).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    "auth.step_up_required",
+    "members.stale",
+    "members.last_admin",
+    "members.sole_editor_in_chief",
+  ])("maps the database's %s straight through", async (message) => {
+    rpc.mockResolvedValue({ data: null, error: { code: "P0001", message } })
+    const { deactivateMemberAction } = await loadActions({ personas: "true" })
+
+    await expect(
+      deactivateMemberAction({ memberId: MEMBER_ID })
+    ).resolves.toEqual({ ok: false, code: message })
+    expect(revalidatePath).not.toHaveBeenCalled()
+  })
+
+  it("maps members.deactivate_self to members.save_failed", async () => {
+    rpc.mockResolvedValue({
+      data: null,
+      error: { code: "P0001", message: "members.deactivate_self" },
+    })
+    const { deactivateMemberAction } = await loadActions({ personas: "true" })
+
+    await expect(
+      deactivateMemberAction({ memberId: MEMBER_ID })
     ).resolves.toEqual({ ok: false, code: "members.save_failed" })
   })
 })
