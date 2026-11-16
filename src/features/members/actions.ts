@@ -26,9 +26,11 @@ import { PERSONAS } from "./personas"
 import { loginPath, safeReturnPath } from "./return-path"
 import {
   memberApproveSchema,
+  memberDeactivateSchema,
   memberDeclineSchema,
   memberMfaResetSchema,
   memberRenameSchema,
+  memberUpdateSchema,
   personaSignInSchema,
 } from "./schemas"
 
@@ -224,6 +226,8 @@ const COMMAND_ERROR_CODES: ReadonlySet<MemberErrorCode> = new Set([
   "auth.step_up_required",
   "members.stale",
   "members.not_found",
+  "members.last_admin",
+  "members.sole_editor_in_chief",
   "members.name_blank",
   "members.name_too_long",
 ])
@@ -374,5 +378,73 @@ export async function resetMemberMfaAction(
   }
 
   revalidatePath(ADMIN_AREA, "layout")
+  return { ok: true, data: { memberId } }
+}
+
+/**
+ * Replaces another member's positions (AD-3, AD-4, AD-22): update_member
+ * checks the caller, the fresh code (`auth.step_up_required`, answered by the
+ * step-up prompt before a retry), the set, the Editor-in-Chief rule and the
+ * target, and the role follows the positions. This only parses, calls it,
+ * maps the error and revalidates the admin area.
+ */
+export async function updateMemberAction(
+  input: unknown
+): Promise<MemberCommandState> {
+  const parsed = memberUpdateSchema.safeParse(input)
+  if (!parsed.success) return { ok: false, code: "members.save_failed" }
+  const { memberId, positions, primaryPosition } = parsed.data
+
+  const supabase = await createClient()
+  const { error } = await supabase.rpc("update_member", {
+    member_id: memberId,
+    positions,
+    primary_position: primaryPosition,
+  })
+  if (error) {
+    return {
+      ok: false,
+      code: mapCommandError(error, COMMAND_ERROR_CODES, "members.save_failed", {
+        route: "action updateMemberAction",
+        entityType: "member",
+        entityId: memberId,
+      }),
+    }
+  }
+
+  revalidatePath(ADMIN_AREA, "layout")
+  return { ok: true, data: { memberId } }
+}
+
+/**
+ * Deactivates another member (AD-3, AD-4, AD-22): deactivate_member checks
+ * the caller, the fresh code, the guards (last admin, Editor-in-Chief) and
+ * the target, then moves their open slots to Needs reassignment. This only
+ * parses, calls it, maps the error and revalidates every page from the root
+ * layout, since the member's slots show on both areas.
+ */
+export async function deactivateMemberAction(
+  input: unknown
+): Promise<MemberCommandState> {
+  const parsed = memberDeactivateSchema.safeParse(input)
+  if (!parsed.success) return { ok: false, code: "members.save_failed" }
+  const { memberId } = parsed.data
+
+  const supabase = await createClient()
+  const { error } = await supabase.rpc("deactivate_member", {
+    member_id: memberId,
+  })
+  if (error) {
+    return {
+      ok: false,
+      code: mapCommandError(error, COMMAND_ERROR_CODES, "members.save_failed", {
+        route: "action deactivateMemberAction",
+        entityType: "member",
+        entityId: memberId,
+      }),
+    }
+  }
+
+  revalidatePath("/", "layout")
   return { ok: true, data: { memberId } }
 }

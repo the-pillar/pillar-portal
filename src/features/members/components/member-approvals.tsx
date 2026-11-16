@@ -1,6 +1,8 @@
 import type { MemberApprovalsData } from "../queries"
+import { MemberDeactivate } from "./member-deactivate"
 import { MemberMfaReset } from "./member-mfa-reset"
 import { MemberNameEditor } from "./member-name-editor"
+import { MemberPositionEditor } from "./member-position-editor"
 import { PendingMemberCard } from "./pending-member-card"
 
 const AWAITING_HEADING_ID = "awaiting-approval-heading"
@@ -9,8 +11,9 @@ const ACTIVE_HEADING_ID = "active-members-heading"
 /**
  * /admin/members' two lists (Story 2.2): "Awaiting approval", one card per
  * pending member, oldest first, and the "Active members" roster by name,
- * each with their positions, the primary first, and Edit name and
- * Reset two-factor where `member_capabilities` offers them (Story 8.2; Epic 5 adds position changes).
+ * each with their positions, the primary first, and Edit name,
+ * Change positions, Reset two-factor and Deactivate where
+ * `member_capabilities` offers them (Stories 8.2 and 5.4).
  * An approved or declined member leaves the first list, so the heading is
  * where focus goes then.
  */
@@ -72,10 +75,21 @@ export function MemberApprovals({
                 {member.email}
               </p>
               <p className="text-sm">{member.positionTitles.join(" · ")}</p>
-              <MemberMfaReset
-                member={member}
-                focusTargetId={ACTIVE_HEADING_ID}
-              />
+              <div className="mt-2 flex flex-wrap items-start gap-3 empty:hidden">
+                <MemberPositionEditor
+                  member={member}
+                  positionGroups={positionGroups}
+                  focusTargetId={ACTIVE_HEADING_ID}
+                />
+                <MemberMfaReset
+                  member={member}
+                  focusTargetId={ACTIVE_HEADING_ID}
+                />
+                <MemberDeactivate
+                  member={member}
+                  focusTargetId={ACTIVE_HEADING_ID}
+                />
+              </div>
             </li>
           ))}
         </ul>

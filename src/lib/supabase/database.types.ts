@@ -627,6 +627,7 @@ export type Database = {
         }
         Returns: string
       }
+      deactivate_member: { Args: { member_id: string }; Returns: undefined }
       decline_member: { Args: { member_id: string }; Returns: undefined }
       delete_task: {
         Args: { expected_updated_at: string; task_id: string }
@@ -651,8 +652,11 @@ export type Database = {
       member_capabilities: {
         Args: { ids: string[] }
         Returns: {
+          can_change_positions: boolean
+          can_deactivate: boolean
           can_rename: boolean
           can_reset_mfa: boolean
+          deactivate_blocked_by: string
           member_id: string
         }[]
       }
@@ -765,6 +769,14 @@ export type Database = {
           respondable_slot_ids: string[]
           task_id: string
         }[]
+      }
+      update_member: {
+        Args: {
+          member_id: string
+          positions: string[]
+          primary_position: string
+        }
+        Returns: undefined
       }
       update_task: {
         Args: {

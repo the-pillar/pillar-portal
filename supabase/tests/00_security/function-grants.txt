@@ -130,3 +130,13 @@ authenticated public.mark_shared_session()
 authenticated public.renew_shared_session()
 authenticated public.check_session_idle()
 authenticated public.end_shared_session()
+
+# members_lifecycle: an admin changes another member's positions or
+# deactivates them (private.can_manage_member and private.deactivation_guard
+# are called by the commands and by member_capabilities, which runs with the
+# caller's rights; private.release_member_slots has no grant: only
+# deactivate_member calls it)
+authenticated private.can_manage_member(uuid)
+authenticated private.deactivation_guard(uuid)
+authenticated public.update_member(uuid, text[], text)
+authenticated public.deactivate_member(uuid)

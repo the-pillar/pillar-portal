@@ -59,3 +59,30 @@ export const memberRenameSchema = z.object({
 })
 
 export type MemberRenameInput = z.infer<typeof memberRenameSchema>
+
+/**
+ * A position change from /admin/members: the member, their whole new set
+ * (Editor-in-Chief may appear, for a holder keeping it; update_member decides
+ * whether that is allowed) and the primary among them.
+ */
+export const memberUpdateSchema = z
+  .object({
+    memberId: z.uuid(),
+    positions: z
+      .array(positionId)
+      .min(1)
+      .max(OFFERED_POSITION_COUNT + 1),
+    primaryPosition: positionId,
+  })
+  .refine((input) => input.positions.includes(input.primaryPosition), {
+    path: ["primaryPosition"],
+  })
+
+export type MemberUpdateInput = z.infer<typeof memberUpdateSchema>
+
+/** A deactivation from /admin/members: deactivate_member checks it all. */
+export const memberDeactivateSchema = z.object({
+  memberId: z.uuid(),
+})
+
+export type MemberDeactivateInput = z.infer<typeof memberDeactivateSchema>
