@@ -147,6 +147,8 @@ export type RosterMember = {
   googleName: string | null
   /** `member_capabilities`' answer: whether Edit name is offered. */
   canRename: boolean
+  /** `member_capabilities`' answer: whether Reset two-factor is offered. */
+  canResetMfa: boolean
 }
 
 export type MemberApprovalsData = {
@@ -222,6 +224,7 @@ export async function getMemberApprovals(): Promise<MemberApprovalsData> {
     ...(activeResult.data ?? []).map((member) => member.id),
   ]
   const canRename = new Set<string>()
+  const canResetMfa = new Set<string>()
   if (ids.length > 0) {
     const { data, error } = await supabase.rpc("member_capabilities", { ids })
     if (error) {
@@ -232,8 +235,10 @@ export async function getMemberApprovals(): Promise<MemberApprovalsData> {
         }
       )
     }
-    for (const row of data ?? [])
+    for (const row of data ?? []) {
       if (row.can_rename) canRename.add(row.member_id)
+      if (row.can_reset_mfa) canResetMfa.add(row.member_id)
+    }
   }
 
   const roster: RosterMember[] = (activeResult.data ?? []).map((member) => ({
@@ -242,6 +247,7 @@ export async function getMemberApprovals(): Promise<MemberApprovalsData> {
     email: member.email,
     googleName: member.google_name,
     canRename: canRename.has(member.id),
+    canResetMfa: canResetMfa.has(member.id),
     positionTitles: member.member_positions
       .flatMap((held) => {
         const position = positions.get(held.position)

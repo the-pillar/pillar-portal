@@ -24,6 +24,7 @@ vi.mock("../actions", () => ({
   approveMemberAction,
   declineMemberAction: vi.fn(),
   renameMemberAction: vi.fn(),
+  resetMemberMfaAction: vi.fn(),
 }))
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }))
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }))
@@ -49,6 +50,7 @@ const ROSTER: MemberApprovalsData["roster"] = [
     positionTitles: ["Head Layout Artist"],
     googleName: null,
     canRename: true,
+    canResetMfa: true,
   },
   {
     id: "00000000-0000-4000-8000-000000000062",
@@ -57,6 +59,7 @@ const ROSTER: MemberApprovalsData["roster"] = [
     positionTitles: ["News Editor", "Online Manager"],
     googleName: "NEWS EDITOR",
     canRename: false,
+    canResetMfa: false,
   },
 ]
 
@@ -215,14 +218,17 @@ describe("MemberApprovals", () => {
       screen.getByRole("region", { name: "Active members" })
     ).getAllByRole("listitem")
     expect(rows.map((row) => row.textContent)).toEqual([
-      "Head Layout ArtistEdit namepersona-head_layout_artist@example.comHead Layout Artist",
+      "Head Layout ArtistEdit namepersona-head_layout_artist@example.comHead Layout ArtistReset two-factor",
       "News Editor and Online Managerdemo-news_editor@example.comNews Editor · Online Manager",
     ])
     expect(
       within(screen.getByRole("region", { name: "Active members" }))
         .getAllByRole("button")
         .map((button) => button.getAttribute("aria-label"))
-    ).toEqual(["Edit name for Head Layout Artist"])
+    ).toEqual([
+      "Edit name for Head Layout Artist",
+      "Reset two-factor for Head Layout Artist",
+    ])
   })
 })
 

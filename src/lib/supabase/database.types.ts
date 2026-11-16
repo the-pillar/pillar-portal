@@ -643,6 +643,7 @@ export type Database = {
         Args: { ids: string[] }
         Returns: {
           can_rename: boolean
+          can_reset_mfa: boolean
           member_id: string
         }[]
       }
@@ -725,6 +726,7 @@ export type Database = {
       }
       reopen_task: { Args: { task_id: string }; Returns: undefined }
       reset_first_run: { Args: never; Returns: undefined }
+      reset_member_mfa: { Args: { member_id: string }; Returns: undefined }
       respond_to_slot: {
         Args: {
           reason?: string

@@ -1,4 +1,5 @@
 import type { MemberApprovalsData } from "../queries"
+import { MemberMfaReset } from "./member-mfa-reset"
 import { MemberNameEditor } from "./member-name-editor"
 import { PendingMemberCard } from "./pending-member-card"
 
@@ -8,8 +9,8 @@ const ACTIVE_HEADING_ID = "active-members-heading"
 /**
  * /admin/members' two lists (Story 2.2): "Awaiting approval", one card per
  * pending member, oldest first, and the "Active members" roster by name,
- * each with their positions, the primary first, and Edit name where
- * `member_capabilities` offers it (Story 8.2; Epic 5 adds position changes).
+ * each with their positions, the primary first, and Edit name and
+ * Reset two-factor where `member_capabilities` offers them (Story 8.2; Epic 5 adds position changes).
  * An approved or declined member leaves the first list, so the heading is
  * where focus goes then.
  */
@@ -49,7 +50,11 @@ export function MemberApprovals({
       </section>
 
       <section aria-labelledby={ACTIVE_HEADING_ID}>
-        <h2 id={ACTIVE_HEADING_ID} className="text-heading-sm text-navy">
+        <h2
+          id={ACTIVE_HEADING_ID}
+          tabIndex={-1}
+          className="rounded-sm text-heading-sm text-navy outline-offset-2 focus-visible:outline-2"
+        >
           Active members
         </h2>
         <ul className="mt-3 divide-y divide-border rounded-lg bg-card shadow-card">
@@ -67,6 +72,10 @@ export function MemberApprovals({
                 {member.email}
               </p>
               <p className="text-sm">{member.positionTitles.join(" · ")}</p>
+              <MemberMfaReset
+                member={member}
+                focusTargetId={ACTIVE_HEADING_ID}
+              />
             </li>
           ))}
         </ul>

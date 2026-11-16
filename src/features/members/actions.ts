@@ -21,6 +21,7 @@ import { loginPath, safeReturnPath } from "./return-path"
 import {
   memberApproveSchema,
   memberDeclineSchema,
+  memberMfaResetSchema,
   memberRenameSchema,
   personaSignInSchema,
 } from "./schemas"
@@ -190,6 +191,7 @@ export type MemberCommandState =
 // recorded.
 const COMMAND_ERROR_CODES: ReadonlySet<MemberErrorCode> = new Set([
   "auth.not_active",
+  "auth.step_up_required",
   "members.stale",
   "members.not_found",
   "members.name_blank",
@@ -310,4 +312,37 @@ export async function renameMemberAction(
   revalidatePath(ADMIN_AREA, "layout")
   revalidatePath(MEMBER_AREA, "layout")
   return { ok: true, data: { memberId, name: data ?? name } }
+}
+
+/**
+ * Resets another admin's two-factor (AD-22): reset_member_mfa checks the
+ * caller, the fresh code (`auth.step_up_required`, which the step-up prompt
+ * answers before retrying), the target and that the reset is still possible,
+ * deletes the target's TOTP factors and logs it. This only parses, calls it,
+ * maps the error and revalidates the admin area.
+ */
+export async function resetMemberMfaAction(
+  input: unknown
+): Promise<MemberCommandState> {
+  const parsed = memberMfaResetSchema.safeParse(input)
+  if (!parsed.success) return { ok: false, code: "members.save_failed" }
+  const { memberId } = parsed.data
+
+  const supabase = await createClient()
+  const { error } = await supabase.rpc("reset_member_mfa", {
+    member_id: memberId,
+  })
+  if (error) {
+    return {
+      ok: false,
+      code: mapCommandError(error, COMMAND_ERROR_CODES, "members.save_failed", {
+        route: "action resetMemberMfaAction",
+        entityType: "member",
+        entityId: memberId,
+      }),
+    }
+  }
+
+  revalidatePath(ADMIN_AREA, "layout")
+  return { ok: true, data: { memberId } }
 }

@@ -1,8 +1,9 @@
-import { useTransition } from "react"
+import { useContext, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 
 import { refreshAfterFailure } from "./refresh-after-failure"
+import { STEP_UP_REQUIRED, StepUpContext } from "./step-up"
 
 /**
  * The part of AD-3's action result the hook reads: `ok`, and on a refusal its
@@ -38,6 +39,13 @@ export type CommandCallbacks<TResult, TCode extends string> = {
  * thunk's synchronous part (the optimistic setter) is a programming error,
  * not a failed save, so it is never turned into the `thrownCode` toast. A
  * `run` while one is still pending is ignored and its thunk never runs.
+ *
+ * A refusal with `auth.step_up_required` (AD-22), under a `StepUpContext`
+ * provider, isn't a failure yet: the person is asked for a fresh code, and
+ * the call runs once more. Cancelling the prompt ends quietly, with no toast
+ * and no re-read; a second refusal (or no provider) takes the normal failure
+ * path. The retry calls `call` again after an `await`, so a thunk's optimistic
+ * setter isn't suited to a command that can need a step-up.
  */
 export function useCommand<TCode extends string>({
   errorMessage,
@@ -47,6 +55,7 @@ export function useCommand<TCode extends string>({
   thrownCode: NoInfer<TCode>
 }) {
   const router = useRouter()
+  const stepUp = useContext(StepUpContext)
   const [isPending, startTransition] = useTransition()
 
   function run<TResult extends CommandResult<TCode>>(
@@ -61,14 +70,33 @@ export function useCommand<TCode extends string>({
       onFailure?.(code)
     }
 
-    startTransition(async () => {
-      const promise = call()
-      let result: TResult
+    // Awaits a call's promise: a rejection is the thrown code. The thunk
+    // itself is called outside, so a synchronous throw is never a toast.
+    async function settled(promise: Promise<TResult>): Promise<TResult | null> {
       try {
-        result = await promise
+        return await promise
       } catch {
         fail(thrownCode)
-        return
+        return null
+      }
+    }
+
+    startTransition(async () => {
+      const promise = call()
+      let result = await settled(promise)
+      if (result === null) return
+      if (stepUp !== null && isStepUpRefusal(result)) {
+        let verified: boolean
+        try {
+          verified = await stepUp.requestStepUp()
+        } catch {
+          fail(thrownCode)
+          return
+        }
+        if (!verified) return
+        const retry = call()
+        result = await settled(retry)
+        if (result === null) return
       }
       const outcome: CommandResult<TCode> = result
       if (!outcome.ok) {
@@ -80,4 +108,8 @@ export function useCommand<TCode extends string>({
   }
 
   return { isPending, run }
+}
+
+function isStepUpRefusal(result: CommandResult<string>): boolean {
+  return !result.ok && result.code === STEP_UP_REQUIRED
 }

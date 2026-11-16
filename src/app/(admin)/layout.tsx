@@ -1,5 +1,7 @@
 import { Suspense } from "react"
 
+import { StepUpProvider } from "@/features/members"
+
 import { NoticeToast } from "../notice-toast"
 import { OfflineToast } from "../offline-toast"
 import { AdminBannerSlot } from "./admin-banners"
@@ -28,7 +30,7 @@ export default async function AdminLayout({
         <NoticeToast />
       </Suspense>
       <OfflineToast />
-      {children}
+      <StepUpProvider>{children}</StepUpProvider>
     </AdminShell>
   )
 }

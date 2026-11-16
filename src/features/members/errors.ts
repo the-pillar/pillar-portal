@@ -10,12 +10,16 @@ import { STALE_COPY } from "@/lib/command-copy"
 // admin, so both get EXPERIENCE.md's stale line and the list re-reads.
 // set_member_name also raises `members.name_blank` and
 // `members.name_too_long`, shown under the field (the client checks first). Any
-// other code (members.not_admin, and the position backstops the picker never
+// other code (members.not_admin, members.reset_own_factor, and the position backstops the picker never
 // reaches), a parse failure or a thrown call is `members.save_failed`.
+// reset_member_mfa also raises `auth.step_up_required` (no code from the last
+// 15 minutes): the step-up prompt (AD-22) handles it and retries, so its copy
+// shows only where no prompt is mounted.
 export const MEMBER_ERROR_COPY = {
   "auth.personas_off": "Persona sign-in is off.",
   "auth.sign_in_failed": "Sign-in didn't finish. Try again.",
   "auth.not_active": "Sign in to do that.",
+  "auth.step_up_required": "Couldn't save — try again.",
   "members.stale": STALE_COPY,
   "members.not_found": STALE_COPY,
   "members.name_blank": "Add a name.",

@@ -470,6 +470,7 @@ describe("error copy", () => {
       "auth.personas_off": "Persona sign-in is off.",
       "auth.sign_in_failed": "Sign-in didn't finish. Try again.",
       "auth.not_active": "Sign in to do that.",
+      "auth.step_up_required": "Couldn't save — try again.",
       "members.stale": stale,
       "members.not_found": stale,
       "members.name_blank": "Add a name.",
@@ -861,4 +862,59 @@ describe("renameMemberAction", () => {
       renameMemberAction({ memberId: MEMBER_ID, name: "Axel" })
     ).resolves.toEqual({ ok: false, code: "members.save_failed" })
   })
+})
+
+describe("resetMemberMfaAction", () => {
+  it("calls reset_member_mfa, revalidates the admin area and returns the member", async () => {
+    rpc.mockResolvedValue({ data: null, error: null })
+    const { resetMemberMfaAction } = await loadActions({ personas: "true" })
+
+    await expect(
+      resetMemberMfaAction({ memberId: MEMBER_ID })
+    ).resolves.toEqual({ ok: true, data: { memberId: MEMBER_ID } })
+    expect(rpc).toHaveBeenCalledExactlyOnceWith("reset_member_mfa", {
+      member_id: MEMBER_ID,
+    })
+    expect(revalidatePath).toHaveBeenCalledWith("/(admin)/admin", "layout")
+  })
+
+  it.each([
+    ["no input", undefined],
+    ["a member id that isn't a uuid", { memberId: "nope" }],
+  ])("returns members.save_failed for %s", async (_label, input) => {
+    const { resetMemberMfaAction } = await loadActions({ personas: "true" })
+
+    await expect(resetMemberMfaAction(input)).resolves.toEqual({
+      ok: false,
+      code: "members.save_failed",
+    })
+    expect(rpc).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    "auth.not_active",
+    "auth.step_up_required",
+    "members.stale",
+    "members.not_found",
+  ])("maps the database's %s straight through", async (message) => {
+    rpc.mockResolvedValue({ data: null, error: { code: "P0001", message } })
+    const { resetMemberMfaAction } = await loadActions({ personas: "true" })
+
+    await expect(
+      resetMemberMfaAction({ memberId: MEMBER_ID })
+    ).resolves.toEqual({ ok: false, code: message })
+    expect(revalidatePath).not.toHaveBeenCalled()
+  })
+
+  it.each(["members.not_admin", "members.reset_own_factor"])(
+    "maps %s to members.save_failed",
+    async (message) => {
+      rpc.mockResolvedValue({ data: null, error: { code: "P0001", message } })
+      const { resetMemberMfaAction } = await loadActions({ personas: "true" })
+
+      await expect(
+        resetMemberMfaAction({ memberId: MEMBER_ID })
+      ).resolves.toEqual({ ok: false, code: "members.save_failed" })
+    }
+  )
 })
