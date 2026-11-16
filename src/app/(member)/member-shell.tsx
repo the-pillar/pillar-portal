@@ -23,11 +23,14 @@ import { DashboardTabs } from "./dashboard-tabs"
 export function MemberShell({
   member,
   newTask,
+  onboarding,
   children,
 }: {
   member: Pick<CurrentMember, "name" | "role">
   /** The New task button, passed only for a caller who can create tasks. */
   newTask?: React.ReactNode
+  /** Which onboarding item the avatar menu offers (`my_onboarding()`'s answer). */
+  onboarding?: "tour" | "tips"
   children: React.ReactNode
 }) {
   return (
@@ -40,6 +43,7 @@ export function MemberShell({
       >
         <MemberMenu
           name={member.name}
+          onboarding={onboarding}
           extraLinks={
             member.role === "editorial_admin"
               ? [{ label: "Admin", href: "/admin" }]

@@ -1138,3 +1138,116 @@ describe("deactivateMemberAction", () => {
     ).resolves.toEqual({ ok: false, code: "members.save_failed" })
   })
 })
+
+describe("recordOnboardingAction", () => {
+  it.each([
+    "tour_seen",
+    "copied_task",
+    "checklist_done",
+    "first_run_shown",
+    "first_run_closed",
+  ])("records %s with one record_onboarding call", async (step) => {
+    const { recordOnboardingAction } = await loadActions({ personas: "true" })
+
+    expect(await recordOnboardingAction(step)).toEqual({ ok: true })
+    expect(rpc).toHaveBeenCalledExactlyOnceWith("record_onboarding", { step })
+  })
+
+  it.each(["", "tour_done", null, undefined, 3, { step: "tour_seen" }])(
+    "rejects %j without calling the database or recording an error",
+    async (step) => {
+      const { recordOnboardingAction } = await loadActions({ personas: "true" })
+
+      expect(await recordOnboardingAction(step)).toEqual({ ok: false })
+      expect(rpc).not.toHaveBeenCalled()
+      expect(after).not.toHaveBeenCalled()
+    }
+  )
+
+  it("revalidates the admin area only for copied_task, so the checklist ticks live", async () => {
+    const { recordOnboardingAction } = await loadActions({ personas: "true" })
+
+    await recordOnboardingAction("tour_seen")
+    expect(revalidatePath).not.toHaveBeenCalled()
+
+    await recordOnboardingAction("copied_task")
+    expect(revalidatePath).toHaveBeenCalledExactlyOnceWith(
+      "/(admin)/admin",
+      "layout"
+    )
+
+    revalidatePath.mockClear()
+    await recordOnboardingAction("first_run_shown")
+    expect(revalidatePath).toHaveBeenCalledExactlyOnceWith(
+      "/(member)/dashboard",
+      "layout"
+    )
+  })
+
+  it("records an unexpected fault after the response and returns not ok", async () => {
+    const error = { code: "XX000", message: "boom" }
+    rpc.mockResolvedValue({ data: null, error })
+    const { recordOnboardingAction } = await loadActions({ personas: "true" })
+
+    expect(await recordOnboardingAction("tour_seen")).toEqual({ ok: false })
+    expect(revalidatePath).not.toHaveBeenCalled()
+    await runAfter()
+    expect(recordErrorEvent).toHaveBeenCalledExactlyOnceWith(error, {
+      route: "action recordOnboardingAction",
+    })
+  })
+
+  it("records nothing for a known code (auth.not_active)", async () => {
+    rpc.mockResolvedValue({
+      data: null,
+      error: { code: "P0001", message: "auth.not_active" },
+    })
+    const { recordOnboardingAction } = await loadActions({ personas: "true" })
+
+    expect(await recordOnboardingAction("tour_seen")).toEqual({ ok: false })
+    await runAfter()
+    expect(recordErrorEvent).not.toHaveBeenCalled()
+  })
+})
+
+describe("recordCopiedTaskAction", () => {
+  it("records copied_task, taking no argument", async () => {
+    const { recordCopiedTaskAction } = await loadActions({ personas: "true" })
+
+    expect(recordCopiedTaskAction.length).toBe(0)
+    await recordCopiedTaskAction()
+    expect(rpc).toHaveBeenCalledExactlyOnceWith("record_onboarding", {
+      step: "copied_task",
+    })
+  })
+})
+
+describe("showTipsAgainAction", () => {
+  it("resets the first run, revalidates the member area and goes to What's mine", async () => {
+    const { showTipsAgainAction } = await loadActions({ personas: "true" })
+
+    await expect(showTipsAgainAction()).rejects.toThrow(
+      new RedirectError("/dashboard")
+    )
+    expect(rpc).toHaveBeenCalledExactlyOnceWith("reset_first_run")
+    expect(revalidatePath).toHaveBeenCalledExactlyOnceWith(
+      "/(member)/dashboard",
+      "layout"
+    )
+  })
+
+  it("records an unexpected fault and still opens What's mine", async () => {
+    const error = { code: "XX000", message: "boom" }
+    rpc.mockResolvedValue({ data: null, error })
+    const { showTipsAgainAction } = await loadActions({ personas: "true" })
+
+    await expect(showTipsAgainAction()).rejects.toThrow(
+      new RedirectError("/dashboard")
+    )
+    expect(revalidatePath).not.toHaveBeenCalled()
+    await runAfter()
+    expect(recordErrorEvent).toHaveBeenCalledExactlyOnceWith(error, {
+      route: "action showTipsAgainAction",
+    })
+  })
+})

@@ -55,6 +55,7 @@ export function AdminTabs() {
             key={link.href}
             href={link.href}
             aria-current={current ? "page" : undefined}
+            data-tour={link.href === "/admin/members" ? "members" : undefined}
             className={cn(
               "flex min-h-11 flex-1 shrink-0 items-center justify-center rounded-md px-3 text-sm font-semibold whitespace-nowrap text-tab-idle-on-navy hover:text-white",
               current

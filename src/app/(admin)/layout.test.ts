@@ -14,6 +14,8 @@ const {
   NewTaskSheet,
   SharedSessionWatcher,
   StepUpProvider,
+  getMyOnboarding,
+  recordCopiedTaskAction,
   RedirectError,
 } = vi.hoisted(() => {
   // Like Next's redirect(), which requireAdmin calls, the mock throws.
@@ -33,6 +35,8 @@ const {
     NewTaskSheet: vi.fn(() => null),
     SharedSessionWatcher: vi.fn(() => null),
     StepUpProvider: vi.fn(() => null),
+    getMyOnboarding: vi.fn(),
+    recordCopiedTaskAction: vi.fn(),
     RedirectError,
   }
 })
@@ -54,6 +58,8 @@ vi.mock("../offline-toast", () => ({ OfflineToast }))
 vi.mock("@/features/members", () => ({
   SharedSessionWatcher,
   StepUpProvider,
+  getMyOnboarding,
+  recordCopiedTaskAction,
 }))
 
 import type { CurrentMember } from "@/features/members"
@@ -74,6 +80,7 @@ const NEW_TASK = {
 
 beforeEach(() => {
   getNewTaskLayoutData.mockResolvedValue(null)
+  getMyOnboarding.mockResolvedValue(null)
 })
 
 afterEach(() => {
@@ -105,6 +112,7 @@ describe("AdminLayout", () => {
       member: MEMBER,
       banners: expect.objectContaining({ type: AdminBannerSlot, props: {} }),
       newTask: undefined,
+      onboarding: undefined,
       children: [
         expect.objectContaining({
           type: Suspense,
@@ -141,10 +149,23 @@ describe("AdminLayout", () => {
         props: expect.objectContaining({
           children: expect.objectContaining({
             type: NewTaskSheet,
-            props: { options: NEW_TASK.options, homeOwner: null },
+            props: {
+              options: NEW_TASK.options,
+              homeOwner: null,
+              onCopied: recordCopiedTaskAction,
+            },
           }),
         }),
       })
     )
+  })
+
+  it("offers the Show the tour again item when my_onboarding says tour and checklist", async () => {
+    requireAdmin.mockResolvedValue(MEMBER)
+    getMyOnboarding.mockResolvedValue({ tourAndChecklist: true })
+
+    const element = await AdminLayout({ children: "page" })
+
+    expect(element.props.onboarding).toBe("tour")
   })
 })

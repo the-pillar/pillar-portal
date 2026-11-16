@@ -31,6 +31,23 @@ describe("CopyForMessenger", () => {
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument()
   })
 
+  it("shrugs off a rejecting onCopied: the toast still shows (vitest fails the run on an unhandled rejection)", async () => {
+    const user = userEvent.setup({ writeToClipboard: false })
+    vi.stubGlobal("navigator", {
+      clipboard: { writeText: vi.fn().mockResolvedValue(undefined) },
+    })
+    render(
+      <CopyForMessenger
+        message={MESSAGE}
+        onCopied={() => Promise.reject(new Error("network"))}
+      />
+    )
+    await user.click(screen.getByRole("button", { name: "Copy for Messenger" }))
+    await new Promise((resolve) => setTimeout(resolve, 10))
+
+    expect(success).toHaveBeenCalledWith("Copied — paste it in Messenger.")
+  })
+
   it("calls onCopied after a copy that worked, and not after one that did not", async () => {
     const onCopied = vi.fn()
     const user = userEvent.setup({ writeToClipboard: false })

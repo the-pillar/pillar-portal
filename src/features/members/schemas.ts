@@ -1,5 +1,7 @@
 import { z } from "zod"
 
+import { Constants } from "@/lib/supabase/database.types"
+
 import { displayNameSchema } from "./display-name"
 import { PERSONA_KEYS } from "./personas"
 import {
@@ -86,3 +88,10 @@ export const memberDeactivateSchema = z.object({
 })
 
 export type MemberDeactivateInput = z.infer<typeof memberDeactivateSchema>
+
+/** The onboarding steps a client may record (`record_onboarding`'s enum). */
+export const ONBOARDING_STEPS = Constants.public.Enums.onboarding_step
+
+export const onboardingStepSchema = z.enum(ONBOARDING_STEPS)
+
+export type OnboardingStep = z.infer<typeof onboardingStepSchema>

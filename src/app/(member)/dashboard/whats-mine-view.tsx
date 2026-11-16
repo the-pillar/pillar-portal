@@ -1,12 +1,27 @@
+import {
+  FirstRunCard,
+  getMyOnboarding,
+  recordOnboardingAction,
+} from "@/features/members"
 import { getWhatsMine, WhatsMineTasks } from "@/features/tasks"
 
 const HEADING_ID = "whats-mine-heading"
 
 // What's mine (EXPERIENCE.md). Reads as the viewer on every request. The h1
 // is the focus target when an answered Waiting item leaves the page.
-// dashboard/page.tsx renders it under its own Suspense boundary.
+// dashboard/page.tsx renders it under its own Suspense boundary. The staff
+// first-run card (Story 8.9) shows above the lists while `my_onboarding()`
+// says this member gets it (not the tour and checklist) and hasn't closed it;
+// a failed onboarding read shows no card.
 export async function WhatsMineView() {
-  const whatsMine = await getWhatsMine()
+  const [whatsMine, onboarding] = await Promise.all([
+    getWhatsMine(),
+    getMyOnboarding(),
+  ])
+  const showFirstRun =
+    onboarding !== null &&
+    !onboarding.tourAndChecklist &&
+    !onboarding.firstRunClosed
   const empty = whatsMine.waiting.length === 0 && whatsMine.tasks.length === 0
 
   return (
@@ -18,6 +33,13 @@ export async function WhatsMineView() {
       >
         What&apos;s mine
       </h1>
+      {showFirstRun && (
+        <FirstRunCard
+          shown={onboarding.firstRunShown}
+          record={recordOnboardingAction}
+          fallbackHeadingId={HEADING_ID}
+        />
+      )}
       {empty ? (
         <div className="mt-6 text-muted-foreground">
           <h2 className="text-heading-sm">Nothing on your plate right now.</h2>

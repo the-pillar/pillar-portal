@@ -111,9 +111,11 @@ const NEXT_WEEK: HandedBackSlot = {
 function Page({
   slots,
   options = OPTIONS,
+  onCopied,
 }: {
   slots: HandedBackSlot[]
   options?: ReassignOptions | null
+  onCopied?: () => void
 }) {
   return (
     <main>
@@ -124,6 +126,7 @@ function Page({
         slots={slots}
         options={options}
         focusTargetId="admin-tasks-heading"
+        onCopied={onCopied}
       />
     </main>
   )
@@ -270,6 +273,35 @@ describe("HandedBackQueue", () => {
       "Staff Cartoonist · 0 active",
       "Editor-in-Chief · 4 active (current)",
     ])
+  })
+
+  it("passes onCopied to each row's reassign toast", async () => {
+    const user = userEvent.setup()
+    const onCopied = vi.fn()
+    reassignSlotAction.mockResolvedValue({
+      ok: true,
+      data: { slotId: RENAMED.slotId },
+    })
+    render(<Page slots={[RENAMED]} onCopied={onCopied} />)
+    await user.click(reassign("Cartoonist", "3.7 check (edit) renamed"))
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("radio", {
+        name: "Staff Cartoonist · 0 active",
+      })
+    )
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: "Reassign",
+      })
+    )
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull())
+
+    vi.stubGlobal("navigator", {
+      clipboard: { writeText: vi.fn().mockResolvedValue(undefined) },
+    })
+    await toastSuccess.mock.calls[0][1].action.onClick()
+
+    expect(onCopied).toHaveBeenCalledOnce()
   })
 
   it("reassigns a row, toasts with Copy for Messenger, and focuses the h1 as the row leaves with the count", async () => {

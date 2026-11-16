@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import { redirect } from "next/navigation"
 
+import { recordCopiedTaskAction } from "@/features/members"
 import {
   getTaskEdit,
   getTaskFormOptionsWithLoad,
@@ -41,7 +42,12 @@ export default async function EditTaskPage({
     <>
       <h1 className="font-heading text-display text-navy">Edit task</h1>
       <div className="mt-3 max-w-2xl">
-        <TaskForm key={taskEditKey(task)} options={options} task={task} />
+        <TaskForm
+          key={taskEditKey(task)}
+          options={options}
+          task={task}
+          onCopied={recordCopiedTaskAction}
+        />
       </div>
     </>
   )

@@ -56,6 +56,7 @@ export function NewTaskButton() {
     <button
       type="button"
       data-new-task-button=""
+      data-tour="new-task"
       data-hidden={hiddenBelowMd ? "" : undefined}
       onClick={() => openNewTask()}
       className={cn(

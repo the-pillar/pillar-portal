@@ -25,10 +25,13 @@ export function HandedBackQueue({
   slots,
   options,
   focusTargetId,
+  onCopied,
 }: {
   slots: HandedBackSlot[]
   options: ReassignOptions | null
   focusTargetId: string
+  /** Called after a Copy for Messenger from the toast that worked. */
+  onCopied?: () => void | Promise<unknown>
 }) {
   if (slots.length === 0 || options === null) return null
 
@@ -82,6 +85,7 @@ export function HandedBackQueue({
                   options={options}
                   focusTargetId={focusTargetId}
                   namedForTask
+                  onCopied={onCopied}
                 />
               </div>
             </article>

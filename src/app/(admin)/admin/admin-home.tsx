@@ -38,14 +38,20 @@ export function AdminHomeCards({ cards }: { cards: readonly AdminHomeCard[] }) {
 
   if (actionable.length === 0) {
     return (
-      <h2 className="mt-6 text-heading-sm text-muted-foreground">
+      <h2
+        data-tour="counts"
+        className="mt-6 text-heading-sm text-muted-foreground"
+      >
         Nothing needs you right now.
       </h2>
     )
   }
 
   return (
-    <ul className="mt-6 grid items-start gap-3 sm:grid-cols-2 lg:grid-cols-3">
+    <ul
+      data-tour="counts"
+      className="mt-6 grid items-start gap-3 sm:grid-cols-2 lg:grid-cols-3"
+    >
       {actionable.map((card) => (
         <li key={card.id} className="flex">
           {card.preview === undefined ? (

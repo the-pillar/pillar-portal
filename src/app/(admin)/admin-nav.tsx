@@ -58,6 +58,7 @@ export function AdminNavLinks() {
             key={link.href}
             href={link.href}
             aria-current={current ? "page" : undefined}
+            data-tour={link.href === "/admin/members" ? "members" : undefined}
             className={cn(
               "flex min-h-11 items-center rounded-md px-3 py-2 text-sm font-semibold text-foreground hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
               current && "bg-navy text-white hover:bg-navy"

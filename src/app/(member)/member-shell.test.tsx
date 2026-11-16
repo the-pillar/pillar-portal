@@ -30,6 +30,7 @@ vi.mock("@/lib/env.client", () => ({
 vi.mock("@/features/members/actions", () => ({
   signInAsPersonaAction: vi.fn(),
   signOutAction,
+  showTipsAgainAction: vi.fn(),
 }))
 
 // color-contrast can't be computed in jsdom (it is always "incomplete").
@@ -231,5 +232,25 @@ describe("MemberShell's New task slot", () => {
     )
     expect(container.querySelector("[data-slot='header-action']")).toBeNull()
     expect(screen.queryByRole("button", { name: "New task" })).toBeNull()
+  })
+
+  it("adds Show tips again to the avatar menu from the onboarding prop", async () => {
+    const user = userEvent.setup()
+    render(
+      <MemberShell
+        member={{ name: "Staff Layout Artist", role: "staff" }}
+        onboarding="tips"
+      >
+        <h1>What&apos;s mine</h1>
+      </MemberShell>
+    )
+
+    await user.click(
+      screen.getByRole("button", { name: "Staff Layout Artist, account" })
+    )
+
+    expect(
+      await screen.findByRole("menuitem", { name: "Show tips again" })
+    ).toBeInTheDocument()
   })
 })
