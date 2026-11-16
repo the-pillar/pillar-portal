@@ -13,15 +13,24 @@ import {
   recordErrorEvent,
 } from "@/lib/record-error-event"
 import { ADMIN_AREA, MEMBER_AREA } from "@/lib/revalidate-paths"
+import { finishSignIn } from "@/lib/supabase/idle"
 import { createClient } from "@/lib/supabase/server"
+import {
+  SHARED_SIGN_IN_COOKIE,
+  SHARED_UNTIL_COOKIE,
+  sharedSignInCookieOptions,
+} from "@/lib/supabase/shared-session"
 
 import type { MemberErrorCode } from "./errors"
 import { PERSONAS } from "./personas"
 import { loginPath, safeReturnPath } from "./return-path"
 import {
   memberApproveSchema,
+  memberDeactivateSchema,
   memberDeclineSchema,
+  memberMfaResetSchema,
   memberRenameSchema,
+  memberUpdateSchema,
   personaSignInSchema,
 } from "./schemas"
 
@@ -35,7 +44,8 @@ const GOOGLE_SIGN_IN: ErrorEventWhere = {
  * redirects to (outside the `try`, since redirect() throws). Google sends
  * the member back through Supabase to /auth/callback, the only redirect URL,
  * carrying the form's `next` once `safeReturnPath` has checked it; the
- * callback checks it again.
+ * callback checks it again. A ticked "This is a shared computer" (`shared=1`)
+ * rides along on `redirectTo`, so the callback marks the session (AD-22).
  *
  * `prompt=select_account` makes Google show its account chooser every time:
  * otherwise, after Sign out, Google silently signs the same account in
@@ -53,15 +63,25 @@ export async function signInWithGoogleAction(
   formData: FormData
 ): Promise<void> {
   const next = safeReturnPath(formData.get("next"))
+  const shared = formData.get("shared") === "1"
+
+  // A backup for the callback if Supabase falls back to the Site URL and
+  // drops `shared` from redirectTo: a short-lived cookie says the same.
+  const cookieStore = await cookies()
+  if (shared) {
+    cookieStore.set(SHARED_SIGN_IN_COOKIE, "1", sharedSignInCookieOptions())
+  } else {
+    cookieStore.delete(SHARED_SIGN_IN_COOKIE)
+  }
 
   let url: string | null = null
   try {
-    const supabase = await createClient()
+    const supabase = await createClient({ shared })
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
         redirectTo: new URL(
-          `/auth/callback?next=${encodeURIComponent(next)}`,
+          `/auth/callback?next=${encodeURIComponent(next)}${shared ? "&shared=1" : ""}`,
           clientEnv.NEXT_PUBLIC_SITE_URL
         ).href,
         queryParams: { prompt: "select_account" },
@@ -99,7 +119,9 @@ export type PersonaSignInState = { ok: false; code: MemberErrorCode } | null
  * the server holds (AD-7), then goes to the form's `next` when
  * `safeReturnPath` accepts it, else /dashboard. Refuses without calling Auth
  * unless PROTOTYPE_PERSONAS is on. A bad button value and any Auth failure
- * look the same to the visitor.
+ * look the same to the visitor. A ticked shared-computer box (`shared=1`)
+ * marks the session and sets the deadline cookie, else a stale one goes
+ * (AD-22); a mark that fails counts as a failed sign-in.
  */
 export async function signInAsPersonaAction(
   _previous: PersonaSignInState,
@@ -115,14 +137,17 @@ export async function signInAsPersonaAction(
   })
   if (!parsed.success) return { ok: false, code: "auth.sign_in_failed" }
 
+  const shared = formData.get("shared") === "1"
+
   let signedIn = false
   try {
-    const supabase = await createClient()
+    const supabase = await createClient({ shared })
     const { error } = await supabase.auth.signInWithPassword({
       email: PERSONAS[parsed.data.persona].email,
       password,
     })
-    signedIn = error === null
+    signedIn =
+      error === null && (await finishSignIn(supabase, await cookies(), shared))
   } catch {
     signedIn = false
   }
@@ -150,12 +175,20 @@ export async function signOutAction(formData?: FormData): Promise<void> {
   let failed: boolean
   try {
     const supabase = await createClient()
+    // Forget a shared session's idle row (best effort: a failure must not keep
+    // the person signed in). An idle sign-out never does this.
+    try {
+      await supabase.rpc("end_shared_session")
+    } catch {
+      // Ignored: the sign-out below still runs.
+    }
     const { error } = await supabase.auth.signOut({ scope: "local" })
     failed = error !== null
   } catch {
     failed = true
   }
   if (failed) await deleteAuthCookies()
+  ;(await cookies()).delete(SHARED_UNTIL_COOKIE)
 
   redirect(
     formData?.has("next")
@@ -190,8 +223,11 @@ export type MemberCommandState =
 // recorded.
 const COMMAND_ERROR_CODES: ReadonlySet<MemberErrorCode> = new Set([
   "auth.not_active",
+  "auth.step_up_required",
   "members.stale",
   "members.not_found",
+  "members.last_admin",
+  "members.sole_editor_in_chief",
   "members.name_blank",
   "members.name_too_long",
 ])
@@ -310,4 +346,105 @@ export async function renameMemberAction(
   revalidatePath(ADMIN_AREA, "layout")
   revalidatePath(MEMBER_AREA, "layout")
   return { ok: true, data: { memberId, name: data ?? name } }
+}
+
+/**
+ * Resets another admin's two-factor (AD-22): reset_member_mfa checks the
+ * caller, the fresh code (`auth.step_up_required`, which the step-up prompt
+ * answers before retrying), the target and that the reset is still possible,
+ * deletes the target's TOTP factors and logs it. This only parses, calls it,
+ * maps the error and revalidates the admin area.
+ */
+export async function resetMemberMfaAction(
+  input: unknown
+): Promise<MemberCommandState> {
+  const parsed = memberMfaResetSchema.safeParse(input)
+  if (!parsed.success) return { ok: false, code: "members.save_failed" }
+  const { memberId } = parsed.data
+
+  const supabase = await createClient()
+  const { error } = await supabase.rpc("reset_member_mfa", {
+    member_id: memberId,
+  })
+  if (error) {
+    return {
+      ok: false,
+      code: mapCommandError(error, COMMAND_ERROR_CODES, "members.save_failed", {
+        route: "action resetMemberMfaAction",
+        entityType: "member",
+        entityId: memberId,
+      }),
+    }
+  }
+
+  revalidatePath(ADMIN_AREA, "layout")
+  return { ok: true, data: { memberId } }
+}
+
+/**
+ * Replaces another member's positions (AD-3, AD-4, AD-22): update_member
+ * checks the caller, the fresh code (`auth.step_up_required`, answered by the
+ * step-up prompt before a retry), the set, the Editor-in-Chief rule and the
+ * target, and the role follows the positions. This only parses, calls it,
+ * maps the error and revalidates the admin area.
+ */
+export async function updateMemberAction(
+  input: unknown
+): Promise<MemberCommandState> {
+  const parsed = memberUpdateSchema.safeParse(input)
+  if (!parsed.success) return { ok: false, code: "members.save_failed" }
+  const { memberId, positions, primaryPosition } = parsed.data
+
+  const supabase = await createClient()
+  const { error } = await supabase.rpc("update_member", {
+    member_id: memberId,
+    positions,
+    primary_position: primaryPosition,
+  })
+  if (error) {
+    return {
+      ok: false,
+      code: mapCommandError(error, COMMAND_ERROR_CODES, "members.save_failed", {
+        route: "action updateMemberAction",
+        entityType: "member",
+        entityId: memberId,
+      }),
+    }
+  }
+
+  revalidatePath(ADMIN_AREA, "layout")
+  return { ok: true, data: { memberId } }
+}
+
+/**
+ * Deactivates another member (AD-3, AD-4, AD-22): deactivate_member checks
+ * the caller, the fresh code, the guards (last admin, Editor-in-Chief) and
+ * the target, then moves their open slots to Needs reassignment. This only
+ * parses, calls it, maps the error and revalidates every page from the root
+ * layout, since the member's slots show on both areas.
+ */
+export async function deactivateMemberAction(
+  input: unknown
+): Promise<MemberCommandState> {
+  const parsed = memberDeactivateSchema.safeParse(input)
+  if (!parsed.success) return { ok: false, code: "members.save_failed" }
+  const { memberId } = parsed.data
+
+  const supabase = await createClient()
+  const { error } = await supabase.rpc("deactivate_member", {
+    member_id: memberId,
+  })
+  if (error) {
+    return {
+      ok: false,
+      code: mapCommandError(error, COMMAND_ERROR_CODES, "members.save_failed", {
+        route: "action deactivateMemberAction",
+        entityType: "member",
+        entityId: memberId,
+      }),
+    }
+  }
+
+  revalidatePath("/", "layout")
+  return { ok: true, data: { memberId } }
 }

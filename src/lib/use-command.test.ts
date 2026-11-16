@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react"
-import { useOptimistic } from "react"
+import { createElement, type ReactNode, useOptimistic } from "react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
+import { StepUpContext, type StepUpRequester } from "./step-up"
 import { useCommand } from "./use-command"
 
 // vi.mock factories run before this file's imports, so what they share with
@@ -211,5 +212,107 @@ describe("useCommand", () => {
     await waitFor(() => expect(result.current.isPending).toBe(false))
     expect(first).toHaveBeenCalledTimes(1)
     expect(second).not.toHaveBeenCalled()
+  })
+})
+
+describe("useCommand step-up", () => {
+  type StepUpResult =
+    | { ok: true; data: { id: string } }
+    | { ok: false; code: Code | "auth.step_up_required" }
+
+  const STEP_UP: StepUpResult = { ok: false, code: "auth.step_up_required" }
+  const OK: StepUpResult = { ok: true, data: { id: "t1" } }
+
+  function renderWith(requester: StepUpRequester | null) {
+    return renderHook(
+      () =>
+        useCommand({
+          errorMessage: (code: Code | "auth.step_up_required") =>
+            code === "auth.step_up_required" ? "Step-up copy" : COPY[code],
+          thrownCode: "thing.failed",
+        }),
+      {
+        wrapper: ({ children }: { children: ReactNode }) =>
+          createElement(StepUpContext.Provider, { value: requester }, children),
+      }
+    )
+  }
+
+  it("asks for a code, then retries the call once and hands on the success", async () => {
+    const requestStepUp = vi.fn().mockResolvedValue(true)
+    const call = vi
+      .fn<() => Promise<StepUpResult>>()
+      .mockResolvedValueOnce(STEP_UP)
+      .mockResolvedValueOnce(OK)
+    const onSuccess = vi.fn()
+    const { result } = renderWith({ requestStepUp })
+
+    act(() => result.current.run(call, { onSuccess }))
+
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledWith(OK))
+    expect(requestStepUp).toHaveBeenCalledTimes(1)
+    expect(call).toHaveBeenCalledTimes(2)
+    expect(toastError).not.toHaveBeenCalled()
+  })
+
+  it("ends quietly when the prompt is cancelled", async () => {
+    const requestStepUp = vi.fn().mockResolvedValue(false)
+    const call = vi.fn(async () => STEP_UP)
+    const onSuccess = vi.fn()
+    const onFailure = vi.fn()
+    const { result } = renderWith({ requestStepUp })
+
+    act(() => result.current.run(call, { onSuccess, onFailure }))
+
+    await waitFor(() => expect(requestStepUp).toHaveBeenCalled())
+    await waitFor(() => expect(result.current.isPending).toBe(false))
+    expect(call).toHaveBeenCalledTimes(1)
+    expect(toastError).not.toHaveBeenCalled()
+    expect(refresh).not.toHaveBeenCalled()
+    expect(onSuccess).not.toHaveBeenCalled()
+    expect(onFailure).not.toHaveBeenCalled()
+  })
+
+  it("takes the failure path on a second refusal, without a third call", async () => {
+    const requestStepUp = vi.fn().mockResolvedValue(true)
+    const call = vi.fn(async () => STEP_UP)
+    const { result } = renderWith({ requestStepUp })
+
+    act(() => result.current.run(call))
+
+    await waitFor(() => expect(toastError).toHaveBeenCalledWith("Step-up copy"))
+    expect(call).toHaveBeenCalledTimes(2)
+    expect(requestStepUp).toHaveBeenCalledTimes(1)
+    expect(refresh).toHaveBeenCalled()
+  })
+
+  it("doesn't turn a synchronous throw from the thunk on retry into the toast", async () => {
+    const requestStepUp = vi.fn().mockResolvedValue(true)
+    let calls = 0
+    const call = (): Promise<StepUpResult> => {
+      if (++calls === 2) throw new Error("programming error")
+      return Promise.resolve(STEP_UP)
+    }
+    const { result } = renderWith({ requestStepUp })
+    // React reports the throw as an uncaught error; it is the expected one.
+    const swallow = (event: ErrorEvent) => event.preventDefault()
+    window.addEventListener("error", swallow)
+
+    act(() => result.current.run(call))
+
+    await waitFor(() => expect(calls).toBe(2))
+    await new Promise((resolve) => setTimeout(resolve))
+    window.removeEventListener("error", swallow)
+    expect(toastError).not.toHaveBeenCalled()
+  })
+
+  it("takes the failure path at once with no provider", async () => {
+    const call = vi.fn(async () => STEP_UP)
+    const { result } = renderWith(null)
+
+    act(() => result.current.run(call))
+
+    await waitFor(() => expect(toastError).toHaveBeenCalledWith("Step-up copy"))
+    expect(call).toHaveBeenCalledTimes(1)
   })
 })

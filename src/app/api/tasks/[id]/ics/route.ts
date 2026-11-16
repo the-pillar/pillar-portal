@@ -1,3 +1,4 @@
+import { cookies } from "next/headers"
 import { after } from "next/server"
 
 import {
@@ -8,6 +9,7 @@ import {
 } from "@/features/tasks"
 import { clientEnv } from "@/lib/env.client"
 import { recordErrorEvent } from "@/lib/record-error-event"
+import { checkIdle, endIdleSession } from "@/lib/supabase/idle"
 import { createClient } from "@/lib/supabase/server"
 
 const NO_STORE = "private, no-store"
@@ -24,7 +26,8 @@ function notFound() {
   })
 }
 
-// Read-only (AD-3): the caller's session reads one task, nothing is written.
+// Read-only (AD-3): the caller's session reads one task, nothing is written
+// (an expired shared session is only signed out).
 // /api isn't proxied, so the session is checked here. A throw still answers
 // the same 404; since Next never sees it, it is logged and recorded in
 // error_events after the response.
@@ -38,6 +41,13 @@ export async function GET(
     const supabase = await createClient()
     const { data, error } = await supabase.auth.getClaims()
     if (error || !data?.claims?.sub) return notFound()
+
+    // /api isn't proxied, so the shared-computer idle limit (AD-22) is checked
+    // here: an expired session is signed out and answered like no session.
+    if ((await checkIdle(supabase)).kind === "expired") {
+      await endIdleSession(supabase, await cookies())
+      return notFound()
+    }
 
     const task = await getTaskForCalendar(id)
     if (!task) return notFound()

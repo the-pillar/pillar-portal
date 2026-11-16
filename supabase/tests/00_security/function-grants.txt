@@ -115,3 +115,28 @@ authenticated public.my_onboarding()
 authenticated public.move_task(uuid, task_column, timestamp with time zone)
 authenticated private.can_create_task()
 authenticated public.can_create_task()
+
+# members_two_factor: an admin resets another admin's two-factor behind a
+# fresh code (private.recent_mfa has no grant: only the definer command calls
+# it; private.can_reset_member_mfa is called by the command and by
+# member_capabilities, which runs with the caller's rights)
+authenticated private.can_reset_member_mfa(uuid)
+authenticated public.reset_member_mfa(uuid)
+
+# members_shared_sessions: the shared-computer idle clock, for any signed-in
+# user (private.shared_session_limit and private.current_session_id have no
+# grant: only these commands call them)
+authenticated public.mark_shared_session()
+authenticated public.renew_shared_session()
+authenticated public.check_session_idle()
+authenticated public.end_shared_session()
+
+# members_lifecycle: an admin changes another member's positions or
+# deactivates them (private.can_manage_member and private.deactivation_guard
+# are called by the commands and by member_capabilities, which runs with the
+# caller's rights; private.release_member_slots has no grant: only
+# deactivate_member calls it)
+authenticated private.can_manage_member(uuid)
+authenticated private.deactivation_guard(uuid)
+authenticated public.update_member(uuid, text[], text)
+authenticated public.deactivate_member(uuid)

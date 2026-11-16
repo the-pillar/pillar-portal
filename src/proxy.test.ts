@@ -1,22 +1,28 @@
 import { readdirSync } from "node:fs"
 
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 // vi.mock factories and vi.hoisted run before this file's imports.
-const { createServerClient, getClaims } = await vi.hoisted(async () => {
-  // Importing next/server throws unless AsyncLocalStorage is on globalThis,
-  // which the Next runtime provides and plain Node doesn't.
-  const { AsyncLocalStorage } = await import("node:async_hooks")
-  globalThis.AsyncLocalStorage ??= AsyncLocalStorage
+const { createServerClient, getClaims, rpc, signOut } = await vi.hoisted(
+  async () => {
+    // Importing next/server throws unless AsyncLocalStorage is on globalThis,
+    // which the Next runtime provides and plain Node doesn't.
+    const { AsyncLocalStorage } = await import("node:async_hooks")
+    globalThis.AsyncLocalStorage ??= AsyncLocalStorage
 
-  const getClaims = vi.fn()
-  return {
-    getClaims,
-    createServerClient: vi.fn<
-      (url: string, key: string, options: unknown) => object
-    >(() => ({ auth: { getClaims } })),
+    const getClaims = vi.fn()
+    const rpc = vi.fn()
+    const signOut = vi.fn()
+    return {
+      getClaims,
+      rpc,
+      signOut,
+      createServerClient: vi.fn<
+        (url: string, key: string, options: unknown) => object
+      >(() => ({ auth: { getClaims, signOut }, rpc })),
+    }
   }
-})
+)
 
 vi.mock("@supabase/ssr", () => ({ createServerClient }))
 vi.mock("@/lib/env.client", () => ({
@@ -78,6 +84,15 @@ function request(
 function passesThrough(response: Response) {
   return response.headers.get("x-middleware-next") === "1"
 }
+
+const SHARED_COOKIE = "pillar-shared-until"
+const SIGNED_IN = { data: { claims: { sub: SUB } }, error: null }
+
+beforeEach(() => {
+  // A personal session unless a test says otherwise.
+  rpc.mockResolvedValue({ data: [], error: null })
+  signOut.mockResolvedValue({ error: null })
+})
 
 afterEach(() => {
   vi.clearAllMocks()
@@ -292,6 +307,169 @@ describe("proxy", () => {
 
     expect(passesThrough(response)).toBe(true)
     expect(response.headers.get("location")).toBeNull()
+  })
+})
+
+describe("shared-computer idle limit (AD-22)", () => {
+  const DEADLINE_ISO = "2026-11-16T10:30:00+00:00"
+  const DEADLINE_MS = Date.parse(DEADLINE_ISO)
+  const withCookies = `${SESSION_COOKIE}=abc; ${SHARED_COOKIE}=${DEADLINE_MS}`
+
+  it("signs out an expired session, then redirects a GET to /login with the idle flag and cleared cookies", async () => {
+    getClaims.mockResolvedValue(SIGNED_IN)
+    rpc.mockResolvedValue({
+      data: [{ expires_at: DEADLINE_ISO, expired: true }],
+      error: null,
+    })
+    signOut.mockImplementation(async () => {
+      cookieMethods().setAll(
+        [
+          {
+            name: SESSION_COOKIE,
+            value: "",
+            options: { path: "/", maxAge: 0 },
+          },
+        ],
+        NO_STORE
+      )
+      return { error: null }
+    })
+
+    const response = await proxy(
+      request("/dashboard?view=board", { cookie: withCookies })
+    )
+
+    expect(signOut).toHaveBeenCalledWith({ scope: "local" })
+    expect(response.status).toBe(307)
+    expect(response.headers.get("location")).toBe(
+      "https://pillar.example/login?next=%2Fdashboard%3Fview%3Dboard&signed_out=idle"
+    )
+    const setCookie = response.headers.get("set-cookie")
+    expect(setCookie).toContain(`${SESSION_COOKIE}=;`)
+    expect(setCookie).toContain(`${SHARED_COOKIE}=;`)
+  })
+
+  it("signs out an expired session on a POST and passes it through", async () => {
+    getClaims.mockResolvedValue(SIGNED_IN)
+    rpc.mockResolvedValue({
+      data: [{ expires_at: DEADLINE_ISO, expired: true }],
+      error: null,
+    })
+
+    const response = await proxy(
+      request("/dashboard", { method: "POST", cookie: withCookies })
+    )
+
+    expect(signOut).toHaveBeenCalledOnce()
+    expect(passesThrough(response)).toBe(true)
+    expect(response.headers.get("location")).toBeNull()
+  })
+
+  it("deletes the auth cookies itself when the local sign-out fails", async () => {
+    getClaims.mockResolvedValue(SIGNED_IN)
+    rpc.mockResolvedValue({
+      data: [{ expires_at: DEADLINE_ISO, expired: true }],
+      error: null,
+    })
+    signOut.mockRejectedValue(new TypeError("fetch failed"))
+
+    const response = await proxy(request("/dashboard", { cookie: withCookies }))
+
+    expect(response.status).toBe(307)
+    expect(response.headers.get("set-cookie")).toContain(`${SESSION_COOKIE}=;`)
+  })
+
+  it("re-sets the deadline cookie unchanged for an active session, without renewing", async () => {
+    getClaims.mockResolvedValue(SIGNED_IN)
+    rpc.mockResolvedValue({
+      data: [{ expires_at: DEADLINE_ISO, expired: false }],
+      error: null,
+    })
+
+    const response = await proxy(
+      request("/dashboard", {
+        cookie: `${SESSION_COOKIE}=abc; ${SHARED_COOKIE}=1`,
+      })
+    )
+
+    expect(passesThrough(response)).toBe(true)
+    expect(response.cookies.get(SHARED_COOKIE)).toMatchObject({
+      value: String(DEADLINE_MS),
+      httpOnly: false,
+      secure: true,
+      sameSite: "lax",
+    })
+    expect(response.cookies.get(SHARED_COOKIE)?.maxAge).toBeUndefined()
+    expect(rpc.mock.calls).toEqual([["check_session_idle"]])
+  })
+
+  it("doesn't re-set a deadline cookie that already holds the same value", async () => {
+    getClaims.mockResolvedValue(SIGNED_IN)
+    rpc.mockResolvedValue({
+      data: [{ expires_at: DEADLINE_ISO, expired: false }],
+      error: null,
+    })
+
+    const response = await proxy(request("/dashboard", { cookie: withCookies }))
+
+    expect(passesThrough(response)).toBe(true)
+    expect(response.cookies.get(SHARED_COOKIE)).toBeUndefined()
+  })
+
+  it("deletes a stale deadline cookie for a personal session", async () => {
+    getClaims.mockResolvedValue(SIGNED_IN)
+
+    const response = await proxy(request("/dashboard", { cookie: withCookies }))
+
+    expect(response.headers.get("set-cookie")).toContain(`${SHARED_COOKIE}=;`)
+  })
+
+  it("writes a refreshed shared session without maxAge, and a personal one with it", async () => {
+    const maxAge = 400 * 24 * 60 * 60
+    const refresh = async () => {
+      cookieMethods().setAll(
+        [
+          {
+            name: SESSION_COOKIE,
+            value: "base64-refreshed",
+            options: { path: "/", sameSite: "lax", maxAge },
+          },
+        ],
+        NO_STORE
+      )
+      return SIGNED_IN
+    }
+    getClaims.mockImplementation(refresh)
+
+    const shared = await proxy(request("/dashboard", { cookie: withCookies }))
+    expect(shared.cookies.get(SESSION_COOKIE)?.maxAge).toBeUndefined()
+
+    createServerClient.mockClear()
+    const personal = await proxy(
+      request("/dashboard", { cookie: `${SESSION_COOKIE}=abc` })
+    )
+    expect(personal.cookies.get(SESSION_COOKIE)?.maxAge).toBe(maxAge)
+  })
+
+  it("passes through, logged, when the check throws", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {})
+    getClaims.mockResolvedValue(SIGNED_IN)
+    rpc.mockRejectedValue(new TypeError("fetch failed"))
+
+    const response = await proxy(request("/dashboard", { cookie: withCookies }))
+
+    expect(passesThrough(response)).toBe(true)
+    expect(signOut).not.toHaveBeenCalled()
+    expect(log).toHaveBeenCalled()
+    log.mockRestore()
+  })
+
+  it("doesn't check the idle clock for a signed-out visitor", async () => {
+    getClaims.mockResolvedValue({ data: null, error: null })
+
+    await proxy(request("/dashboard"))
+
+    expect(rpc).not.toHaveBeenCalled()
   })
 })
 

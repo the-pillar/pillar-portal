@@ -14,15 +14,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Label } from "@/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { PENDING_STYLE } from "@/lib/pending-style"
 import { useCommand } from "@/lib/use-command"
 import {
@@ -37,6 +28,7 @@ import { memberErrorMessage } from "../errors"
 import type { PositionGroup } from "../position-groups"
 import type { PendingMember } from "../queries"
 import { MemberNameEditor } from "./member-name-editor"
+import { PositionPicker, usePositionChoice } from "./position-picker"
 
 type DialogKind = "look-alike" | "decline"
 
@@ -75,9 +67,8 @@ export function PendingMemberCard({
     thrownCode: "members.save_failed",
   })
   const [pickerOpen, setPickerOpen] = useState(false)
-  const [checked, setChecked] = useState<readonly string[]>([])
-  const [chosenPrimary, setChosenPrimary] = useState<string | null>(null)
-  const [primarySelectOpen, setPrimarySelectOpen] = useState(false)
+  const choice = usePositionChoice({ groups: positionGroups })
+  const { checkedPositions, primary } = choice
   const [dialogKind, setDialogKind] = useState<DialogKind>("decline")
   const [dialogOpen, setDialogOpen] = useState(false)
   const rootRef = useRef<HTMLLIElement>(null)
@@ -85,18 +76,6 @@ export function PendingMemberCard({
   const declineRef = useRef<HTMLButtonElement>(null)
   const id = useId()
   const pickerId = `${id}-picker`
-  const primaryId = `${id}-primary`
-
-  // The checked positions in the picker's order, whatever order they were
-  // checked in.
-  const checkedPositions = positionGroups
-    .flatMap((group) => group.positions)
-    .filter((position) => checked.includes(position.id))
-  const primary =
-    checkedPositions.length === 1
-      ? checkedPositions[0].id
-      : (checkedPositions.find((position) => position.id === chosenPrimary)
-          ?.id ?? null)
 
   // However the card goes away (approved, declined, or gone in a re-read
   // after a refusal), focus inside it, or in one of its popups (the
@@ -121,18 +100,6 @@ export function PendingMemberCard({
   function togglePicker() {
     if (isPending) return
     setPickerOpen((open) => !open)
-  }
-
-  function setPositionChecked(positionId: string, next: boolean) {
-    if (isPending) return
-    setChecked((current) =>
-      next
-        ? current.includes(positionId)
-          ? current
-          : [...current, positionId]
-        : current.filter((held) => held !== positionId)
-    )
-    if (!next && chosenPrimary === positionId) setChosenPrimary(null)
   }
 
   function openDialog(kind: DialogKind) {
@@ -223,80 +190,13 @@ export function PendingMemberCard({
 
       {pickerOpen && (
         <div id={pickerId} className="mt-4 flex flex-col gap-4">
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {positionGroups.map((group) => (
-              <fieldset key={group.id} className="flex min-w-0 flex-col">
-                <legend className="mb-1 text-sm font-semibold">
-                  {group.label}
-                </legend>
-                {group.positions.map((position) => {
-                  const checkboxId = `${id}-${position.id}`
-                  return (
-                    <div
-                      key={position.id}
-                      className="flex min-h-11 items-center gap-3"
-                    >
-                      <Checkbox
-                        id={checkboxId}
-                        checked={checked.includes(position.id)}
-                        aria-disabled={pending}
-                        className={PENDING_STYLE}
-                        onCheckedChange={(value) =>
-                          setPositionChecked(position.id, value === true)
-                        }
-                      />
-                      <Label
-                        htmlFor={checkboxId}
-                        className="min-h-11 flex-1 cursor-pointer leading-snug font-normal"
-                      >
-                        {position.title}
-                      </Label>
-                    </div>
-                  )
-                })}
-              </fieldset>
-            ))}
-          </div>
-
-          {checkedPositions.length === 1 && (
-            <p className="text-sm">
-              Primary position: {checkedPositions[0].title}
-            </p>
-          )}
-          {checkedPositions.length > 1 && (
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor={primaryId}>Primary position</Label>
-              <Select
-                value={primary ?? ""}
-                open={primarySelectOpen}
-                onOpenChange={(next) =>
-                  setPrimarySelectOpen(next && !isPending)
-                }
-                onValueChange={(value) => {
-                  if (!isPending) setChosenPrimary(value)
-                }}
-              >
-                <SelectTrigger
-                  id={primaryId}
-                  aria-disabled={pending}
-                  className={cn("min-h-11 w-full sm:w-80", PENDING_STYLE)}
-                >
-                  <SelectValue placeholder="Choose one" />
-                </SelectTrigger>
-                <SelectContent data-popup-owner={id}>
-                  {checkedPositions.map((position) => (
-                    <SelectItem
-                      key={position.id}
-                      value={position.id}
-                      className="min-h-11"
-                    >
-                      {position.title}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
+          <PositionPicker
+            idPrefix={id}
+            groups={positionGroups}
+            choice={choice}
+            isPending={isPending}
+            popupOwner={id}
+          />
 
           <Button
             ref={approveRef}
