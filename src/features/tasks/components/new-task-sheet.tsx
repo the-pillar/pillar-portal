@@ -38,6 +38,7 @@ import {
 import type { TaskFormOptions } from "../queries/task-form"
 import { copyForMessengerAction } from "./messenger-toast"
 import { TaskForm } from "./task-form"
+import { useSwipeDown } from "./use-swipe-down"
 
 const FORM_ID = "new-task-form"
 const ID_PREFIX = "new-task"
@@ -127,18 +128,25 @@ export function NewTaskSheet({
     }
   }, [left, keepAndAsk, session])
 
-  // Everything that dismisses by choice (Escape, Close, an outside tap) asks
-  // first when there is something to lose.
-  function requestClose() {
-    if (dirty) setAsking(true)
-    else leave()
-  }
-
   const leave = useCallback(() => {
     setAsking(false)
     setDirty(false)
     closeNewTask()
   }, [])
+
+  // Everything that dismisses by choice (Escape, Close, an outside tap, a
+  // swipe down) asks first when there is something to lose. Answers whether
+  // the sheet is closing now.
+  function requestClose(): boolean {
+    if (dirty) {
+      setAsking(true)
+      return false
+    }
+    leave()
+    return true
+  }
+
+  const { sheetRef, swipeHandlers } = useSwipeDown<HTMLDivElement>(requestClose)
 
   const onCreated = useCallback(
     (id: string, message: string | null) => {
@@ -177,6 +185,7 @@ export function NewTaskSheet({
         }}
       >
         <SheetContent
+          ref={sheetRef}
           side="bottom"
           showCloseButton={false}
           data-slot="new-task-sheet"
@@ -203,27 +212,37 @@ export function NewTaskSheet({
           // (DESIGN.md › Sticky budget), so the whole sheet scrolls.
           className="inset-0! h-dvh! w-auto! max-w-none! gap-0 rounded-t-xl p-0 md:left-auto! md:w-120! md:rounded-none [@media(max-height:479px)]:overflow-y-auto"
         >
+          {/* Below `md` the handle and header are the grab strip: swipe down
+              to close (the close button stays the tap alternative). */}
           <div
-            aria-hidden="true"
-            className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-border md:hidden"
-          />
-          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border bg-card px-4 py-1">
-            <SheetTitle className="text-heading-sm font-bold">
-              New task
-            </SheetTitle>
-            <SheetDescription className="sr-only">
-              Add a task for the Board and the Planner.
-            </SheetDescription>
-            <SheetClose asChild>
-              <Button
-                type="button"
-                variant="ghost"
-                aria-label="Close New task"
-                className="size-11"
-              >
-                <X aria-hidden="true" />
-              </Button>
-            </SheetClose>
+            data-slot="new-task-grab"
+            className="shrink-0 border-b border-border bg-card max-md:touch-none max-md:select-none"
+            {...swipeHandlers}
+          >
+            <div
+              aria-hidden="true"
+              className="flex justify-center pt-2 pb-1 md:hidden"
+            >
+              <div className="h-1 w-10 rounded-full bg-border" />
+            </div>
+            <div className="flex items-center justify-between gap-2 px-4 py-1">
+              <SheetTitle className="text-heading-sm font-bold">
+                New task
+              </SheetTitle>
+              <SheetDescription className="sr-only">
+                Add a task for the Board and the Planner.
+              </SheetDescription>
+              <SheetClose asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  aria-label="Close New task"
+                  className="size-11"
+                >
+                  <X aria-hidden="true" />
+                </Button>
+              </SheetClose>
+            </div>
           </div>
           <div className="min-h-0 flex-1 scroll-py-4 overflow-y-auto px-4 py-4 [&_[data-slot=select-trigger]]:w-full max-md:[&_[data-slot=select-trigger]]:text-base [@media(max-height:479px)]:flex-none [@media(max-height:479px)]:overflow-visible">
             {session && (

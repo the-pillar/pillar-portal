@@ -310,6 +310,103 @@ describe("NewTaskSheet", () => {
     expect(screen.getByLabelText("Title")).toHaveValue("Half a thought")
   })
 
+  describe("swipe down (below md)", () => {
+    function stubPhone(phone: boolean) {
+      window.matchMedia = vi.fn((query: string) => ({
+        matches: phone && query.includes("max-width: 767px"),
+        media: query,
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })) as unknown as typeof window.matchMedia
+    }
+
+    async function openPhoneSheet(phone = true) {
+      stubPhone(phone)
+      openFromUrl()
+      renderSheet()
+      const sheet = await screen.findByRole("dialog")
+      Object.defineProperty(sheet, "offsetHeight", { value: 800 })
+      const strip = sheet.querySelector<HTMLElement>(
+        '[data-slot="new-task-grab"]'
+      )!
+      return { sheet, strip }
+    }
+
+    // jsdom stamps events with the real clock, so the last move's speed is
+    // set by direction: `settle` ends with a small move back up (no flick).
+    function swipe(strip: HTMLElement, dy: number, settle = false) {
+      const pointer = { pointerId: 1, pointerType: "touch" }
+      fireEvent.pointerDown(strip, { ...pointer, clientY: 100, button: 0 })
+      fireEvent.pointerMove(strip, { ...pointer, clientY: 100 + dy + 10 })
+      if (settle) {
+        fireEvent.pointerMove(strip, { ...pointer, clientY: 100 + dy })
+      }
+      fireEvent.pointerUp(strip, { ...pointer, clientY: 100 + dy })
+    }
+
+    it("follows the finger and closes past a quarter of the height", async () => {
+      const { sheet, strip } = await openPhoneSheet()
+      fireEvent.pointerDown(strip, {
+        pointerId: 1,
+        clientY: 100,
+        button: 0,
+        pointerType: "touch",
+      })
+      fireEvent.pointerMove(strip, {
+        pointerId: 1,
+        clientY: 400,
+        pointerType: "touch",
+      })
+      expect(sheet.style.transform).toBe("translateY(300px)")
+      fireEvent.pointerUp(strip, {
+        pointerId: 1,
+        clientY: 400,
+        pointerType: "touch",
+      })
+
+      await waitFor(() =>
+        expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+      )
+      expect(screen.queryByText("Discard this task?")).not.toBeInTheDocument()
+      expect(window.location.search).toBe("")
+    })
+
+    it("springs back from a short, slow drag", async () => {
+      const { sheet, strip } = await openPhoneSheet()
+      swipe(strip, 60, true)
+
+      expect(sheet.style.transform).toBe("")
+      expect(screen.getByRole("dialog")).toBeInTheDocument()
+      expect(window.location.search).toBe("?new=task")
+    })
+
+    it("asks to discard instead of closing when something was typed", async () => {
+      const { sheet, strip } = await openPhoneSheet()
+      const user = userEvent.setup()
+      await user.type(screen.getByLabelText("Title"), "Typed")
+
+      swipe(strip, 400)
+
+      expect(
+        await screen.findByRole("alertdialog", { name: "Discard this task?" })
+      ).toBeInTheDocument()
+      expect(sheet.style.transform).toBe("")
+      expect(screen.getByLabelText("Title")).toHaveValue("Typed")
+    })
+
+    it("leaves the panel alone from md", async () => {
+      const { sheet, strip } = await openPhoneSheet(false)
+      swipe(strip, 400)
+
+      expect(sheet.style.transform).toBe("")
+      expect(screen.getByRole("dialog")).toBeInTheDocument()
+    })
+  })
+
   it("asks on Escape with text typed: Keep editing is focused, Discard task closes", async () => {
     openFromUrl()
     renderSheet()
