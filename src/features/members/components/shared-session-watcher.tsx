@@ -48,15 +48,19 @@ function readDeadline(): number | null {
  *   or any trusted input renews and closes it in every tab.
  * - 2 s past the deadline it reloads, and the proxy sends the tab to /login
  *   with the idle line. A 401 from the activity post goes there directly.
+ * - A shared session's page restored from the back/forward cache reloads, so
+ *   Back after a sign-out never shows the last person's page.
  */
 export function SharedSessionWatcher() {
   const [deadline, setDeadline] = useState<number | null>(null)
   const [warning, setWarning] = useState(false)
   const lastPost = useRef(0)
   const warningRef = useRef(false)
+  const seenShared = useRef(false)
 
   const evaluate = useCallback(() => {
     const next = readDeadline()
+    if (next !== null) seenShared.current = true
     setDeadline(next)
     if (next === null) {
       warningRef.current = false
@@ -109,6 +113,17 @@ export function SharedSessionWatcher() {
       document.removeEventListener("visibilitychange", onVisible)
     }
   }, [evaluate])
+
+  // Back after a sign-out can restore this page from the back/forward cache,
+  // showing the last person's page with no session behind it. A restored page
+  // that belonged to a shared session reloads, so the proxy decides.
+  useEffect(() => {
+    function onPageShow(event: PageTransitionEvent) {
+      if (event.persisted && seenShared.current) window.location.reload()
+    }
+    window.addEventListener("pageshow", onPageShow)
+    return () => window.removeEventListener("pageshow", onPageShow)
+  }, [])
 
   // Trusted input renews, at most once a minute (at once while warning).
   useEffect(() => {

@@ -186,4 +186,32 @@ describe("SharedSessionWatcher", () => {
 
     expect(replace).toHaveBeenCalledExactlyOnceWith("/login?signed_out=idle")
   })
+
+  function restoreFromCache(persisted: boolean) {
+    act(() => {
+      const event = new Event("pageshow") as PageTransitionEvent
+      Object.defineProperty(event, "persisted", { value: persisted })
+      window.dispatchEvent(event)
+    })
+  }
+
+  it("reloads a shared session's page restored from the back/forward cache, even after sign-out removed the cookie", async () => {
+    setDeadline(NOW + 30 * MIN)
+    render(<SharedSessionWatcher />)
+    await tick(1000)
+
+    setDeadline(null)
+    restoreFromCache(false)
+    expect(reload).not.toHaveBeenCalled()
+
+    restoreFromCache(true)
+    expect(reload).toHaveBeenCalledOnce()
+  })
+
+  it("leaves a personal session's restored page alone", async () => {
+    render(<SharedSessionWatcher />)
+    await tick(1000)
+    restoreFromCache(true)
+    expect(reload).not.toHaveBeenCalled()
+  })
 })
