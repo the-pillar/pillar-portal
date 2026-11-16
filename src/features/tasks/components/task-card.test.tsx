@@ -69,6 +69,14 @@ describe("TaskCard", () => {
     expect(ref.current).toBe(link)
   })
 
+  it("carries the view's URL as from when given one", () => {
+    render(<TaskCard task={TASK} from="/dashboard" />)
+
+    expect(
+      screen.getByRole("link", { name: "Lay out the spread" })
+    ).toHaveAttribute("href", `/dashboard/tasks/${TASK.id}?from=%2Fdashboard`)
+  })
+
   it("links to Task detail, named by the title alone", () => {
     render(<TaskCard task={TASK} />)
 

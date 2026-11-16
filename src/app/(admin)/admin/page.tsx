@@ -77,11 +77,14 @@ async function AdminHomeBody({ tourAgain }: { tourAgain: boolean }) {
 
   const onboard = onboarding?.tourAndChecklist ? onboarding : null
 
+  // One grid: "Needs you" and, from lg, the checklist beside it. The tour is
+  // a portal, so it takes no cell.
   return (
-    <>
+    <div className="mt-6 grid items-start gap-6 lg:grid-cols-2">
       <AdminHomeCards cards={cards} />
       {onboard && !onboard.checklistDone && (
         <OnboardingChecklist
+          className="max-w-xl lg:mt-11"
           items={{
             twoFactor: onboard.twoFactor,
             createdTask,
@@ -104,7 +107,7 @@ async function AdminHomeBody({ tourAgain }: { tourAgain: boolean }) {
           returnFocusId={HEADING_ID}
         />
       )}
-    </>
+    </div>
   )
 }
 

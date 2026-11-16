@@ -2,6 +2,9 @@ import type { WhatsMine } from "../queries/whats-mine"
 import { SlotResponse } from "./slot-response"
 import { TaskCard } from "./task-card"
 
+// What's mine's own URL, for Task detail's return link.
+const WHATS_MINE_HREF = "/dashboard"
+
 /**
  * What's mine's lists (EXPERIENCE.md › What's mine): "Waiting for you", one
  * card per open awaiting slot, then "My tasks", the other tasks where the
@@ -24,13 +27,16 @@ export function WhatsMineTasks({
     <div className="mt-6 flex flex-col gap-8">
       {waiting.length > 0 && (
         <section aria-labelledby="waiting-heading">
-          <h2 id="waiting-heading" className="text-heading-sm text-navy">
+          <h2
+            id="waiting-heading"
+            className="font-heading text-heading-sm text-navy"
+          >
             Waiting for you ({waiting.length})
           </h2>
           <ul className="mt-3 flex flex-col gap-3">
             {waiting.map((item) => (
               <li key={item.slotId}>
-                <TaskCard task={item.task}>
+                <TaskCard task={item.task} from={WHATS_MINE_HREF}>
                   <p className="mt-3 text-sm font-medium">
                     Your slot: {item.roleLabel}
                   </p>
@@ -50,13 +56,16 @@ export function WhatsMineTasks({
 
       {tasks.length > 0 && (
         <section aria-labelledby="my-tasks-heading">
-          <h2 id="my-tasks-heading" className="text-heading-sm text-navy">
+          <h2
+            id="my-tasks-heading"
+            className="font-heading text-heading-sm text-navy"
+          >
             My tasks ({tasks.length})
           </h2>
           <ul className="mt-3 flex flex-col gap-3">
             {tasks.map((task) => (
               <li key={task.id}>
-                <TaskCard task={task} />
+                <TaskCard task={task} from={WHATS_MINE_HREF} />
               </li>
             ))}
           </ul>

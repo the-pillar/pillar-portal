@@ -48,7 +48,7 @@ describe("groupOfferedPositions", () => {
       groups.map((group) => [group.label, group.positions.length])
     ).toEqual([
       ["Staff", 6],
-      ["Desk Editors", 5],
+      ["Desk editors", 5],
       ["Heads", 5],
       ["Top editors", 2],
       ["Management", 3],

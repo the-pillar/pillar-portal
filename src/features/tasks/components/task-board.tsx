@@ -57,6 +57,7 @@ import {
 } from "../board-dnd"
 import { highlightedIds } from "../board-highlights"
 import { pushBoardParams, replaceBoardParams } from "../board-url"
+import { boardHref } from "../return-link"
 import { clearCreatedTask, subscribeCreatedTask } from "../created-task-signal"
 import {
   taskErrorMessage,
@@ -637,6 +638,7 @@ export function TaskBoard({
                 isPending={isPending}
                 landedId={landedId}
                 highlighted={highlighted}
+                viewOwner={ownerFilterParam(filter)}
                 addOwner={
                   canCreate && column === "to_do"
                     ? filter.kind === "section" || filter.kind === "desk"
@@ -709,6 +711,7 @@ function BoardColumn({
   isPending,
   landedId,
   highlighted,
+  viewOwner,
   addOwner,
   onMove,
   onAnimationEnd,
@@ -720,6 +723,8 @@ function BoardColumn({
   isPending: boolean
   landedId: string | null
   highlighted: ReadonlySet<string>
+  /** The Board's owner chip as shown (`ownerFilterParam`), for return links. */
+  viewOwner: string
   /**
    * To Do's **+ Add a task** (undefined elsewhere, or without
    * `can_create_task`): the active chip's owner, "" for none.
@@ -788,6 +793,7 @@ function BoardColumn({
               isPending={isPending}
               landed={landedId === card.id}
               highlighted={highlighted.has(card.id)}
+              viewOwner={viewOwner}
               onMove={onMove}
               onAnimationEnd={onAnimationEnd}
             />
@@ -815,6 +821,7 @@ function BoardCardItem({
   isPending,
   landed,
   highlighted,
+  viewOwner,
   onMove,
   onAnimationEnd,
 }: {
@@ -822,6 +829,7 @@ function BoardCardItem({
   isPending: boolean
   landed: boolean
   highlighted: boolean
+  viewOwner: string
   onMove: (card: BoardCard, toColumn: TaskColumn, how: HowMoved) => void
   onAnimationEnd: (id: string) => void
 }) {
@@ -859,6 +867,7 @@ function BoardCardItem({
       <TaskCard
         task={card}
         showStatus={false}
+        from={boardHref({ owner: viewOwner, column: card.column, id: card.id })}
         titleLinkProps={titleLinkProps}
         // A card saving offers no move.
         moves={isPending ? [] : card.moves}

@@ -184,6 +184,23 @@
   }
 }
 
+/* Task detail's sticky action bar (DESIGN.md › Sticky action bar) takes the
+   tab bar's place while it is fixed: the tab bar hides (one fixed bar at
+   most), and content and scrollers clear the bar's measured height
+   (--action-bar-height, set by TaskColumnControl) plus 8px. A viewer with no
+   bar keeps the tab bar. */
+@media (max-width: 767px) and (min-height: 480px) {
+  body:has([data-action-bar]) [data-bottom-tab-bar] {
+    display: none;
+  }
+  html:has([data-action-bar]) {
+    scroll-padding-bottom: calc(var(--action-bar-height, 7rem) + 8px);
+  }
+  html:has([data-action-bar]) body main {
+    padding-bottom: calc(var(--action-bar-height, 7rem) + 8px);
+  }
+}
+
 /* The floating New task button (DESIGN.md › New task button) sits 16px from
    the edge and is 44px tall. Below md, while it shows, content and scrollers
    clear it too (Sticky budget); an open sheet, menu or dialog hides it. */
@@ -402,6 +419,16 @@
 }
 [data-avatar="8"] {
   --avatar: var(--color-avatar-8);
+}
+
+/* "You're on it." check on Task detail (DESIGN.md › Motion). */
+@keyframes check-pop {
+  from {
+    transform: scale(var(--motion-check-scale));
+  }
+}
+.check-pop {
+  animation: check-pop var(--motion-check) var(--ease-overshoot);
 }
 
 /* The staff first-run card's tips rise in one after another (DESIGN.md ›

@@ -222,7 +222,10 @@ describe("HandedBackQueue", () => {
     const row = rowFor("3.7 check (edit) renamed")
     expect(
       within(row).getByRole("link", { name: "3.7 check (edit) renamed" })
-    ).toHaveAttribute("href", `/dashboard/tasks/${RENAMED.taskId}`)
+    ).toHaveAttribute(
+      "href",
+      `/dashboard/tasks/${RENAMED.taskId}?from=%2Fadmin%2Ftasks`
+    )
     expect(
       within(row).getByText("Cartoonist · Editor-in-Chief")
     ).toBeInTheDocument()

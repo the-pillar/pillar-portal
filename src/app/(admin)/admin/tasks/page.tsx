@@ -1,5 +1,6 @@
 import type { Metadata } from "next"
 
+import { Button } from "@/components/ui/button"
 import { recordCopiedTaskAction } from "@/features/members"
 import {
   canCreateTask,
@@ -59,10 +60,9 @@ export default async function AdminTasksPage() {
       />
       <ReviewQueue tasks={reviewQueue} focusTargetId={HEADING_ID} />
       {canCreate && (
-        <NewTaskLink
-          label="New task"
-          className="mt-8 inline-flex min-h-11 items-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-        />
+        <Button asChild className="mt-8 min-h-11 px-4">
+          <NewTaskLink label="New task" />
+        </Button>
       )}
     </>
   )

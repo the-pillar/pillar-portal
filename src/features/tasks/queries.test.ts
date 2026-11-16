@@ -179,6 +179,9 @@ const TASK_ROW = {
   revision_note_by: null,
   revision_note_at: null,
   updated_at: "2026-10-30T02:15:42.123456+00:00",
+  done_at: null,
+  owning_section_id: null,
+  owning_desk_id: "layout",
   sections: null,
   desks: { name: "Layout" },
 }
@@ -303,7 +306,7 @@ describe("getTaskDetail", () => {
     const tasks = calls.find((c) => c.table === "tasks")!
     expect(tasks.calls).toContainEqual([
       "select",
-      "id, title, description, due_at, reference_url, column, revision_note, revision_note_by, revision_note_at, updated_at, moved_at, sections(name), desks(name)",
+      "id, title, description, due_at, reference_url, column, revision_note, revision_note_by, revision_note_at, updated_at, moved_at, done_at, owning_section_id, owning_desk_id, sections(name), desks(name)",
     ])
     expect(tasks.calls).toContainEqual(["eq", "id", TASK_ID])
     const slots = calls.find((c) => c.table === "task_assignments")!
@@ -351,8 +354,10 @@ describe("getTaskDetail", () => {
       title: "Lay out the spread",
       description: "Two pages.",
       ownerName: "Layout",
+      ownerId: "layout",
       dueAt: "2026-10-31T15:30:00+00:00",
       referenceUrl: "https://example.com/brief",
+      doneAt: null,
       column: "to_do",
       revisionNote: null,
       slots: [
@@ -361,6 +366,7 @@ describe("getTaskDetail", () => {
           role: "layout_artist",
           memberId: HEAD_LAYOUT,
           memberName: "Head Layout Artist",
+          initials: "HA",
           state: "on_it",
           reason: null,
           updatedAt: "2026-10-30T02:15:42.000001+00:00",
@@ -370,6 +376,7 @@ describe("getTaskDetail", () => {
           role: "writer",
           memberId: STAFF_WRITER,
           memberName: "Staff Writer",
+          initials: "SW",
           state: "needs_reassignment",
           reason: "Exams all week",
           updatedAt: "2026-10-30T02:15:42.000002+00:00",
@@ -379,6 +386,7 @@ describe("getTaskDetail", () => {
           role: "cartoonist",
           memberId: FORMER,
           memberName: "Former member",
+          initials: "FM",
           state: "awaiting_response",
           reason: null,
           updatedAt: "2026-10-30T02:15:42+00:00",

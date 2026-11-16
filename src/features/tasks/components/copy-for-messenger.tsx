@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import { MessageSquareShare } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import { toast } from "@/components/ui/toast"
 
 import { copyText, MESSENGER_COPIED, MESSENGER_HINT } from "../messenger"
@@ -44,15 +45,16 @@ export function CopyForMessenger({
 
   return (
     <div className="flex flex-col gap-2">
-      <button
+      <Button
         ref={button}
         type="button"
+        variant="outline"
         onClick={copy}
-        className="inline-flex min-h-11 items-center gap-2 self-start rounded-md border border-input bg-background px-3 text-sm font-medium focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden"
+        className="min-h-11 px-3"
       >
         <MessageSquareShare aria-hidden className="size-4" />
         Copy for Messenger
-      </button>
+      </Button>
       {manual && (
         <div className="flex flex-col gap-1">
           <label htmlFor="messenger-message" className="sr-only">

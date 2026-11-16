@@ -3,6 +3,7 @@ import {
   getMyOnboarding,
   recordOnboardingAction,
 } from "@/features/members"
+import { EmptyState } from "@/components/empty-state"
 import { getWhatsMine, WhatsMineTasks } from "@/features/tasks"
 
 const HEADING_ID = "whats-mine-heading"
@@ -41,13 +42,12 @@ export async function WhatsMineView() {
         />
       )}
       {empty ? (
-        <div className="mt-6 text-muted-foreground">
-          <h2 className="text-heading-sm">Nothing on your plate right now.</h2>
-          <p className="mt-1">
+        <EmptyState title="Nothing on your plate right now." className="mt-6">
+          <p className="text-muted-foreground">
             New assignments will show up here — your editor or head will also
             message you.
           </p>
-        </div>
+        </EmptyState>
       ) : (
         <WhatsMineTasks whatsMine={whatsMine} focusTargetId={HEADING_ID} />
       )}

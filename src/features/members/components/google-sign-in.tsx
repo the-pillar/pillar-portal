@@ -56,7 +56,9 @@ function GoogleButton() {
         if (pending) event.preventDefault()
       }}
       className={cn(
-        "min-h-11 w-full gap-3 border-card-edge bg-card text-base shadow-card",
+        // Google's branding rules allow a white fill only, with its own
+        // neutral edge (the field edge), never the navy primary.
+        "min-h-12 w-full gap-3 border-input bg-card text-base font-semibold",
         PENDING_STYLE
       )}
     >

@@ -1,6 +1,7 @@
 "use client"
 
 import { CalendarPlus, EllipsisVertical } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import { toast } from "@/components/ui/toast"
 
 import {
@@ -32,9 +33,11 @@ export function AddToCalendarMenu({
 }) {
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger className="inline-flex min-h-11 items-center gap-2 rounded-md border border-input bg-background px-3 text-sm font-medium focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden">
-        <CalendarPlus aria-hidden className="size-4" />
-        Add to Google Calendar
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" className="min-h-11 px-3">
+          <CalendarPlus aria-hidden className="size-4" />
+          Add to Google Calendar
+        </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="min-w-56">
         <DropdownMenuItem asChild>

@@ -9,6 +9,7 @@ import { formatInPht } from "@/lib/time"
 import { cn } from "@/lib/utils"
 
 import type { TaskCardData } from "../queries/shared"
+import { taskHref } from "../return-link"
 import {
   SENT_BACK_LABEL,
   SLOT_STATE_FAMILIES,
@@ -60,6 +61,7 @@ export function TaskCard({
   showStatus = true,
   moves,
   onMove,
+  from,
 }: {
   task: TaskCardData
   children?: React.ReactNode
@@ -72,6 +74,11 @@ export function TaskCard({
   showStatus?: boolean
   moves?: readonly TaskColumn[]
   onMove?: (toColumn: TaskColumn) => void
+  /**
+   * The URL of the view this card sits in, which Task detail's return link
+   * goes back to. Built by the view from its own state when the card renders.
+   */
+  from?: string
 }) {
   const Heading = headingLevel === 4 ? "h4" : "h3"
   // The Sent back badge carries that state; the dot names the column.
@@ -106,7 +113,7 @@ export function TaskCard({
         </p>
         <Heading className="pr-11 text-card-title break-words">
           <Link
-            href={`/dashboard/tasks/${task.id}`}
+            href={taskHref(task.id, from)}
             className="after:absolute after:inset-0 after:rounded-lg focus-visible:outline-hidden"
             {...titleLinkProps}
           >

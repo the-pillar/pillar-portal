@@ -72,6 +72,16 @@ describe("the root not-found page", () => {
     }
   )
 
+  it("makes the way home a primary Button, not a hand-rolled link", async () => {
+    getCurrentMember.mockResolvedValue(null)
+    await renderNotFound()
+
+    expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute(
+      "data-variant",
+      "default"
+    )
+  })
+
   it("falls back to Sign in, and records the fault after the response, when the lookup throws", async () => {
     const error = new Error("members read failed")
     getCurrentMember.mockRejectedValue(error)

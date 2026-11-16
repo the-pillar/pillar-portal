@@ -35,6 +35,7 @@ export function PlannerGrid({
   labelledBy,
   canCreate = false,
   highlightId = null,
+  from,
 }: {
   /** `YYYY-MM`, a Manila month. */
   month: string
@@ -48,6 +49,8 @@ export function PlannerGrid({
   canCreate?: boolean
   /** The task just created, whose chip highlights once. */
   highlightId?: string | null
+  /** The Planner's own URL, passed to each chip for Task detail's return link. */
+  from?: string
 }) {
   const byDay = tasksByDay(tasks)
 
@@ -116,7 +119,7 @@ export function PlannerGrid({
                             task.id === highlightId ? "" : undefined
                           }
                         >
-                          <PlannerChip task={task} />
+                          <PlannerChip task={task} from={from} />
                         </li>
                       ))}
                     </ul>

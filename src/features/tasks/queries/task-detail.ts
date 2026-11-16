@@ -1,6 +1,10 @@
 import "server-only"
 
-import { PRODUCTION_ROLE_LABELS, type ProductionRole } from "@/features/members"
+import {
+  initialsOf,
+  PRODUCTION_ROLE_LABELS,
+  type ProductionRole,
+} from "@/features/members"
 import { createClient } from "@/lib/supabase/server"
 
 import type { SlotState, TaskColumn } from "../status"
@@ -12,6 +16,8 @@ export type TaskDetailSlot = {
   memberId: string
   /** From member_directory; "Former member" when they're no longer listed. */
   memberName: string
+  /** Up to two initials of `memberName`, for the slot's avatar. */
+  initials: string
   state: SlotState
   /**
    * The hand-back reason, only when RLS lets the caller read it (the slot's
@@ -41,9 +47,13 @@ export type TaskDetail = {
   description: string | null
   /** The owning content section's or desk's name. */
   ownerName: string
+  /** Its id, which colors the owner label (`data-owner`). */
+  ownerId: string
   /** UTC ISO timestamp; shown in PHT. */
   dueAt: string
   referenceUrl: string | null
+  /** When it was marked done (UTC ISO), null while it isn't Done. */
+  doneAt: string | null
   column: TaskColumn
   /** Present while the task stands sent back; its status reads "Sent back". */
   revisionNote: TaskRevisionNote | null
@@ -109,7 +119,7 @@ export async function getTaskDetail(id: string): Promise<TaskDetail | null> {
     supabase
       .from("tasks")
       .select(
-        "id, title, description, due_at, reference_url, column, revision_note, revision_note_by, revision_note_at, updated_at, moved_at, sections(name), desks(name)"
+        "id, title, description, due_at, reference_url, column, revision_note, revision_note_by, revision_note_at, updated_at, moved_at, done_at, owning_section_id, owning_desk_id, sections(name), desks(name)"
       )
       .eq("id", id)
       .maybeSingle(),
@@ -187,8 +197,10 @@ export async function getTaskDetail(id: string): Promise<TaskDetail | null> {
     title: task.title,
     description: task.description,
     ownerName: task.sections?.name ?? task.desks?.name ?? "",
+    ownerId: task.owning_section_id ?? task.owning_desk_id ?? "",
     dueAt: task.due_at,
     referenceUrl: task.reference_url,
+    doneAt: task.done_at ?? null,
     column: task.column,
     revisionNote:
       task.revision_note !== null && task.revision_note_at !== null
@@ -206,6 +218,7 @@ export async function getTaskDetail(id: string): Promise<TaskDetail | null> {
       role: slot.role,
       memberId: slot.member_id,
       memberName: nameById.get(slot.member_id) ?? FORMER_MEMBER,
+      initials: initialsOf(nameById.get(slot.member_id) ?? FORMER_MEMBER),
       state: slot.state,
       reason: reasonBySlotId.get(slot.id) ?? null,
       updatedAt: slot.updated_at,

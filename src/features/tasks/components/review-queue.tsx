@@ -2,6 +2,9 @@ import type { TaskCardData } from "../queries/shared"
 import { TaskCard } from "./task-card"
 import { TaskReview } from "./task-review"
 
+// This queue lives on /admin/tasks, which Task detail returns to.
+const ADMIN_TASKS_HREF = "/admin/tasks"
+
 /**
  * `/admin/tasks`' "Waiting for your review (n)": the tasks
  * `getReviewQueue()` returns (task_capabilities' can_review, AD-4), soonest
@@ -26,7 +29,7 @@ export function ReviewQueue({
       <ul className="mt-3 flex flex-col gap-3">
         {tasks.map((task) => (
           <li key={task.id}>
-            <TaskCard task={task}>
+            <TaskCard task={task} from={ADMIN_TASKS_HREF}>
               <TaskReview
                 taskId={task.id}
                 canReview

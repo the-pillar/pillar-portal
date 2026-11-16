@@ -15,6 +15,7 @@ import {
   type PlannerChipStatusKind,
 } from "../planner"
 import type { PlannerCard } from "../queries/planner"
+import { taskHref } from "../return-link"
 
 // Each status's glyph and color, at least 3:1 on the card. To Do takes
 // muted-foreground: the neutral dot's gray is only 2.5:1 on white.
@@ -44,16 +45,19 @@ const GLYPHS: Record<
 export function PlannerChip({
   task,
   variant = "grid",
+  from,
 }: {
   task: PlannerCard
   variant?: "grid" | "row"
+  /** The Planner's own URL (its month and chip), for Task detail's return link. */
+  from?: string
 }) {
   const { icon: Glyph, className } = GLYPHS[plannerChipStatus(task).kind]
   const row = variant === "row"
 
   return (
     <Link
-      href={`/dashboard/tasks/${task.id}`}
+      href={taskHref(task.id, from)}
       aria-label={plannerChipLabel(task)}
       data-owner={task.ownerId}
       data-yours={task.yours ? "" : undefined}
