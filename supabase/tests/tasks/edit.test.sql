@@ -574,9 +574,9 @@ select results_eq(
   $$ select t.title, t.description, t.due_at, t.reference_url,
             t.updated_at = now(),
             (to_jsonb(t) - 'title' - 'description' - 'due_at'
-               - 'reference_url' - 'updated_at' - 'updated_by')
+               - 'reference_url' - 'reference_urls' - 'updated_at' - 'updated_by')
               = (select to_jsonb(b) - 'title' - 'description' - 'due_at'
-                   - 'reference_url' - 'updated_at' - 'updated_by'
+                   - 'reference_url' - 'reference_urls' - 'updated_at' - 'updated_by'
                  from b01_before b)
      from public.tasks t
      where t.id = '00000000-0000-4000-b000-000000000001' $$,

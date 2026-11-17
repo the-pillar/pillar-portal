@@ -463,6 +463,7 @@ export type Database = {
           owning_desk_id: string | null
           owning_section_id: string | null
           reference_url: string | null
+          reference_urls: string[]
           revision_note: string | null
           revision_note_at: string | null
           revision_note_by: string | null
@@ -484,6 +485,7 @@ export type Database = {
           owning_desk_id?: string | null
           owning_section_id?: string | null
           reference_url?: string | null
+          reference_urls?: string[]
           revision_note?: string | null
           revision_note_at?: string | null
           revision_note_by?: string | null
@@ -505,6 +507,7 @@ export type Database = {
           owning_desk_id?: string | null
           owning_section_id?: string | null
           reference_url?: string | null
+          reference_urls?: string[]
           revision_note?: string | null
           revision_note_at?: string | null
           revision_note_by?: string | null
@@ -615,18 +618,31 @@ export type Database = {
           expires_at: string
         }[]
       }
-      create_task: {
-        Args: {
-          description: string
-          due_at: string
-          owning_desk_id: string
-          owning_section_id: string
-          reference_url: string
-          slots: Json
-          title: string
-        }
-        Returns: string
-      }
+      create_task:
+        | {
+            Args: {
+              description: string
+              due_at: string
+              owning_desk_id: string
+              owning_section_id: string
+              reference_url: string
+              slots: Json
+              title: string
+            }
+            Returns: string
+          }
+        | {
+            Args: {
+              description: string
+              due_at: string
+              owning_desk_id: string
+              owning_section_id: string
+              reference_urls: string[]
+              slots: Json
+              title: string
+            }
+            Returns: string
+          }
       deactivate_member: { Args: { member_id: string }; Returns: undefined }
       decline_member: { Args: { member_id: string }; Returns: undefined }
       delete_task: {
@@ -778,17 +794,29 @@ export type Database = {
         }
         Returns: undefined
       }
-      update_task: {
-        Args: {
-          description: string
-          due_at: string
-          reference_url: string
-          slots: Json
-          task_id: string
-          title: string
-        }
-        Returns: boolean
-      }
+      update_task:
+        | {
+            Args: {
+              description: string
+              due_at: string
+              reference_url: string
+              slots: Json
+              task_id: string
+              title: string
+            }
+            Returns: boolean
+          }
+        | {
+            Args: {
+              description: string
+              due_at: string
+              reference_urls: string[]
+              slots: Json
+              task_id: string
+              title: string
+            }
+            Returns: boolean
+          }
     }
     Enums: {
       job_status: "ok" | "failed" | "skipped"
