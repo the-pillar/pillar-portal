@@ -140,3 +140,9 @@ authenticated private.can_manage_member(uuid)
 authenticated private.deactivation_guard(uuid)
 authenticated public.update_member(uuid, text[], text)
 authenticated public.deactivate_member(uuid)
+
+# tasks_reference_links: the list overloads of create_task and update_task
+# (the single-link ones stay until Story 8.12; the link predicates, the
+# backfill and the sync trigger function have no grant)
+authenticated public.create_task(text, text, text, text, timestamp with time zone, text[], jsonb)
+authenticated public.update_task(uuid, text, text, timestamp with time zone, text[], jsonb)
