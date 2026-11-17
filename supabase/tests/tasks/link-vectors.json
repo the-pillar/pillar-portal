@@ -1,0 +1,327 @@
+{
+  "about": "Link vectors for private.is_valid_link (spine AD-24), read by supabase/tests/tasks/reference_links.test.sql and Story 8.15's Vitest. `valid` is what is_valid_link returns for `url` right-padded with 'a' to `pad_to` characters when given; `url` may be null. U+0000 is left out: Postgres text cannot hold it.",
+  "vectors": [
+    {
+      "url": "https://example.com",
+      "valid": true,
+      "why": "https with host only"
+    },
+    {
+      "url": "http://example.com",
+      "valid": true,
+      "why": "http with host only"
+    },
+    {
+      "url": "https://example.com/a/b?x=1&y=2#frag",
+      "valid": true,
+      "why": "path, query and fragment"
+    },
+    {
+      "url": "http://example.com/a/b?x=1#top",
+      "valid": true,
+      "why": "http with path, query and fragment"
+    },
+    {
+      "url": "https://example.com/caf\u00e9/\u65e5\u672c\u8a9e",
+      "valid": true,
+      "why": "non-ASCII path"
+    },
+    {
+      "url": "https://b\u00fccher.example/\u00fc",
+      "valid": true,
+      "why": "non-ASCII host"
+    },
+    {
+      "url": "https://example.com/",
+      "pad_to": 2048,
+      "valid": true,
+      "why": "2048 characters exactly"
+    },
+    {
+      "url": "https://example.com/",
+      "pad_to": 2049,
+      "valid": false,
+      "why": "2049 characters"
+    },
+    {
+      "url": null,
+      "valid": false,
+      "why": "null link"
+    },
+    {
+      "url": "",
+      "valid": false,
+      "why": "empty string"
+    },
+    {
+      "url": "HTTPS://example.com",
+      "valid": false,
+      "why": "scheme is case-sensitive in SQL (the form lowercases it first)"
+    },
+    {
+      "url": "Https://example.com",
+      "valid": false,
+      "why": "mixed-case scheme"
+    },
+    {
+      "url": "ftp://example.com/file",
+      "valid": false,
+      "why": "ftp scheme"
+    },
+    {
+      "url": "mailto:a@example.com",
+      "valid": false,
+      "why": "mailto scheme"
+    },
+    {
+      "url": "javascript:alert(1)",
+      "valid": false,
+      "why": "javascript scheme"
+    },
+    {
+      "url": "example.com/page",
+      "valid": false,
+      "why": "no scheme (the form adds https://)"
+    },
+    {
+      "url": "https:/example.com",
+      "valid": false,
+      "why": "one slash"
+    },
+    {
+      "url": "https://example.com/a https://example.com/b",
+      "valid": false,
+      "why": "two links joined by a space"
+    },
+    {
+      "url": "https://example.com/a\u0001b",
+      "valid": false,
+      "why": "refused character U+0001"
+    },
+    {
+      "url": "https://example.com/a\u0002b",
+      "valid": false,
+      "why": "refused character U+0002"
+    },
+    {
+      "url": "https://example.com/a\u0003b",
+      "valid": false,
+      "why": "refused character U+0003"
+    },
+    {
+      "url": "https://example.com/a\u0004b",
+      "valid": false,
+      "why": "refused character U+0004"
+    },
+    {
+      "url": "https://example.com/a\u0005b",
+      "valid": false,
+      "why": "refused character U+0005"
+    },
+    {
+      "url": "https://example.com/a\u0006b",
+      "valid": false,
+      "why": "refused character U+0006"
+    },
+    {
+      "url": "https://example.com/a\u0007b",
+      "valid": false,
+      "why": "refused character U+0007"
+    },
+    {
+      "url": "https://example.com/a\bb",
+      "valid": false,
+      "why": "refused character U+0008"
+    },
+    {
+      "url": "https://example.com/a\tb",
+      "valid": false,
+      "why": "refused character U+0009"
+    },
+    {
+      "url": "https://example.com/a\nb",
+      "valid": false,
+      "why": "refused character U+000A"
+    },
+    {
+      "url": "https://example.com/a\u000bb",
+      "valid": false,
+      "why": "refused character U+000B"
+    },
+    {
+      "url": "https://example.com/a\fb",
+      "valid": false,
+      "why": "refused character U+000C"
+    },
+    {
+      "url": "https://example.com/a\rb",
+      "valid": false,
+      "why": "refused character U+000D"
+    },
+    {
+      "url": "https://example.com/a\u000eb",
+      "valid": false,
+      "why": "refused character U+000E"
+    },
+    {
+      "url": "https://example.com/a\u000fb",
+      "valid": false,
+      "why": "refused character U+000F"
+    },
+    {
+      "url": "https://example.com/a\u0010b",
+      "valid": false,
+      "why": "refused character U+0010"
+    },
+    {
+      "url": "https://example.com/a\u0011b",
+      "valid": false,
+      "why": "refused character U+0011"
+    },
+    {
+      "url": "https://example.com/a\u0012b",
+      "valid": false,
+      "why": "refused character U+0012"
+    },
+    {
+      "url": "https://example.com/a\u0013b",
+      "valid": false,
+      "why": "refused character U+0013"
+    },
+    {
+      "url": "https://example.com/a\u0014b",
+      "valid": false,
+      "why": "refused character U+0014"
+    },
+    {
+      "url": "https://example.com/a\u0015b",
+      "valid": false,
+      "why": "refused character U+0015"
+    },
+    {
+      "url": "https://example.com/a\u0016b",
+      "valid": false,
+      "why": "refused character U+0016"
+    },
+    {
+      "url": "https://example.com/a\u0017b",
+      "valid": false,
+      "why": "refused character U+0017"
+    },
+    {
+      "url": "https://example.com/a\u0018b",
+      "valid": false,
+      "why": "refused character U+0018"
+    },
+    {
+      "url": "https://example.com/a\u0019b",
+      "valid": false,
+      "why": "refused character U+0019"
+    },
+    {
+      "url": "https://example.com/a\u001ab",
+      "valid": false,
+      "why": "refused character U+001A"
+    },
+    {
+      "url": "https://example.com/a\u001bb",
+      "valid": false,
+      "why": "refused character U+001B"
+    },
+    {
+      "url": "https://example.com/a\u001cb",
+      "valid": false,
+      "why": "refused character U+001C"
+    },
+    {
+      "url": "https://example.com/a\u001db",
+      "valid": false,
+      "why": "refused character U+001D"
+    },
+    {
+      "url": "https://example.com/a\u001eb",
+      "valid": false,
+      "why": "refused character U+001E"
+    },
+    {
+      "url": "https://example.com/a\u001fb",
+      "valid": false,
+      "why": "refused character U+001F"
+    },
+    {
+      "url": "https://example.com/a b",
+      "valid": false,
+      "why": "refused character U+0020"
+    },
+    {
+      "url": "https://example.com/a\u007fb",
+      "valid": false,
+      "why": "refused character U+007F"
+    },
+    {
+      "url": "https://example.com/a\u0085b",
+      "valid": false,
+      "why": "refused character U+0085"
+    },
+    {
+      "url": "https://example.com/a\u00a0b",
+      "valid": false,
+      "why": "refused character U+00A0"
+    },
+    {
+      "url": "https://example.com/a\u200bb",
+      "valid": false,
+      "why": "refused character U+200B"
+    },
+    {
+      "url": "https://example.com/a\u200cb",
+      "valid": false,
+      "why": "refused character U+200C"
+    },
+    {
+      "url": "https://example.com/a\u200db",
+      "valid": false,
+      "why": "refused character U+200D"
+    },
+    {
+      "url": "https://example.com/a\u200eb",
+      "valid": false,
+      "why": "refused character U+200E"
+    },
+    {
+      "url": "https://example.com/a\u200fb",
+      "valid": false,
+      "why": "refused character U+200F"
+    },
+    {
+      "url": "https://example.com/a\u2028b",
+      "valid": false,
+      "why": "refused character U+2028"
+    },
+    {
+      "url": "https://example.com/a\u2029b",
+      "valid": false,
+      "why": "refused character U+2029"
+    },
+    {
+      "url": "https://example.com/a\u202fb",
+      "valid": false,
+      "why": "refused character U+202F"
+    },
+    {
+      "url": "https://example.com/a\u205fb",
+      "valid": false,
+      "why": "refused character U+205F"
+    },
+    {
+      "url": "https://example.com/a\u3000b",
+      "valid": false,
+      "why": "refused character U+3000"
+    },
+    {
+      "url": "https://example.com/a\ufeffb",
+      "valid": false,
+      "why": "refused character U+FEFF"
+    }
+  ]
+}
