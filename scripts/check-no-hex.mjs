@@ -15,7 +15,10 @@ const { values: args, positionals: dirs } = parseArgs({
   allowPositionals: true,
 })
 const ROOT = path.resolve(args.root ?? path.join(import.meta.dirname, ".."))
-const EXEMPT = new Set(["src/app/globals.css"])
+// The email shell's tokens are generated from globals.css (`pnpm email:tokens`,
+// kept fresh by `pnpm check:email-tokens`), since email clients ignore CSS
+// variables.
+const EXEMPT = new Set(["src/app/globals.css", "src/features/email/tokens.ts"])
 
 // #rgb, #rgba, #rrggbb, #rrggbbaa, not part of a longer word and not an
 // HTML numeric character reference (&#123;).

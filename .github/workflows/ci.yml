@@ -37,6 +37,15 @@ jobs:
       PROTOTYPE_PERSONAS: "true"
       PROTOTYPE_PERSONA_PASSWORD: ci-canary-persona-password
       SUPABASE_SECRET_KEY: sb_secret_ci-canary-not-a-real-key
+      # The email sender: sink mode, and canaries for the rest, so
+      # check:bundle can prove none reaches the browser. The three limits are
+      # under 8 characters, which check:bundle skips.
+      EMAIL_MODE: sink
+      RESEND_API_KEY: re_ci-canary-not-a-real-key
+      EMAIL_FROM: ci-canary-sender@example.invalid
+      EMAIL_DAILY_LIMIT: "100"
+      EMAIL_MONTHLY_LIMIT: "3000"
+      EMAIL_CONFIRMATION_DAILY_CAP: "30"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -60,6 +69,9 @@ jobs:
 
       - name: No hex colors outside globals.css
         run: pnpm check:hex
+
+      - name: Email tokens match globals.css
+        run: pnpm check:email-tokens
 
       - name: Unit and component tests (including axe)
         run: pnpm test

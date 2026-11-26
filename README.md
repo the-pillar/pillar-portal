@@ -69,6 +69,10 @@ is:
 | `PROTOTYPE_PERSONAS` | Server-only, optional. `true` turns on persona sign-in; unset or `false` leaves it off. It may be `true` only when `NEXT_PUBLIC_SUPABASE_URL` is the local stack (`localhost` or `127.0.0.1`) or the staging project |
 | `PROTOTYPE_PERSONA_PASSWORD` | Server-only, at least 16 characters; required when personas are on. Locally it must match `supabase/seed.sql` (`.env.example` has the value); staging's is generated and set on Vercel |
 | `SUPABASE_SECRET_KEY` | Server-only, required. A Supabase secret key (`sb_secret_...`); a publishable key or a legacy JWT key is refused. Locally, `SECRET_KEY` from `pnpm exec supabase status -o env` (`.env.example` leaves it empty, so no secret key is ever committed); on Vercel, a dedicated key from the project's dashboard, set for Production and Preview. Only `src/lib/supabase/admin.ts` reads it |
+| `EMAIL_MODE` | Server-only, `sink` (default) or `send`. Sink runs the whole send path but records each email in memory instead of sending it. `send` really sends through Resend and boot refuses it outside production (a Vercel production deploy on the production Supabase project), or without `RESEND_API_KEY` and `EMAIL_FROM` |
+| `RESEND_API_KEY` | Server-only, `re_...`; required in `send` mode. Only `src/features/email` reads it |
+| `EMAIL_FROM` | Server-only, an address or `Name <address>`; required in `send` mode |
+| `EMAIL_DAILY_LIMIT`, `EMAIL_MONTHLY_LIMIT`, `EMAIL_CONFIRMATION_DAILY_CAP` | Server-only positive integers, defaulting to 100, 3000 and 30: Resend's free plan, counted per UTC day and month, and the daily cap on confirmation and status-code emails inside it |
 
 ### Prototype personas
 
@@ -176,9 +180,10 @@ failing step blocks the merge:
 | `pnpm check:hex` | No hex color in any file under `src/` except `src/app/globals.css`, which holds the design tokens |
 | `pnpm test` | Vitest: unit tests, component tests in jsdom with an axe accessibility check, plus tests that run the lint config and the three check scripts (two against temp-dir fixture projects, `check:env` against this repo) |
 | `pnpm exec supabase db start`, then `pnpm exec supabase db reset` | The migrations apply cleanly to a fresh database |
-| `pnpm exec supabase test db` | pgTAP: the catalog test in `supabase/tests/00_security/` (see below), `supabase/tests/core/` (the org reference data, and the operations records: who reads `job_runs` and `error_events`, their commands and CHECKs), members in `supabase/tests/members/` (the new-user trigger, role derivation, constraints, a table-driven caller matrix of helper results and RLS visibility, approval and the first-admin bootstrap) and tasks in `supabase/tests/tasks/` |
+| `pnpm exec supabase test db` | pgTAP: the catalog test in `supabase/tests/00_security/` (see below), `supabase/tests/core/` (the org reference data, and the operations records: who reads `job_runs` and `error_events`, their commands and CHECKs), members in `supabase/tests/members/` (the new-user trigger, role derivation, constraints, a table-driven caller matrix of helper results and RLS visibility, approval and the first-admin bootstrap) tasks in `supabase/tests/tasks/` and the email outbox in `supabase/tests/email/` (enqueue and its dedupe, claim order and quota, prepare and the marks, RLS) |
 | `pnpm db:types && git diff --exit-code -- src/lib/supabase/database.types.ts` | The committed types match the schema. Run `pnpm db:types` after any schema change and commit the result; Prettier leaves the file alone |
 | `pnpm build` | Runs `pnpm check:env` first (imports `src/lib/env.server.ts`, so a missing or malformed server-only variable stops the build with its name, reading `.env.local` when there is one), then the production build |
+| `pnpm email:tokens` | Regenerates `src/features/email/tokens.ts` (the email shell's colors and font) from the DESIGN.md tokens in `src/app/globals.css`; `pnpm check:email-tokens` fails when the file is stale, and CI runs it |
 | `pnpm check:bundle` | Browser-facing build output (`.next/static`, and prerendered `.html`, `.rsc` and `.body` files) contains no Supabase secret key and no server-only env value of 8+ characters; run after `pnpm build`. It reads `.env.local` when there is one (variables already set in the shell win). Unset server-only variables are listed as not scanned, and under `CI=true` they fail the check (every server-only variable needs a canary value in CI) |
 
 To run the whole gate locally:

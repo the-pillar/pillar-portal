@@ -20,6 +20,25 @@ const PERSONA_PASSWORD_MIN_LENGTH = 16
 const SECRET_KEY_PATTERN = /^sb_secret_[A-Za-z0-9_-]{16,}$/
 const SECRET_KEY_MESSAGE = "must be a secret key (sb_secret_…)"
 
+// The email sender's key (`re_…`) and the From address, bare or as
+// `Name <address>`.
+const RESEND_KEY_PATTERN = /^re_[A-Za-z0-9_-]{8,}$/
+const RESEND_KEY_MESSAGE = "must be a Resend API key (re_…)"
+const EMAIL_FROM_PATTERN =
+  /^(?:[^<>\r\n]+<[^<>\s@]+@[^<>\s@]+>|[^<>\s@]+@[^<>\s@]+)$/
+const EMAIL_FROM_MESSAGE = 'must be an address, or "Name <address>"'
+
+// Resend's free plan: 100 a day, 3,000 a month. Confirmation-class mail
+// (confirmations and status codes) gets its own daily cap inside the day's.
+const DEFAULT_EMAIL_DAILY_LIMIT = 100
+const DEFAULT_EMAIL_MONTHLY_LIMIT = 3000
+const DEFAULT_EMAIL_CONFIRMATION_CAP = 30
+
+const positiveInteger = z.coerce
+  .number({ error: "must be a positive whole number" })
+  .int({ error: "must be a positive whole number" })
+  .positive({ error: "must be a positive whole number" })
+
 // An empty value (`NAME=` in an env file) counts as unset.
 const optional = <T extends z.ZodType>(schema: T) =>
   z.preprocess((value) => (value === "" ? undefined : value), schema.optional())
@@ -45,6 +64,29 @@ export const serverEnvSchema = z.object({
       error: `must be at least ${PERSONA_PASSWORD_MIN_LENGTH} characters`,
     })
   ),
+  // "sink" (the default) runs the whole send path but records instead of
+  // sending. "send" really sends, and boot refuses it outside production.
+  EMAIL_MODE: optional(
+    z.enum(["sink", "send"], { error: 'must be "sink" or "send"' })
+  ),
+  // Resend's API key, for src/features/email only. Needed in send mode.
+  RESEND_API_KEY: optional(
+    z
+      .string({ error: RESEND_KEY_MESSAGE })
+      .regex(RESEND_KEY_PATTERN, { error: RESEND_KEY_MESSAGE })
+  ),
+  // The From address of every email. Needed in send mode.
+  EMAIL_FROM: optional(
+    z
+      .string({ error: EMAIL_FROM_MESSAGE })
+      .max(200, { error: EMAIL_FROM_MESSAGE })
+      .regex(EMAIL_FROM_PATTERN, { error: EMAIL_FROM_MESSAGE })
+  ),
+  // The quota: per UTC day, per UTC month, and the daily cap on confirmation
+  // and status-code mail. Defaults 100, 3000 and 30.
+  EMAIL_DAILY_LIMIT: optional(positiveInteger),
+  EMAIL_MONTHLY_LIMIT: optional(positiveInteger),
+  EMAIL_CONFIRMATION_DAILY_CAP: optional(positiveInteger),
 })
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>
@@ -99,6 +141,26 @@ if (parsed.success && parsed.data.PROTOTYPE_PERSONAS === "true") {
   }
 }
 
+// Real mail leaves only from production, and only when it can actually be
+// sent: the key and the From address must be there.
+if (parsed.success && parsed.data.EMAIL_MODE === "send") {
+  if (
+    !isProductionDeploy(
+      process.env.VERCEL_ENV,
+      process.env.NEXT_PUBLIC_SUPABASE_URL
+    )
+  ) {
+    problems.push(
+      '  - EMAIL_MODE: must not be "send" outside production (a Vercel production deploy on the production Supabase project)'
+    )
+  }
+  for (const name of ["RESEND_API_KEY", "EMAIL_FROM"] as const) {
+    if (parsed.data[name] === undefined) {
+      problems.push(`  - ${name}: required when EMAIL_MODE is send`)
+    }
+  }
+}
+
 if (!parsed.success || problems.length > 0) {
   throw new Error(
     `Invalid server environment variables:\n${problems.join("\n")}`
@@ -126,3 +188,18 @@ export const isProduction = isProductionDeploy(
   process.env.VERCEL_ENV,
   process.env.NEXT_PUBLIC_SUPABASE_URL
 )
+
+/**
+ * The email sender's settings, with the defaults applied. `mode` is `sink`
+ * unless `EMAIL_MODE=send`, which boot has already refused outside
+ * production and without the key and the From address.
+ */
+export const emailConfig = {
+  mode: serverEnv.EMAIL_MODE ?? "sink",
+  resendApiKey: serverEnv.RESEND_API_KEY,
+  from: serverEnv.EMAIL_FROM,
+  dailyLimit: serverEnv.EMAIL_DAILY_LIMIT ?? DEFAULT_EMAIL_DAILY_LIMIT,
+  monthlyLimit: serverEnv.EMAIL_MONTHLY_LIMIT ?? DEFAULT_EMAIL_MONTHLY_LIMIT,
+  confirmationCap:
+    serverEnv.EMAIL_CONFIRMATION_DAILY_CAP ?? DEFAULT_EMAIL_CONFIRMATION_CAP,
+} as const

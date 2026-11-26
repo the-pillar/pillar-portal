@@ -21,6 +21,8 @@ const ENV_MESSAGE =
 const TOAST_MODULE = "src/components/ui/toast.tsx"
 const SONNER_MESSAGE =
   "Import toast from @/components/ui/toast, which owns the kinds, timings and pause rules (DESIGN.md › Toast)."
+const RESEND_MESSAGE =
+  "Only src/features/email imports resend: send mail through the email slice's outbox and sender (AD-2)."
 const GET_SESSION_MESSAGE =
   "Get the caller from supabase.auth.getClaims(), which verifies the token. getSession() trusts the cookie (AD-7)."
 
@@ -67,15 +69,17 @@ const sliceZones = [
 ]
 
 // AD-6: the secret-key client acts as service_role, so only the importers
-// the spine names may use it. Today: the server error recorder and
-// /api/health. Still to come, each added here by its own story: public
-// intake actions, the `files` slice (staging reads and deletes, and the
-// promotion write), the `email` sender, /api/cron/daily and the Resend
-// webhook.
+// the spine names may use it. Today: the server error recorder, /api/health
+// and the `email` sender. Still to come, each added here by its own story:
+// public intake actions, the `files` slice (staging reads and deletes, and
+// the promotion write), /api/cron/daily and the Resend webhook.
 const ADMIN_CLIENT = "./src/lib/supabase/admin.ts"
 const ADMIN_CLIENT_IMPORTERS = [
   "src/lib/record-error-event.ts",
   "src/app/api/health/route.ts",
+  // The outbox drain: claims, prepares and marks rows through service_role
+  // commands (AD-6, Story 4.1).
+  "src/features/email/sender.ts",
   // The client's own test, which checks the key and options it is built
   // with.
   "src/lib/supabase/admin.test.ts",
@@ -103,11 +107,15 @@ function assertKnownSlices(rootDir) {
 
 // `no-restricted-imports` options are replaced, not merged, when two config
 // blocks match one file, so each block states its full list.
-function restrictedImports({ cn, process, sonner = true }) {
+function restrictedImports({ cn, process, sonner = true, resend = true }) {
   const paths = []
   const patterns = []
   if (sonner) {
     paths.push({ name: "sonner", message: SONNER_MESSAGE })
+  }
+  if (resend) {
+    paths.push({ name: "resend", message: RESEND_MESSAGE })
+    patterns.push({ group: ["resend/*"], message: RESEND_MESSAGE })
   }
   if (cn) {
     const message = `Import cn from @/lib/utils, which knows the DESIGN.md tokens.`
@@ -251,6 +259,19 @@ export function createConfig(rootDir) {
           cn: true,
           process: true,
           sonner: false,
+        }),
+      },
+    },
+    {
+      // Only the email slice imports resend. The blocks above replace this
+      // rule's options, so this restates them without the resend entry.
+      name: "pillar/email-slice",
+      files: ["src/features/email/**/*.{js,jsx,mjs,cjs,ts,tsx,mts,cts}"],
+      rules: {
+        "no-restricted-imports": restrictedImports({
+          cn: true,
+          process: true,
+          resend: false,
         }),
       },
     },
