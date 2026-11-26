@@ -26,6 +26,10 @@ const RESEND_KEY_PATTERN = /^re_[A-Za-z0-9_-]{8,}$/
 const RESEND_KEY_MESSAGE = "must be a Resend API key (re_…)"
 const EMAIL_FROM_PATTERN =
   /^(?:[^<>\r\n]+<[^<>\s@]+@[^<>\s@]+>|[^<>\s@]+@[^<>\s@]+)$/
+// The Resend webhook's signing secret (`whsec_…`, from the Resend dashboard).
+const WEBHOOK_SECRET_PATTERN =
+  /^whsec_(?:[A-Za-z0-9+/]{4}){4,}(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/
+const WEBHOOK_SECRET_MESSAGE = "must be a Resend webhook secret (whsec_…)"
 const EMAIL_FROM_MESSAGE = 'must be an address, or "Name <address>"'
 
 // Resend's free plan: 100 a day, 3,000 a month. Confirmation-class mail
@@ -81,6 +85,13 @@ export const serverEnvSchema = z.object({
       .string({ error: EMAIL_FROM_MESSAGE })
       .max(200, { error: EMAIL_FROM_MESSAGE })
       .regex(EMAIL_FROM_PATTERN, { error: EMAIL_FROM_MESSAGE })
+  ),
+  // The signing secret of Resend's webhook, for src/features/email only.
+  // Needed in send mode; without it the webhook refuses every request.
+  RESEND_WEBHOOK_SECRET: optional(
+    z
+      .string({ error: WEBHOOK_SECRET_MESSAGE })
+      .regex(WEBHOOK_SECRET_PATTERN, { error: WEBHOOK_SECRET_MESSAGE })
   ),
   // The quota: per UTC day, per UTC month, and the daily cap on confirmation
   // and status-code mail. Defaults 100, 3000 and 30.
@@ -142,7 +153,7 @@ if (parsed.success && parsed.data.PROTOTYPE_PERSONAS === "true") {
 }
 
 // Real mail leaves only from production, and only when it can actually be
-// sent: the key and the From address must be there.
+// sent: the key, the From address and the webhook secret must be there.
 if (parsed.success && parsed.data.EMAIL_MODE === "send") {
   if (
     !isProductionDeploy(
@@ -154,7 +165,11 @@ if (parsed.success && parsed.data.EMAIL_MODE === "send") {
       '  - EMAIL_MODE: must not be "send" outside production (a Vercel production deploy on the production Supabase project)'
     )
   }
-  for (const name of ["RESEND_API_KEY", "EMAIL_FROM"] as const) {
+  for (const name of [
+    "RESEND_API_KEY",
+    "EMAIL_FROM",
+    "RESEND_WEBHOOK_SECRET",
+  ] as const) {
     if (parsed.data[name] === undefined) {
       problems.push(`  - ${name}: required when EMAIL_MODE is send`)
     }
@@ -198,6 +213,7 @@ export const emailConfig = {
   mode: serverEnv.EMAIL_MODE ?? "sink",
   resendApiKey: serverEnv.RESEND_API_KEY,
   from: serverEnv.EMAIL_FROM,
+  webhookSecret: serverEnv.RESEND_WEBHOOK_SECRET,
   dailyLimit: serverEnv.EMAIL_DAILY_LIMIT ?? DEFAULT_EMAIL_DAILY_LIMIT,
   monthlyLimit: serverEnv.EMAIL_MONTHLY_LIMIT ?? DEFAULT_EMAIL_MONTHLY_LIMIT,
   confirmationCap:

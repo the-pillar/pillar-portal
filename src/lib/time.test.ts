@@ -14,6 +14,8 @@ import {
   dayOfWeek,
   shiftMonth,
   utcToPhtInput,
+  weekdayShort,
+  isBeforePhtHour,
 } from "./time"
 
 // Every test here must pass whatever the process's own timezone is, so every
@@ -345,6 +347,19 @@ describe.each(ZONES)("with TZ=%s", (zone, januaryOffset) => {
       expect(dayOfWeek("2026-11-15")).toBe(0)
       expect(dayOfWeek("2026-11-20")).toBe(5)
       expect(dayOfWeek("2026-11-21")).toBe(6)
+    })
+
+    it("names the weekday in three letters", () => {
+      expect(weekdayShort("2026-11-26")).toBe("Thu")
+      expect(weekdayShort("2026-11-29")).toBe("Sun")
+    })
+
+    it("tells whether an instant is before an hour of Philippine time", () => {
+      // 07:59 PHT is 23:59 UTC the day before; 08:00 PHT is 00:00 UTC.
+      expect(isBeforePhtHour(new Date("2026-11-25T23:59:00Z"), 8)).toBe(true)
+      expect(isBeforePhtHour(new Date("2026-11-26T00:00:00Z"), 8)).toBe(false)
+      expect(isBeforePhtHour(new Date("2026-11-26T15:59:00Z"), 8)).toBe(false)
+      expect(isBeforePhtHour(new Date("2026-11-26T16:00:00Z"), 8)).toBe(true)
     })
 
     it("refuses a day that isn't real", () => {

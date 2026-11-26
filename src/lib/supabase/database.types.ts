@@ -189,6 +189,35 @@ export type Database = {
           },
         ]
       }
+      email_webhook_events: {
+        Row: {
+          event_type: string
+          outbox_id: string | null
+          received_at: string
+          svix_id: string
+        }
+        Insert: {
+          event_type: string
+          outbox_id?: string | null
+          received_at?: string
+          svix_id: string
+        }
+        Update: {
+          event_type?: string
+          outbox_id?: string | null
+          received_at?: string
+          svix_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_webhook_events_outbox_id_fkey"
+            columns: ["outbox_id"]
+            isOneToOne: false
+            referencedRelation: "email_outbox"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       error_events: {
         Row: {
           code: string
@@ -803,6 +832,20 @@ export type Database = {
         Args: { expected_updated_at: string; task_id: string }
         Returns: undefined
       }
+      email_quota_status: {
+        Args: {
+          confirmation_cap: number
+          daily_limit: number
+          monthly_limit: number
+        }
+        Returns: {
+          finishes_on: string
+          limit_today: number
+          provider_day: string
+          queued: number
+          sent_today: number
+        }[]
+      }
       end_job_run: {
         Args: {
           detail?: Json
@@ -911,6 +954,16 @@ export type Database = {
           slot_id: string
         }
         Returns: undefined
+      }
+      record_email_event: {
+        Args: {
+          bounce_subtype: string
+          bounce_type: string
+          event_type: string
+          provider_message_id: string
+          svix_id: string
+        }
+        Returns: string
       }
       record_error_event: {
         Args: {

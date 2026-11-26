@@ -296,6 +296,7 @@ describe("eslint architecture rules", { timeout: 30_000 }, () => {
     "src/lib/record-error-event.ts",
     "src/app/api/health/route.ts",
     "src/features/email/sender.ts",
+    "src/features/email/webhook.ts",
     "src/lib/supabase/admin.test.ts",
   ])("allows %s to import the secret-key client", async (file) => {
     const messages = await lint(

@@ -18,6 +18,8 @@ const {
   OnboardingTour,
   NewTaskTrigger,
   recordOnboardingAction,
+  getEmailQuotaStatus,
+  QuotaMeter,
 } = vi.hoisted(() => ({
   // Two fixture link cards, so the test can see both counts start
   // together, and a list card between them.
@@ -56,6 +58,8 @@ const {
   OnboardingTour: vi.fn(() => null),
   NewTaskTrigger: vi.fn(() => null),
   recordOnboardingAction: vi.fn(),
+  getEmailQuotaStatus: vi.fn(),
+  QuotaMeter: vi.fn(() => null),
 }))
 
 vi.mock("next/server", () => ({
@@ -69,6 +73,7 @@ vi.mock("@/features/members", () => ({
   OnboardingTour,
   recordOnboardingAction,
 }))
+vi.mock("@/features/email", () => ({ getEmailQuotaStatus, QuotaMeter }))
 vi.mock("@/features/tasks", () => ({
   canCreateTask,
   hasCreatedTaskForViewer: hasCreatedTask,
@@ -93,7 +98,16 @@ beforeEach(() => {
   countPending.mockResolvedValue(0)
   hasCreatedTask.mockResolvedValue(false)
   canCreateTask.mockResolvedValue(true)
+  getEmailQuotaStatus.mockResolvedValue(QUOTA)
 })
+
+const QUOTA = {
+  providerDay: "2026-11-26",
+  sentToday: 10,
+  limitToday: 100,
+  queued: 0,
+  finishesOn: null,
+}
 
 const ADMIN_ONBOARDING = {
   tourAndChecklist: true,
@@ -247,7 +261,7 @@ describe("AdminHomePage", () => {
     async function children(tour?: string) {
       body()
       const rendered = await renderBody(tour)
-      return (rendered.props.children as (Element | null)[]).slice(1)
+      return (rendered.props.children as (Element | null)[]).slice(1, 3)
     }
 
     it("shows the checklist and the tour to a fresh admin, from my_onboarding alone", async () => {
@@ -362,5 +376,43 @@ describe("AdminHomePage", () => {
         (checklist.props as unknown as { createTask: unknown }).createTask
       ).toBeNull()
     })
+  })
+})
+
+describe("AdminHomePage Email section (Story 4.2)", () => {
+  function setup() {
+    requireAdmin.mockResolvedValue({ role: "editorial_admin" })
+    counts[0].count.mockResolvedValue(0)
+    counts[1].count.mockResolvedValue(0)
+    list.rows.mockResolvedValue([])
+  }
+  const section = async () => {
+    const body = await renderBody()
+    const children = body.props.children as (Element | null)[]
+    return children[children.length - 1] as Element | null
+  }
+
+  it("shows the meter under an Email heading, from the quota read", async () => {
+    setup()
+    const email = (await section()) as Element
+    const [heading, meter] = email.props.children as Element[]
+
+    expect(email.type).toBe("section")
+    expect(heading.props.children).toBe("Email")
+    expect(meter.type).toBe(QuotaMeter)
+    expect(meter.props).toMatchObject({ status: QUOTA })
+  })
+
+  it("records a failed quota read, hides the section and keeps the rest", async () => {
+    setup()
+    const failure = new Error("rpc failed")
+    getEmailQuotaStatus.mockRejectedValue(failure)
+
+    expect(await section()).toBeNull()
+    expect(recordErrorEvent).toHaveBeenCalledWith(failure, {
+      route: "render (admin)/admin",
+    })
+    const cards = (await renderCards()) as Element
+    expect(cards.type).toBe(AdminHomeCards)
   })
 })

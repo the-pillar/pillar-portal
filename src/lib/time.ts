@@ -195,3 +195,17 @@ export function dayOfWeek(dayKey: string): number {
   const [y, m, d] = dayParts(dayKey)
   return calendarDate(y, m, d).getDay()
 }
+
+/** "Thu", for a `YYYY-MM-DD` day key. */
+export function weekdayShort(dayKey: string): string {
+  const [y, m, d] = dayParts(dayKey)
+  return format(calendarDate(y, m, d), "EEE")
+}
+
+/** Whether an instant falls before `hour:00` (0 to 23) Philippine time. */
+export function isBeforePhtHour(
+  date: Date | string | number,
+  hour: number
+): boolean {
+  return Number(formatInPht(date, "H")) < hour
+}
