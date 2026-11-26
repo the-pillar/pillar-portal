@@ -1,6 +1,7 @@
 import { formatInPht } from "@/lib/time"
 
 import type { PRODUCTION_ROLES } from "./schemas"
+import { siteLabel } from "./site-label"
 
 type ProductionRole = (typeof PRODUCTION_ROLES)[number]
 
@@ -16,6 +17,8 @@ export type MessengerTask = {
   roles: ProductionRole[]
   /** UTC instant; shown in PHT. */
   dueAt: Date | string
+  /** The saved reference links, in order; every caller passes them. */
+  referenceUrls: string[]
 }
 
 /**
@@ -29,7 +32,10 @@ export function buildMessengerMessage(
 ): string {
   const roles = [...new Set(task.roles)].map((role) => roleLabels[role])
   const link = new URL(`/dashboard/tasks/${task.id}`, siteUrl).href
-  return `📌 ${task.title} — ${roles.join(" / ")} · due ${formatInPht(task.dueAt, DUE_FORMAT)}\n${link}`
+  const head = `📌 ${task.title} — ${roles.join(" / ")} · due ${formatInPht(task.dueAt, DUE_FORMAT)}\n${link}`
+  if (task.referenceUrls.length === 0) return head
+  const lines = task.referenceUrls.map((url) => `• ${siteLabel(url)}: ${url}`)
+  return `${head}\n\nReference\n${lines.join("\n")}`
 }
 
 // Lives in src/lib so the members slice can copy a link too.

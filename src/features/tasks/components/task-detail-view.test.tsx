@@ -91,7 +91,7 @@ const TASK: TaskDetail = {
   ownerId: "layout",
   // 23:30 PHT on Saturday, October 31, 2026.
   dueAt: "2026-10-31T15:30:00+00:00",
-  referenceUrl: "https://example.com/brief",
+  referenceUrls: ["https://example.com/brief"],
   doneAt: null,
   column: "doing",
   revisionNote: null,
@@ -174,7 +174,8 @@ const REASSIGN_OPTIONS: ReassignOptions = {
 }
 
 function slotRows() {
-  return within(screen.getByRole("list")).getAllByRole("listitem")
+  // The slot list, the first on the page (the links' list comes after it).
+  return within(screen.getAllByRole("list")[0]).getAllByRole("listitem")
 }
 
 describe("TaskDetailView", () => {
@@ -185,7 +186,7 @@ describe("TaskDetailView", () => {
     render(<TaskDetailView task={TASK} />)
     await user.click(screen.getByRole("button", { name: "Copy for Messenger" }))
     expect(writeText).toHaveBeenCalledWith(
-      `📌 Lay out the spread — Layout Artist / Cartoonist / Writer · due Sat, Oct 31, 11:30 PM\nhttps://pillar.example/dashboard/tasks/${TASK.id}`
+      `📌 Lay out the spread — Layout Artist / Cartoonist / Writer · due Sat, Oct 31, 11:30 PM\nhttps://pillar.example/dashboard/tasks/${TASK.id}\n\nReference\n• example.com: https://example.com/brief`
     )
   })
 
@@ -221,7 +222,9 @@ describe("TaskDetailView", () => {
     expect(owner).toHaveTextContent("Owner: Layout")
     const due = screen.getByText("Sat, Oct 31, 2026 at 11:30 PM")
     expect(due.closest("p")).toHaveAttribute("data-due", "open")
-    const link = screen.getByRole("link", { name: /example\.com\/brief/ })
+    const link = screen.getByRole("link", {
+      name: /^example\.com\s*\(opens in a new tab\)$/,
+    })
     expect(link).toHaveAttribute("href", "https://example.com/brief")
     expect(link).toHaveAttribute("target", "_blank")
     expect(screen.getByText(/Two pages\./)).toHaveClass("whitespace-pre-line")
@@ -232,7 +235,7 @@ describe("TaskDetailView", () => {
       due,
       screen.getByText(/Two pages\./),
       screen.getByRole("heading", { level: 2, name: "Role slots" }),
-      screen.getByRole("heading", { level: 2, name: "Reference" }),
+      screen.getByRole("heading", { level: 2, name: "Reference links" }),
       screen.getByRole("button", { name: "Add to Google Calendar" }),
       screen.getByRole("button", { name: "Copy for Messenger" }),
     ]
@@ -869,9 +872,9 @@ describe("TaskDetailView", () => {
     vi.stubGlobal("navigator", { clipboard: { writeText } })
     await toastSuccess.mock.calls[0][1].action.onClick()
     // The task's title, the reassigned slot's role only, the due date in
-    // PHT, and the task's own link.
+    // PHT, the task's own link, and its saved reference links.
     expect(writeText).toHaveBeenCalledExactlyOnceWith(
-      `📌 Lay out the spread — Layout Artist · due Sat, Oct 31, 11:30 PM\nhttps://pillar.example/dashboard/tasks/${TASK.id}`
+      `📌 Lay out the spread — Layout Artist · due Sat, Oct 31, 11:30 PM\nhttps://pillar.example/dashboard/tasks/${TASK.id}\n\nReference\n• example.com: https://example.com/brief`
     )
 
     await waitFor(() => expect(layoutReassign()).toHaveFocus())
@@ -886,20 +889,49 @@ describe("TaskDetailView", () => {
     expect(document.getElementById(`slot-${LAYOUT_SLOT}`)).toHaveFocus()
   })
 
-  it("omits the reference link row and the description when they're empty", () => {
+  it("omits the reference links section and the description when they're empty", () => {
     render(
       <TaskDetailView
-        task={{ ...TASK, referenceUrl: null, description: null }}
+        task={{ ...TASK, referenceUrls: [], description: null }}
       />
     )
 
-    expect(screen.queryByText("Reference link")).toBeNull()
+    expect(screen.queryByText("Reference links")).toBeNull()
     expect(screen.queryByText(/Two pages\./)).toBeNull()
+  })
+
+  it("lists every link as a row: the site's name is the link, the whole address sits outside it, once", () => {
+    const urls = [
+      "https://drive.google.com/drive/folders/1AbCdEfGhIjKlMnOp",
+      "https://www.canva.com/design/DAF123/edit",
+      "https://example.org/some/long/path/that/keeps/going/and/going.html",
+    ]
+    render(<TaskDetailView task={{ ...TASK, referenceUrls: urls }} />)
+
+    const section = screen.getByRole("heading", {
+      level: 2,
+      name: "Reference links",
+    }).nextElementSibling as HTMLElement
+    const rows = within(section).getAllByRole("listitem")
+    expect(rows).toHaveLength(3)
+    const names = ["Google Drive", "Canva", "example.org"]
+    rows.forEach((row, i) => {
+      const link = within(row).getByRole("link", {
+        name: new RegExp(`^${names[i]}\\s*\\(opens in a new tab\\)$`),
+      })
+      expect(link).toHaveAttribute("href", urls[i])
+      // The address is outside the link, and whole in the row's text.
+      expect(link).not.toHaveTextContent(urls[i])
+      expect(row.textContent).toContain(urls[i])
+      expect(row.querySelector("[title]")).toBeNull()
+    })
   })
 
   it("shows an unsafe stored link as plain text", () => {
     render(
-      <TaskDetailView task={{ ...TASK, referenceUrl: "javascript:alert(1)" }} />
+      <TaskDetailView
+        task={{ ...TASK, referenceUrls: ["javascript:alert(1)"] }}
+      />
     )
 
     // Only the return link: the stored URL isn't one.

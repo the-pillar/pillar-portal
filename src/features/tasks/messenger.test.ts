@@ -18,12 +18,40 @@ describe("buildMessengerMessage", () => {
   it("builds the title, roles, PHT date and link", () => {
     expect(
       buildMessengerMessage(
-        { id: ID, title: "Lay out", roles: ["layout_artist"], dueAt: DUE },
+        {
+          id: ID,
+          title: "Lay out",
+          roles: ["layout_artist"],
+          dueAt: DUE,
+          referenceUrls: [],
+        },
         "https://pillar.example",
         LABELS
       )
     ).toBe(
       `📌 Lay out — Layout Artist · due Fri, Oct 16, 5:00 PM\nhttps://pillar.example/dashboard/tasks/${ID}`
+    )
+  })
+
+  it("lists the reference links by site under Reference", () => {
+    expect(
+      buildMessengerMessage(
+        {
+          id: ID,
+          title: "Lay out",
+          roles: ["layout_artist"],
+          dueAt: DUE,
+          referenceUrls: [
+            "https://drive.google.com/drive/folders/1",
+            "https://www.canva.com/design/2",
+            "https://example.org/x",
+          ],
+        },
+        "https://pillar.example",
+        LABELS
+      )
+    ).toBe(
+      `📌 Lay out — Layout Artist · due Fri, Oct 16, 5:00 PM\nhttps://pillar.example/dashboard/tasks/${ID}\n\nReference\n• Google Drive: https://drive.google.com/drive/folders/1\n• Canva: https://www.canva.com/design/2\n• example.org: https://example.org/x`
     )
   })
 
@@ -34,6 +62,7 @@ describe("buildMessengerMessage", () => {
         title: "T",
         roles: ["photojournalist", "layout_artist", "photojournalist"],
         dueAt: new Date(DUE),
+        referenceUrls: [],
       },
       "https://pillar.example",
       LABELS
@@ -47,7 +76,13 @@ describe("buildMessengerMessage", () => {
       vi.stubEnv("TZ", zone)
       expect(
         buildMessengerMessage(
-          { id: ID, title: "T", roles: ["writer"], dueAt: DUE },
+          {
+            id: ID,
+            title: "T",
+            roles: ["writer"],
+            dueAt: DUE,
+            referenceUrls: [],
+          },
           "https://pillar.example",
           LABELS
         )
@@ -57,7 +92,7 @@ describe("buildMessengerMessage", () => {
 
   it("takes the link from the site URL it is given, nothing else", () => {
     const message = buildMessengerMessage(
-      { id: ID, title: "T", roles: ["writer"], dueAt: DUE },
+      { id: ID, title: "T", roles: ["writer"], dueAt: DUE, referenceUrls: [] },
       "https://pillar.example",
       LABELS
     )

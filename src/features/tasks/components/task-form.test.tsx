@@ -278,16 +278,50 @@ describe("TaskForm", () => {
     expect(createTaskAction).not.toHaveBeenCalled()
   })
 
-  it("blocks submit with an inline error on a malformed reference link", async () => {
+  it("blocks submit with an inline error on a malformed reference link, and focuses it", async () => {
     const user = userEvent.setup()
     renderForm()
 
     await fillMinimalValidForm(user)
-    await user.type(screen.getByLabelText("Reference link"), "not-a-url")
+    await user.type(screen.getByLabelText("Reference link 1"), "not-a-url")
     await user.click(screen.getByRole("button", { name: "Create task" }))
 
-    expect(await screen.findByText("Enter a valid link")).toBeInTheDocument()
+    expect(
+      await screen.findByText(
+        "This doesn't look like a link. Copy the full address from your browser."
+      )
+    ).toBeInTheDocument()
+    await waitFor(() =>
+      expect(screen.getByLabelText("Reference link 1")).toHaveFocus()
+    )
     expect(createTaskAction).not.toHaveBeenCalled()
+  })
+
+  it("drops empty link rows on save and carries the cleaned links into Copy for Messenger", async () => {
+    createTaskAction.mockResolvedValue({ ok: true, data: { id: "task-1" } })
+    const user = userEvent.setup()
+    renderForm()
+
+    await fillMinimalValidForm(user)
+    await user.click(screen.getByRole("button", { name: "Add a link" }))
+    await user.click(screen.getByRole("button", { name: "Add a link" }))
+    await user.type(screen.getByLabelText("Reference link 1"), "canva.com/x")
+    await user.type(screen.getByLabelText("Reference link 3"), "youtu.be/abc")
+    await user.click(screen.getByRole("button", { name: "Create task" }))
+
+    await waitFor(() => expect(createTaskAction).toHaveBeenCalledOnce())
+    expect(createTaskAction.mock.calls[0][0].referenceUrls).toEqual([
+      "https://canva.com/x",
+      "https://youtu.be/abc",
+    ])
+    await waitFor(() => expect(toastSuccess).toHaveBeenCalled())
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    vi.stubGlobal("navigator", { clipboard: { writeText } })
+    await toastSuccess.mock.calls[0][1].action.onClick()
+    expect(writeText.mock.calls[0][0]).toContain(
+      "\n\nReference\n• Canva: https://canva.com/x\n• YouTube: https://youtu.be/abc"
+    )
+    vi.unstubAllGlobals()
   })
 
   it("submits the parsed data, toasts Task created, and resets while keeping the owner", async () => {
@@ -305,7 +339,7 @@ describe("TaskForm", () => {
         owningSectionId: "news",
         owningDeskId: null,
         dueAt: "2026-11-01T09:00",
-        referenceUrl: null,
+        referenceUrls: [],
         description: null,
         slots: [{ role: "layout_artist", memberId: MEMBER_1 }],
       })
@@ -542,7 +576,7 @@ const TASK: TaskEdit = {
   description: "Two pages.",
   ownerName: "Layout",
   dueAtInput: "2026-10-31T23:30",
-  referenceUrl: "https://example.com/brief",
+  referenceUrls: ["https://example.com/brief"],
   slots: [
     {
       id: SLOT_A,
@@ -629,7 +663,7 @@ describe("TaskForm in edit mode", () => {
     expect(screen.getByLabelText("Title")).toHaveValue("Lay out the spread")
     expect(screen.getByLabelText("Description")).toHaveValue("Two pages.")
     expect(screen.getByLabelText("Due date")).toHaveValue("2026-10-31T23:30")
-    expect(screen.getByLabelText("Reference link")).toHaveValue(
+    expect(screen.getByLabelText("Reference link 1")).toHaveValue(
       "https://example.com/brief"
     )
     expect(memberBoxes().map((box) => box.textContent)).toEqual([
@@ -717,7 +751,8 @@ describe("TaskForm in edit mode", () => {
       title: "Lay out the spread, v2",
       description: "Two pages.",
       dueAt: "2026-11-05T17:00",
-      referenceUrl: "https://example.com/brief",
+      referenceUrls: ["https://example.com/brief"],
+      loadedReferenceUrls: ["https://example.com/brief"],
       slots: LOADED_SLOTS,
     })
     expect(toastSuccess).toHaveBeenCalledExactlyOnceWith(
@@ -789,7 +824,7 @@ describe("TaskForm in edit mode", () => {
     expect(toastSuccess).toHaveBeenCalledWith("Copied — paste it in Messenger.")
     // 23:30 on 2026-10-31 PHT, every slot's role, the task's own link.
     expect(writeText).toHaveBeenCalledWith(
-      `📌 Lay out the spread — Layout Artist / Cartoonist / Photojournalist / Writer · due Sat, Oct 31, 11:30 PM\nhttps://pillar.example/dashboard/tasks/${TASK_ID}`
+      `📌 Lay out the spread — Layout Artist / Cartoonist / Photojournalist / Writer · due Sat, Oct 31, 11:30 PM\nhttps://pillar.example/dashboard/tasks/${TASK_ID}\n\nReference\n• example.com: https://example.com/brief`
     )
   })
 
@@ -918,17 +953,73 @@ describe("TaskForm in edit mode", () => {
     expect(memberBoxes()[3]).toHaveTextContent("Staff Layout Artist")
   })
 
+  it("saves a loaded link left unchanged, even one a new link would be refused for, and never cleans it", async () => {
+    updateTaskAction.mockResolvedValue({
+      ok: true,
+      data: { taskId: TASK_ID, newAssignee: false },
+    })
+    const odd = "https://example.com/has a space"
+    const user = userEvent.setup()
+    render(<EditPage task={{ ...TASK, referenceUrls: [odd] }} />)
+
+    const row = screen.getByLabelText("Reference link 1")
+    await user.click(row)
+    await user.tab()
+    expect(row).toHaveValue(odd)
+    expect(row).not.toHaveAttribute("aria-invalid", "true")
+    await user.click(save())
+
+    await waitFor(() => expect(updateTaskAction).toHaveBeenCalledOnce())
+    expect(updateTaskAction.mock.calls[0][0]).toMatchObject({
+      referenceUrls: [odd],
+      loadedReferenceUrls: [odd],
+    })
+  })
+
+  it("shows the server's refusal of the list under the field, not as a toast, and clears it on the next save", async () => {
+    updateTaskAction.mockResolvedValueOnce({
+      ok: false,
+      code: "tasks.invalid_links",
+    })
+    const user = userEvent.setup()
+    render(<EditPage />)
+
+    await user.click(save())
+
+    const message = await screen.findByText(
+      "A link didn't save. Check the links and try again."
+    )
+    expect(toastError).not.toHaveBeenCalled()
+    expect(
+      screen.getByLabelText("Reference link 1").getAttribute("aria-describedby")
+    ).toContain(message.id)
+
+    updateTaskAction.mockResolvedValueOnce({
+      ok: true,
+      data: { taskId: TASK_ID, newAssignee: false },
+    })
+    await user.click(save())
+    await waitFor(() => expect(push).toHaveBeenCalled())
+    expect(
+      screen.queryByText("A link didn't save. Check the links and try again.")
+    ).toBeNull()
+  })
+
   it("validates the fields as create does", async () => {
     const user = userEvent.setup()
     render(<EditPage />)
 
     await user.clear(screen.getByLabelText("Title"))
-    await user.clear(screen.getByLabelText("Reference link"))
-    await user.type(screen.getByLabelText("Reference link"), "not-a-url")
+    await user.clear(screen.getByLabelText("Reference link 1"))
+    await user.type(screen.getByLabelText("Reference link 1"), "not-a-url")
     await user.click(save())
 
     expect(await screen.findByText("Add a title")).toBeInTheDocument()
-    expect(screen.getByText("Enter a valid link")).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        "This doesn't look like a link. Copy the full address from your browser."
+      )
+    ).toBeInTheDocument()
     expect(updateTaskAction).not.toHaveBeenCalled()
   })
 
@@ -1047,7 +1138,8 @@ describe("TaskForm in edit mode", () => {
         title: "Done, renamed",
         description: "Two pages.",
         dueAt: "2026-10-31T23:30",
-        referenceUrl: "https://example.com/brief",
+        referenceUrls: ["https://example.com/brief"],
+        loadedReferenceUrls: ["https://example.com/brief"],
         slots: LOADED_SLOTS,
       })
     })

@@ -87,6 +87,7 @@ const RENAMED: HandedBackSlot = {
   taskTitle: "3.7 check (edit) renamed",
   // 23:30 PHT on Saturday, October 31, 2026.
   dueAt: "2026-10-31T15:30:00+00:00",
+  referenceUrls: [],
   role: "cartoonist",
   roleLabel: "Cartoonist",
   memberId: EIC.id,
@@ -100,6 +101,7 @@ const NEXT_WEEK: HandedBackSlot = {
   taskTitle: "test due next week",
   // 09:00 PHT on Monday, November 9, 2026.
   dueAt: "2026-11-09T01:00:00+00:00",
+  referenceUrls: [],
   role: "layout_artist",
   roleLabel: "Layout Artist",
   memberId: STAFF_LAYOUT.id,

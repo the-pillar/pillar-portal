@@ -61,6 +61,7 @@ export const TASK_ERROR_COPY = {
   "tasks.not_approver": "Only the task's head or a top editor can do that.",
   "tasks.stale": STALE_COPY,
   "tasks.invalid_slot_member": STALE_COPY,
+  "tasks.invalid_links": "A link didn't save. Check the links and try again.",
 } as const
 
 export type TaskErrorCode = keyof typeof TASK_ERROR_COPY

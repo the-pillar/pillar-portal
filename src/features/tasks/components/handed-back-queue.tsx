@@ -80,6 +80,7 @@ export function HandedBackQueue({
                   taskId={slot.taskId}
                   taskTitle={slot.taskTitle}
                   taskDueAt={slot.dueAt}
+                  taskReferenceUrls={slot.referenceUrls}
                   slotId={slot.slotId}
                   role={slot.role}
                   memberId={slot.memberId}

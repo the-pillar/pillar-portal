@@ -4,7 +4,6 @@ import Link from "next/link"
 import { StatusBadge } from "@/components/status-badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { avatarSlot } from "@/components/ui/avatar-slot"
-import { ExternalLink } from "@/components/ui/external-link"
 import { clientEnv } from "@/lib/env.client"
 import { formatInPht } from "@/lib/time"
 import { cn } from "@/lib/utils"
@@ -22,6 +21,7 @@ import {
 import { AddToCalendarMenu } from "./calendar-menu"
 import { CopyForMessenger } from "./copy-for-messenger"
 import { HandBack } from "./hand-back"
+import { LinkRow } from "./link-row"
 import { ReassignSlot } from "./reassign-slot"
 import { SlotResponse } from "./slot-response"
 import { TaskColumnControl } from "./task-column-control"
@@ -39,7 +39,7 @@ const NOTE_DATE_FORMAT = "EEE, MMM d, yyyy"
  * with the viewer's actions after them (below md, one fixed action bar while
  * the viewer holds exactly one open slot), the revision note while the task
  * stands sent back, the description, the approver's actions, one white row
- * per role slot, the reference link, then Add to Google Calendar and Copy
+ * per role slot, the reference links, then Add to Google Calendar and Copy
  * for Messenger. Which actions appear
  * comes only from `task.allowedMoves`, `task.respondableSlotIds`,
  * `task.handBackSlotIds`, `task.canReview`, `task.canReopen`,
@@ -78,7 +78,7 @@ export function TaskDetailView({
         title: task.title,
         description: task.description,
         dueAt: task.dueAt,
-        referenceUrl: task.referenceUrl,
+        referenceUrls: task.referenceUrls,
       },
       clientEnv.NEXT_PUBLIC_SITE_URL
     )
@@ -90,6 +90,7 @@ export function TaskDetailView({
       title: task.title,
       roles: task.slots.map((slot) => slot.role),
       dueAt: task.dueAt,
+      referenceUrls: task.referenceUrls,
     },
     clientEnv.NEXT_PUBLIC_SITE_URL,
     task.roleLabels
@@ -304,6 +305,7 @@ export function TaskDetailView({
                     taskId={task.id}
                     taskTitle={task.title}
                     taskDueAt={task.dueAt}
+                    taskReferenceUrls={task.referenceUrls}
                     slotId={slot.id}
                     role={slot.role}
                     memberId={slot.memberId}
@@ -322,19 +324,18 @@ export function TaskDetailView({
         })}
       </ul>
 
-      {task.referenceUrl !== null && (
+      {task.referenceUrls.length > 0 && (
         <>
           <h2 className="mt-8 font-heading text-heading-sm text-navy">
-            Reference
+            Reference links
           </h2>
-          <p className="mt-2 min-w-0 break-all">
-            <ExternalLink
-              href={task.referenceUrl}
-              className="inline-flex min-h-11 items-center underline underline-offset-4"
-            >
-              {task.referenceUrl}
-            </ExternalLink>
-          </p>
+          <ul className="mt-2 flex flex-col">
+            {task.referenceUrls.map((url, index) => (
+              <li key={`${index}-${url}`} className="min-w-0">
+                <LinkRow url={url} />
+              </li>
+            ))}
+          </ul>
         </>
       )}
 

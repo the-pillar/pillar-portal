@@ -45,7 +45,7 @@ const VALID_INPUT = {
   owningSectionId: "news",
   owningDeskId: null,
   dueAt: "2026-10-31T23:30",
-  referenceUrl: null,
+  referenceUrls: [],
   slots: [{ role: "layout_artist", memberId: MEMBER_ID }],
 }
 
@@ -62,6 +62,50 @@ afterEach(() => {
 })
 
 describe("createTaskAction", () => {
+  it("cleans the links and sends the list, an empty one as []", async () => {
+    rpc.mockResolvedValue({ data: "task-1", error: null })
+
+    await createTaskAction({
+      ...VALID_INPUT,
+      referenceUrls: ["canva.com/x", "HTTPS://Drive.google.com/y"],
+    })
+    expect(rpc.mock.calls[0][1].reference_urls).toEqual([
+      "https://canva.com/x",
+      "https://Drive.google.com/y",
+    ])
+
+    await createTaskAction(VALID_INPUT)
+    expect(rpc.mock.calls[1][1].reference_urls).toEqual([])
+  })
+
+  it.each([
+    ["a link that isn't one", ["hello"]],
+    ["a mailto link", ["mailto:a@b.com"]],
+    ["six links", Array.from({ length: 6 }, (_, i) => `https://a.com/${i}`)],
+    ["a missing list", undefined],
+    ["a null list", null],
+  ])("rejects %s without calling the database", async (_name, links) => {
+    const result = await createTaskAction({
+      ...VALID_INPUT,
+      referenceUrls: links,
+    })
+
+    expect(result).toEqual({ ok: false, code: "tasks.create_failed" })
+    expect(createClient).not.toHaveBeenCalled()
+  })
+
+  it("maps the database's refusal of the list to its own copy, unrecorded", async () => {
+    rpc.mockResolvedValue({
+      data: null,
+      error: { code: "P0001", message: "tasks.invalid_links" },
+    })
+
+    const result = await createTaskAction(VALID_INPUT)
+
+    expect(result).toEqual({ ok: false, code: "tasks.invalid_links" })
+    expect(after).not.toHaveBeenCalled()
+  })
+
   it("rejects invalid input without calling the database", async () => {
     const result = await createTaskAction({ ...VALID_INPUT, title: "" })
 
@@ -80,7 +124,7 @@ describe("createTaskAction", () => {
       owning_section_id: "news",
       owning_desk_id: null,
       due_at: "2026-10-31T15:30:00.000Z",
-      reference_url: null,
+      reference_urls: [],
       slots: [{ role: "layout_artist", member_id: MEMBER_ID }],
     })
     // Admin home's "Create a task" checklist item ticks live (Story 8.9).
@@ -158,7 +202,7 @@ const VALID_EDIT = {
   title: "Lay out the spread",
   description: null,
   dueAt: "2026-10-31T23:30",
-  referenceUrl: null,
+  referenceUrls: [],
   slots: [
     {
       id: SLOT_ID,
@@ -400,6 +444,8 @@ describe("error copy", () => {
     const { TASK_ERROR_COPY } = await import("./errors")
     expect(TASK_ERROR_COPY).toEqual({
       "auth.not_active": "Sign in to do that.",
+      "tasks.invalid_links":
+        "A link didn't save. Check the links and try again.",
       "tasks.not_admin": "Only the Editorial Board can create tasks.",
       "tasks.duplicate_slot":
         "The same member already has that role — remove one.",
@@ -659,7 +705,8 @@ describe("updateTaskAction", () => {
     title: "  Lay out the spread, v2  ",
     description: null,
     dueAt: "2026-10-31T23:30",
-    referenceUrl: "https://example.com/brief",
+    referenceUrls: ["https://example.com/brief"],
+    loadedReferenceUrls: [],
     slots: [
       {
         id: SLOT_ID,
@@ -712,6 +759,45 @@ describe("updateTaskAction", () => {
     expect(createClient).not.toHaveBeenCalled()
   })
 
+  it("never refuses a link equal to one the form loaded, and cleans the rest", async () => {
+    rpc.mockResolvedValue({ data: false, error: null })
+    const loaded = "https://example.com/has a space"
+
+    const result = await updateTaskAction({
+      ...EDIT_INPUT,
+      referenceUrls: [loaded, "canva.com/x"],
+      loadedReferenceUrls: [loaded],
+    })
+
+    expect(result.ok).toBe(true)
+    expect(rpc.mock.calls[0][1].reference_urls).toEqual([
+      loaded,
+      "https://canva.com/x",
+    ])
+  })
+
+  it("refuses a link that isn't the loaded one when it is invalid", async () => {
+    const result = await updateTaskAction({
+      ...EDIT_INPUT,
+      referenceUrls: ["https://example.com/has a space"],
+      loadedReferenceUrls: ["https://example.com/other"],
+    })
+
+    expect(result).toEqual({ ok: false, code: "tasks.save_failed" })
+  })
+
+  it("maps the database's refusal of the list to its own copy, unrecorded", async () => {
+    rpc.mockResolvedValue({
+      data: null,
+      error: { code: "P0001", message: "tasks.invalid_links" },
+    })
+
+    const result = await updateTaskAction(EDIT_INPUT)
+
+    expect(result).toEqual({ ok: false, code: "tasks.invalid_links" })
+    expect(after).not.toHaveBeenCalled()
+  })
+
   it("calls update_task with the trimmed fields, the PHT due date as a UTC instant and the slots (an id and the loaded member only on an existing one), then revalidates the dashboard and the admin pages", async () => {
     rpc.mockResolvedValue({ data: false, error: null })
 
@@ -722,7 +808,7 @@ describe("updateTaskAction", () => {
       title: "Lay out the spread, v2",
       description: null,
       due_at: "2026-10-31T15:30:00.000Z",
-      reference_url: "https://example.com/brief",
+      reference_urls: ["https://example.com/brief"],
       slots: [
         {
           id: SLOT_ID,
@@ -1093,6 +1179,16 @@ describe("recording unexpected errors", () => {
       "updateTaskAction",
       () => updateTaskAction(VALID_EDIT),
       "tasks.not_allowed",
+    ],
+    [
+      "updateTaskAction",
+      () => updateTaskAction(VALID_EDIT),
+      "tasks.invalid_links",
+    ],
+    [
+      "createTaskAction",
+      () => createTaskAction(VALID_INPUT),
+      "tasks.invalid_links",
     ],
   ])("%s doesn't record a known code (%s)", async (_name, call, message) => {
     rpc.mockResolvedValue({ data: null, error: { code: "P0001", message } })

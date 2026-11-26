@@ -34,7 +34,7 @@ const TASK_ROW = {
   description: "Two pages.",
   // 23:30 PHT on Oct 31, as PostgREST returns it.
   due_at: "2026-10-31T15:30:00+00:00",
-  reference_url: "https://example.com/brief",
+  reference_urls: ["https://example.com/brief"],
   column: "doing",
   updated_at: "2026-10-30T02:15:42.123456+00:00",
   sections: null,
@@ -138,7 +138,7 @@ describe("getTaskEdit", () => {
     const tasks = calls.find((c) => c.table === "tasks")!
     expect(tasks.calls).toContainEqual([
       "select",
-      "id, title, description, due_at, reference_url, column, updated_at, sections(name), desks(name)",
+      "id, title, description, due_at, reference_urls, column, updated_at, sections(name), desks(name)",
     ])
     expect(tasks.calls).toContainEqual(["eq", "id", TASK_ID])
     const slots = calls.find((c) => c.table === "task_assignments")!
@@ -176,7 +176,7 @@ describe("getTaskEdit", () => {
       description: "Two pages.",
       ownerName: "Layout",
       dueAtInput: "2026-10-31T23:30",
-      referenceUrl: "https://example.com/brief",
+      referenceUrls: ["https://example.com/brief"],
       slots: [
         {
           id: SLOT_A,

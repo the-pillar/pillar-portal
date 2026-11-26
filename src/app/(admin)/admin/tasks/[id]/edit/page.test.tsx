@@ -70,7 +70,7 @@ const TASK = {
   description: null,
   ownerName: "Layout",
   dueAtInput: "2026-10-31T23:30",
-  referenceUrl: null,
+  referenceUrls: [],
   slots: [
     {
       id: SLOT_A,
