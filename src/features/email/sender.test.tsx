@@ -91,6 +91,7 @@ describe("drainOutbox", () => {
       dropped: 0,
       failed: 0,
       gone: 0,
+      faulted: false,
     })
     expect(sink.sent.map((s) => s.idempotencyKey)).toEqual([
       "reminder:1:1",
@@ -236,6 +237,7 @@ describe("drainOutbox", () => {
       dropped: 0,
       failed: 0,
       gone: 0,
+      faulted: true,
     })
     expect(recordErrorEvent).toHaveBeenCalledExactlyOnceWith(
       { code: "42501" },

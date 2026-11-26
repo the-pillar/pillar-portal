@@ -254,6 +254,7 @@ export type Database = {
           finished_at: string | null
           id: number
           job: string
+          run_id: number | null
           started_at: string
           status: Database["public"]["Enums"]["job_status"] | null
           step: string | null
@@ -263,6 +264,7 @@ export type Database = {
           finished_at?: string | null
           id?: never
           job: string
+          run_id?: number | null
           started_at?: string
           status?: Database["public"]["Enums"]["job_status"] | null
           step?: string | null
@@ -272,11 +274,20 @@ export type Database = {
           finished_at?: string | null
           id?: never
           job?: string
+          run_id?: number | null
           started_at?: string
           status?: Database["public"]["Enums"]["job_status"] | null
           step?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "job_runs_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "job_runs"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       member_onboarding: {
         Row: {
@@ -855,6 +866,7 @@ export type Database = {
         Returns: undefined
       }
       end_shared_session: { Args: never; Returns: undefined }
+      enqueue_due_reminders: { Args: never; Returns: number }
       hand_back_slot: {
         Args: { reason?: string; slot_id: string }
         Returns: undefined
@@ -975,6 +987,16 @@ export type Database = {
         }
         Returns: undefined
       }
+      record_job_step: {
+        Args: {
+          detail?: Json
+          duration_ms: number
+          run_id: number
+          status: Database["public"]["Enums"]["job_status"]
+          step: string
+        }
+        Returns: undefined
+      }
       record_onboarding: {
         Args: { step: Database["public"]["Enums"]["onboarding_step"] }
         Returns: undefined
@@ -992,6 +1014,7 @@ export type Database = {
         }
         Returns: undefined
       }
+      run_retention: { Args: never; Returns: Json }
       send_back_task: {
         Args: { note: string; task_id: string }
         Returns: undefined
@@ -1000,6 +1023,7 @@ export type Database = {
         Args: { member_id: string; name: string }
         Returns: string
       }
+      sweep_shared_sessions: { Args: never; Returns: number }
       task_capabilities: {
         Args: { ids: string[] }
         Returns: {

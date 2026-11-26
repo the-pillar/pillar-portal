@@ -37,6 +37,8 @@ jobs:
       PROTOTYPE_PERSONAS: "true"
       PROTOTYPE_PERSONA_PASSWORD: ci-canary-persona-password
       SUPABASE_SECRET_KEY: sb_secret_ci-canary-not-a-real-key
+      # The bearer token of /api/cron/daily (32+ characters, or boot refuses).
+      CRON_SECRET: ci-canary-cron-secret-not-a-real-one-0123456789
       # The email sender: sink mode, and canaries for the rest, so
       # check:bundle can prove none reaches the browser. The three limits are
       # under 8 characters, which check:bundle skips.

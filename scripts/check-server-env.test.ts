@@ -11,6 +11,8 @@ const REPO_ROOT = path.join(import.meta.dirname, "..")
 // protection would block it as a Supabase secret).
 const VALID_KEY = "sb_secret_" + "0123456789abcdefghijklmnopqrstu"
 
+const VALID_CRON = "c".repeat(40)
+
 function checkEnv(env: Record<string, string>) {
   return runScript("check-server-env.mjs", REPO_ROOT, {
     nodeArgs: ["--conditions=react-server"],
@@ -20,7 +22,10 @@ function checkEnv(env: Record<string, string>) {
 
 describe("check:env", () => {
   it("passes with a valid server environment, printing one OK line", () => {
-    const result = checkEnv({ SUPABASE_SECRET_KEY: VALID_KEY })
+    const result = checkEnv({
+      SUPABASE_SECRET_KEY: VALID_KEY,
+      CRON_SECRET: VALID_CRON,
+    })
 
     expect(result.status).toBe(0)
     expect(result.output.trim().split("\n")).toHaveLength(1)
@@ -36,7 +41,10 @@ describe("check:env", () => {
   })
 
   it("fails with a malformed secret key", () => {
-    const result = checkEnv({ SUPABASE_SECRET_KEY: "bad" })
+    const result = checkEnv({
+      SUPABASE_SECRET_KEY: "bad",
+      CRON_SECRET: VALID_CRON,
+    })
 
     expect(result.status).toBe(1)
     expect(result.output).toContain(

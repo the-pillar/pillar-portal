@@ -33,6 +33,8 @@ export type DrainResult = {
   failed: number
   /** Rows another sender had already moved on: nothing was done. */
   gone: number
+  /** The drain itself failed (a claim, not a row) and stopped; recorded already. */
+  faulted: boolean
 }
 
 function transportFor(options: DrainOptions): EmailTransport {
@@ -63,6 +65,7 @@ export async function drainOutbox(
     dropped: 0,
     failed: 0,
     gone: 0,
+    faulted: false,
   }
   const batchSize = options.maxRows ?? BATCH_SIZE
   const deadline = Date.now() + (options.deadlineMs ?? DEADLINE_MS)
@@ -96,6 +99,7 @@ export async function drainOutbox(
       }
     }
   } catch (thrown) {
+    result.faulted = true
     await recordErrorEvent(thrown, { route: ROUTE })
   }
 

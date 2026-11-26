@@ -75,6 +75,7 @@ const PASSWORD = "a-persona-password-for-tests"
 // key-shaped literal sits in the source.
 async function loadActions({ personas }: { personas: string | undefined }) {
   vi.stubEnv("SUPABASE_SECRET_KEY", "sb_secret_" + "a-key-for-these-tests-only")
+  vi.stubEnv("CRON_SECRET", "c".repeat(40))
   vi.stubEnv("PROTOTYPE_PERSONAS", personas)
   vi.stubEnv("PROTOTYPE_PERSONA_PASSWORD", PASSWORD)
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "http://127.0.0.1:54321")

@@ -133,7 +133,7 @@ where id = '00000000-0000-4000-a000-0000000000e3';
 -- check drops a row whose payload says so; the report notice's claim check
 -- holds a row whose payload says so. `status_code` and `confirmation` have
 -- no send check.
-create function private.email_send_check_reminder(p_id uuid)
+create or replace function private.email_send_check_reminder(p_id uuid)
 returns text
 language sql stable
 set search_path = ''

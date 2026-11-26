@@ -14,10 +14,12 @@ import { z } from "zod"
 const STAGING_SUPABASE_ORIGIN = "https://sxlgelitcaolpiijfwsq.supabase.co"
 const LOCAL_HOSTNAMES = new Set(["localhost", "127.0.0.1"])
 const PERSONA_PASSWORD_MIN_LENGTH = 16
+const CRON_SECRET_MIN_LENGTH = 32
 
 // A Supabase secret key: `sb_secret_` and the key. A publishable key or a
 // legacy JWT key (service_role or anon) is refused.
 const SECRET_KEY_PATTERN = /^sb_secret_[A-Za-z0-9_-]{16,}$/
+const CRON_SECRET_MESSAGE = "must be at least 32 characters"
 const SECRET_KEY_MESSAGE = "must be a secret key (sb_secret_…)"
 
 // The email sender's key (`re_…`) and the From address, bare or as
@@ -57,6 +59,12 @@ export const serverEnvSchema = z.object({
   SUPABASE_SECRET_KEY: z
     .string({ error: SECRET_KEY_MESSAGE })
     .regex(SECRET_KEY_PATTERN, { error: SECRET_KEY_MESSAGE }),
+  // The bearer token Vercel Cron sends to /api/cron/daily (AD-3, AD-13).
+  // Required: without it nothing could drain the outbox or run the day's
+  // reminders, so boot refuses.
+  CRON_SECRET: z
+    .string({ error: CRON_SECRET_MESSAGE })
+    .min(CRON_SECRET_MIN_LENGTH, { error: CRON_SECRET_MESSAGE }),
   // "true" turns on persona sign-in on /login. Unset means off.
   PROTOTYPE_PERSONAS: optional(
     z.enum(["true", "false"], { error: 'must be "true" or "false"' })
