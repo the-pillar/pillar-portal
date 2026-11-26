@@ -448,6 +448,55 @@ export type Database = {
           },
         ]
       }
+      task_deliverable_links: {
+        Row: {
+          added_at: string
+          added_by: string
+          id: string
+          seq: number
+          slot_id: string
+          url: string
+        }
+        Insert: {
+          added_at?: string
+          added_by: string
+          id?: string
+          seq?: never
+          slot_id: string
+          url: string
+        }
+        Update: {
+          added_at?: string
+          added_by?: string
+          id?: string
+          seq?: never
+          slot_id?: string
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_deliverable_links_added_by_fkey"
+            columns: ["added_by"]
+            isOneToOne: false
+            referencedRelation: "member_directory"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_deliverable_links_added_by_fkey"
+            columns: ["added_by"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_deliverable_links_slot_id_fkey"
+            columns: ["slot_id"]
+            isOneToOne: false
+            referencedRelation: "task_assignments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tasks: {
         Row: {
           column: Database["public"]["Enums"]["task_column"]
@@ -601,6 +650,10 @@ export type Database = {
       }
     }
     Functions: {
+      add_deliverable_links: {
+        Args: { slot_id: string; urls: string[] }
+        Returns: undefined
+      }
       approve_member: {
         Args: {
           member_id: string
@@ -753,6 +806,7 @@ export type Database = {
         Args: { step: Database["public"]["Enums"]["onboarding_step"] }
         Returns: undefined
       }
+      remove_deliverable_link: { Args: { link_id: string }; Returns: boolean }
       renew_shared_session: { Args: never; Returns: string }
       reopen_task: { Args: { task_id: string }; Returns: undefined }
       reset_first_run: { Args: never; Returns: undefined }
@@ -779,8 +833,11 @@ export type Database = {
           allowed_moves: Database["public"]["Enums"]["task_column"][]
           can_manage: boolean
           can_reassign: boolean
+          can_remove_deliverables: boolean
           can_reopen: boolean
           can_review: boolean
+          deliverable_add_slot_ids: string[]
+          deliverable_remove_slot_ids: string[]
           hand_back_slot_ids: string[]
           respondable_slot_ids: string[]
           task_id: string
