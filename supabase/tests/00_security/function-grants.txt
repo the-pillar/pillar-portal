@@ -146,3 +146,10 @@ authenticated public.deactivate_member(uuid)
 # backfill and the sync trigger function have no grant)
 authenticated public.create_task(text, text, text, text, timestamp with time zone, text[], jsonb)
 authenticated public.update_task(uuid, text, text, timestamp with time zone, text[], jsonb)
+
+# tasks_deliverable_links: the slot edge (called from task_capabilities, which
+# runs with the caller's rights) and the two commands (task_capabilities and
+# update_task keep the grants listed above)
+authenticated private.can_edit_deliverables(uuid)
+authenticated public.add_deliverable_links(uuid, text[])
+authenticated public.remove_deliverable_link(uuid)

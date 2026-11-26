@@ -349,11 +349,13 @@ select results_eq(
             p.proargnames = array['ids', 'task_id', 'allowed_moves',
                                   'respondable_slot_ids', 'hand_back_slot_ids',
                                   'can_review', 'can_reopen', 'can_manage',
-                                  'can_reassign']
+                                  'can_reassign', 'deliverable_add_slot_ids',
+                                  'deliverable_remove_slot_ids',
+                                  'can_remove_deliverables']
      from pg_proc p
      where p.oid = 'public.task_capabilities(uuid[])'::regprocedure $$,
   $$ values (false, true, true, true) $$,
-  'task_capabilities still runs with the caller''s rights, owned by postgres, with search_path = '''', keeps its columns and adds can_reassign last'
+  'task_capabilities still runs with the caller''s rights, owned by postgres, with search_path = '''', keeps its columns, can_reassign next, then the three deliverable fields'
 );
 
 select ok(
