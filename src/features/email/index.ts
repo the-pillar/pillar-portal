@@ -2,6 +2,10 @@
 // from here only. Server code: the drain reads the secret key.
 export { drainOutbox } from "./sender"
 export type { DrainOptions, DrainResult } from "./sender"
+export { getEmailQuotaStatus } from "./quota"
+export type { EmailQuotaStatus } from "./quota"
+export { QuotaMeter } from "./quota-meter"
+export { handleResendWebhook } from "./webhook"
 export { EmailShell, EmailText } from "./shell"
 export type { EmailAudience, EmailShellProps } from "./shell"
 export { EmailRenderError, renderEmail } from "./render"

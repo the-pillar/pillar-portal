@@ -42,6 +42,7 @@ jobs:
       # under 8 characters, which check:bundle skips.
       EMAIL_MODE: sink
       RESEND_API_KEY: re_ci-canary-not-a-real-key
+      RESEND_WEBHOOK_SECRET: whsec_Y2ljYW5hcnlub3RhcmVhbGtleQ==
       EMAIL_FROM: ci-canary-sender@example.invalid
       EMAIL_DAILY_LIMIT: "100"
       EMAIL_MONTHLY_LIMIT: "3000"

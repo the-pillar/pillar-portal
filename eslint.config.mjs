@@ -80,6 +80,9 @@ const ADMIN_CLIENT_IMPORTERS = [
   // The outbox drain: claims, prepares and marks rows through service_role
   // commands (AD-6, Story 4.1).
   "src/features/email/sender.ts",
+  // The Resend webhook: records a bounce through a service_role command
+  // (AD-6, Story 4.2).
+  "src/features/email/webhook.ts",
   // The client's own test, which checks the key and options it is built
   // with.
   "src/lib/supabase/admin.test.ts",

@@ -18,6 +18,7 @@ type Env = {
   VERCEL_ENV?: string
   EMAIL_MODE?: string
   RESEND_API_KEY?: string
+  RESEND_WEBHOOK_SECRET?: string
   EMAIL_FROM?: string
   EMAIL_DAILY_LIMIT?: string
   EMAIL_MONTHLY_LIMIT?: string
@@ -37,6 +38,7 @@ async function loadServerEnv(env: Env = {}) {
   vi.stubEnv("VERCEL_ENV", env.VERCEL_ENV)
   vi.stubEnv("EMAIL_MODE", env.EMAIL_MODE)
   vi.stubEnv("RESEND_API_KEY", env.RESEND_API_KEY)
+  vi.stubEnv("RESEND_WEBHOOK_SECRET", env.RESEND_WEBHOOK_SECRET)
   vi.stubEnv("EMAIL_FROM", env.EMAIL_FROM)
   vi.stubEnv("EMAIL_DAILY_LIMIT", env.EMAIL_DAILY_LIMIT)
   vi.stubEnv("EMAIL_MONTHLY_LIMIT", env.EMAIL_MONTHLY_LIMIT)
@@ -67,6 +69,7 @@ describe("serverEnv", () => {
       "PROTOTYPE_PERSONAS",
       "PROTOTYPE_PERSONA_PASSWORD",
       "RESEND_API_KEY",
+      "RESEND_WEBHOOK_SECRET",
       "SUPABASE_SECRET_KEY",
     ])
   })
@@ -212,6 +215,8 @@ describe("emailConfig", () => {
   const PRODUCTION_SUPABASE_URL = "https://abcdefghijklmnopqrst.supabase.co"
   // Key-shaped, built at runtime so no key literal sits in the source.
   const RESEND_KEY = "re_" + "a-key-for-these-tests-only"
+  const WEBHOOK_SECRET =
+    "whsec_" + Buffer.from("a-secret-for-these-tests").toString("base64")
   const FROM = "The Pillar <portal@example.com>"
   const production = {
     VERCEL_ENV: "production",
@@ -224,6 +229,7 @@ describe("emailConfig", () => {
       mode: "sink",
       resendApiKey: undefined,
       from: undefined,
+      webhookSecret: undefined,
       dailyLimit: 100,
       monthlyLimit: 3000,
       confirmationCap: 30,
@@ -268,6 +274,26 @@ describe("emailConfig", () => {
     expect((error as Error).message).not.toContain("not-a-key")
   })
 
+  it("refuses a webhook secret that isn't a whsec_ secret, without repeating it", async () => {
+    const error = await loadServerEnv({
+      RESEND_WEBHOOK_SECRET: "not-a-secret",
+    }).catch((thrown: unknown) => thrown)
+    expect((error as Error).message).toMatch(
+      /RESEND_WEBHOOK_SECRET: must be a Resend webhook secret/
+    )
+    expect((error as Error).message).not.toContain("not-a-secret")
+  })
+
+  it.each([
+    "whsec_" + "abcd-efgh-ijkl-mnop",
+    "whsec_" + "abcdefghijklmnop=",
+    "whsec_" + "abc",
+  ])("refuses the malformed webhook secret %s", async (value) => {
+    await expect(
+      loadServerEnv({ RESEND_WEBHOOK_SECRET: value })
+    ).rejects.toThrow(/RESEND_WEBHOOK_SECRET: must be a Resend webhook/)
+  })
+
   it("refuses a From that isn't an address, naming it", async () => {
     await expect(loadServerEnv({ EMAIL_FROM: "The Pillar" })).rejects.toThrow(
       /EMAIL_FROM: must be an address/
@@ -279,11 +305,13 @@ describe("emailConfig", () => {
       ...production,
       EMAIL_MODE: "send",
       RESEND_API_KEY: RESEND_KEY,
+      RESEND_WEBHOOK_SECRET: WEBHOOK_SECRET,
       EMAIL_FROM: FROM,
     })
     expect(emailConfig).toMatchObject({
       mode: "send",
       resendApiKey: RESEND_KEY,
+      webhookSecret: WEBHOOK_SECRET,
       from: FROM,
     })
   })
@@ -301,12 +329,13 @@ describe("emailConfig", () => {
         ...where,
         EMAIL_MODE: "send",
         RESEND_API_KEY: RESEND_KEY,
+        RESEND_WEBHOOK_SECRET: WEBHOOK_SECRET,
         EMAIL_FROM: FROM,
       })
     ).rejects.toThrow(/EMAIL_MODE: must not be "send" outside production/)
   })
 
-  it.each(["RESEND_API_KEY", "EMAIL_FROM"] as const)(
+  it.each(["RESEND_API_KEY", "EMAIL_FROM", "RESEND_WEBHOOK_SECRET"] as const)(
     "refuses send mode without %s, naming it",
     async (missing) => {
       await expect(
@@ -314,6 +343,7 @@ describe("emailConfig", () => {
           ...production,
           EMAIL_MODE: "send",
           RESEND_API_KEY: RESEND_KEY,
+          RESEND_WEBHOOK_SECRET: WEBHOOK_SECRET,
           EMAIL_FROM: FROM,
           [missing]: undefined,
         })
@@ -393,6 +423,7 @@ describe(".env.example", () => {
     )
     expect(["", "sink", undefined]).toContain(example.EMAIL_MODE)
     expect(example.RESEND_API_KEY ?? "").toBe("")
+    expect(example.RESEND_WEBHOOK_SECRET ?? "").toBe("")
     const { emailConfig } = await loadServerEnv({
       EMAIL_MODE: example.EMAIL_MODE,
       EMAIL_FROM: example.EMAIL_FROM,

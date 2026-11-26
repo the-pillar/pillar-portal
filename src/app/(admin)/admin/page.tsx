@@ -2,6 +2,7 @@ import { Suspense } from "react"
 import type { Metadata } from "next"
 import { after } from "next/server"
 
+import { getEmailQuotaStatus, QuotaMeter } from "@/features/email"
 import {
   countPendingApprovalsForViewer,
   getMyOnboarding,
@@ -61,9 +62,10 @@ export default async function AdminHomePage({
 // or list read reaches (admin)/error.tsx, which replaces the page inside the
 // admin shell. `my_onboarding` alone decides who gets the tour and checklist
 // (its read failing shows neither); a failed created-task read is recorded
-// and leaves that item to do.
+// and leaves that item to do. A failed quota read is recorded and leaves the
+// Email section out.
 async function AdminHomeBody({ tourAgain }: { tourAgain: boolean }) {
-  const [cards, onboarding, createdTask, pending, canCreate] =
+  const [cards, onboarding, createdTask, pending, canCreate, quota] =
     await Promise.all([
       Promise.all(ADMIN_HOME_COUNTS.map(readCard)),
       getMyOnboarding(),
@@ -73,12 +75,16 @@ async function AdminHomeBody({ tourAgain }: { tourAgain: boolean }) {
       }),
       countPendingApprovalsForViewer(),
       canCreateTask(),
+      getEmailQuotaStatus().catch((error: unknown) => {
+        after(() => recordErrorEvent(error, { route: "render (admin)/admin" }))
+        return null
+      }),
     ])
 
   const onboard = onboarding?.tourAndChecklist ? onboarding : null
 
-  // One grid: "Needs you" and, from lg, the checklist beside it. The tour is
-  // a portal, so it takes no cell.
+  // One grid: "Needs you" and, from lg, the checklist beside it, then the
+  // Email section across both. The tour is a portal, so it takes no cell.
   return (
     <div className="mt-6 grid items-start gap-6 lg:grid-cols-2">
       <AdminHomeCards cards={cards} />
@@ -106,6 +112,17 @@ async function AdminHomeBody({ tourAgain }: { tourAgain: boolean }) {
           record={recordOnboardingAction}
           returnFocusId={HEADING_ID}
         />
+      )}
+      {quota && (
+        <section aria-labelledby="email-heading" className="lg:col-span-2">
+          <h2
+            id="email-heading"
+            className="font-heading text-heading-sm text-navy"
+          >
+            Email
+          </h2>
+          <QuotaMeter status={quota} now={new Date()} className="mt-3" />
+        </section>
       )}
     </div>
   )
