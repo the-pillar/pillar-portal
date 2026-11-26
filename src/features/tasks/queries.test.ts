@@ -250,6 +250,7 @@ function mockDetail({
     { id: STAFF_WRITER, name: "Staff Writer" },
   ] as unknown,
   reasons = [{ assignment_id: SLOT_B, reason: "Exams all week" }] as unknown,
+  links = [] as unknown,
   errors = {} as Partial<Record<string, unknown>>,
 } = {}) {
   const calls: Call[] = []
@@ -264,6 +265,7 @@ function mockDetail({
     task_assignments: slots,
     member_directory: members,
     assignment_reasons: reasons,
+    task_deliverable_links: links,
   }
   createClient.mockResolvedValue({
     rpc,
@@ -370,6 +372,7 @@ describe("getTaskDetail", () => {
           state: "on_it",
           reason: null,
           updatedAt: "2026-10-30T02:15:42.000001+00:00",
+          links: [],
         },
         {
           id: SLOT_B,
@@ -380,6 +383,7 @@ describe("getTaskDetail", () => {
           state: "needs_reassignment",
           reason: "Exams all week",
           updatedAt: "2026-10-30T02:15:42.000002+00:00",
+          links: [],
         },
         {
           id: SLOT_C,
@@ -390,6 +394,7 @@ describe("getTaskDetail", () => {
           state: "awaiting_response",
           reason: null,
           updatedAt: "2026-10-30T02:15:42+00:00",
+          links: [],
         },
       ],
       allowedMoves: ["doing", "for_review"],
@@ -399,9 +404,88 @@ describe("getTaskDetail", () => {
       canReopen: false,
       canManage: false,
       canReassign: false,
+      deliverableAddSlotIds: [],
+      deliverableRemoveSlotIds: [],
+      canRemoveDeliverables: false,
       updatedAt: "2026-10-30T02:15:42.123456+00:00",
       roleLabels: expect.objectContaining({ layout_artist: "Layout Artist" }),
     })
+  })
+
+  it("puts each slot's deliverable links on it in seq order, naming an adder only when it isn't the slot's own member, and passes the three capabilities through", async () => {
+    const { calls } = mockDetail({
+      capabilities: [
+        {
+          task_id: TASK_ID,
+          allowed_moves: [],
+          respondable_slot_ids: [],
+          hand_back_slot_ids: [],
+          can_review: false,
+          can_reopen: false,
+          can_manage: false,
+          can_reassign: false,
+          deliverable_add_slot_ids: [SLOT_A],
+          deliverable_remove_slot_ids: [SLOT_A, SLOT_B],
+          can_remove_deliverables: true,
+        },
+      ],
+      links: [
+        {
+          id: "l1",
+          slot_id: SLOT_A,
+          url: "https://www.canva.com/design/1",
+          added_by: HEAD_LAYOUT,
+          added_at: "2026-10-30T03:00:00+00:00",
+          task_assignments: { task_id: TASK_ID },
+        },
+        {
+          id: "l2",
+          slot_id: SLOT_B,
+          url: "https://docs.google.com/document/d/2",
+          added_by: HEAD_LAYOUT,
+          added_at: "2026-10-30T03:01:00+00:00",
+          task_assignments: { task_id: TASK_ID },
+        },
+        {
+          id: "l3",
+          slot_id: SLOT_B,
+          url: "https://example.org/3",
+          added_by: "00000000-0000-4000-8000-0000000000ee",
+          added_at: "2026-10-30T03:02:00+00:00",
+          task_assignments: { task_id: TASK_ID },
+        },
+      ],
+    })
+
+    const detail = await getTaskDetail(TASK_ID)
+
+    expect(detail?.slots.map((slot) => slot.links)).toEqual([
+      [
+        {
+          id: "l1",
+          url: "https://www.canva.com/design/1",
+          addedByName: null,
+        },
+      ],
+      [
+        {
+          id: "l2",
+          url: "https://docs.google.com/document/d/2",
+          addedByName: "Head Layout Artist",
+        },
+        {
+          id: "l3",
+          url: "https://example.org/3",
+          addedByName: "Former member",
+        },
+      ],
+      [],
+    ])
+    expect(detail?.deliverableAddSlotIds).toEqual([SLOT_A])
+    expect(detail?.deliverableRemoveSlotIds).toEqual([SLOT_A, SLOT_B])
+    expect(detail?.canRemoveDeliverables).toBe(true)
+    const links = calls.find((c) => c.table === "task_deliverable_links")!
+    expect(links.calls).toContainEqual(["order", "seq"])
   })
 
   it("returns the revision note with its author's name from member_directory, and reads that name with the slot members'", async () => {

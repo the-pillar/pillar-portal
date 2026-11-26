@@ -17,15 +17,19 @@ import type { TaskDetail } from "../queries/task-detail"
 import { TaskDetailView } from "./task-detail-view"
 
 const {
+  addDeliverableLinksAction,
   deleteTaskAction,
   handBackSlotAction,
   markDoneAction,
   reassignSlotAction,
   refresh,
+  removeDeliverableLinkAction,
   reopenTaskAction,
   replace,
   toastSuccess,
 } = vi.hoisted(() => ({
+  addDeliverableLinksAction: vi.fn(),
+  removeDeliverableLinkAction: vi.fn(),
   deleteTaskAction: vi.fn(),
   handBackSlotAction: vi.fn(),
   markDoneAction: vi.fn(),
@@ -36,6 +40,8 @@ const {
   toastSuccess: vi.fn(),
 }))
 vi.mock("../actions", () => ({
+  addDeliverableLinksAction,
+  removeDeliverableLinkAction,
   deleteTaskAction,
   handBackSlotAction,
   markDoneAction,
@@ -105,6 +111,7 @@ const TASK: TaskDetail = {
       state: "awaiting_response",
       reason: null,
       updatedAt: "2026-10-30T02:15:42.000031+00:00",
+      links: [],
     },
     {
       id: CARTOON_SLOT,
@@ -115,6 +122,7 @@ const TASK: TaskDetail = {
       state: "awaiting_response",
       reason: null,
       updatedAt: "2026-10-30T02:15:42.000032+00:00",
+      links: [],
     },
     {
       id: WRITER_SLOT,
@@ -125,6 +133,7 @@ const TASK: TaskDetail = {
       state: "needs_reassignment",
       reason: "Exams all week",
       updatedAt: "2026-10-30T02:15:42.000033+00:00",
+      links: [],
     },
   ],
   allowedMoves: ["to_do", "for_review"],
@@ -134,6 +143,9 @@ const TASK: TaskDetail = {
   canReopen: false,
   canManage: false,
   canReassign: false,
+  deliverableAddSlotIds: [],
+  deliverableRemoveSlotIds: [],
+  canRemoveDeliverables: false,
   updatedAt: "2026-10-30T02:15:42.123456+00:00",
   movedAt: "2026-10-30T02:15:42.000034+00:00",
   roleLabels: {
@@ -887,6 +899,164 @@ describe("TaskDetailView", () => {
     )
     expect(screen.queryByRole("button", { name: /^Reassign/ })).toBeNull()
     expect(document.getElementById(`slot-${LAYOUT_SLOT}`)).toHaveFocus()
+  })
+
+  describe("deliverable links", () => {
+    const CANVA_LINK = {
+      id: "00000000-0000-4000-8000-0000000000a1",
+      url: "https://www.canva.com/design/DAF1/edit",
+      addedByName: null,
+    }
+    const DOCS_LINK = {
+      id: "00000000-0000-4000-8000-0000000000a2",
+      url: "https://docs.google.com/document/d/1Mn/edit",
+      addedByName: "Paolo",
+    }
+    // Two Layout Artist-style slots would also merge in Messenger; here the
+    // Layout slot and the Writer slot each hold links.
+    const withLinks: TaskDetail = {
+      ...TASK,
+      slots: TASK.slots.map((slot) =>
+        slot.id === LAYOUT_SLOT
+          ? { ...slot, state: "on_it", links: [CANVA_LINK] }
+          : slot.id === WRITER_SLOT
+            ? { ...slot, links: [DOCS_LINK] }
+            : slot
+      ),
+    }
+    const slotRow = (id: string) => document.getElementById(`slot-${id}`)!
+
+    it("lists each slot's links in its row, after the name line, and nothing for an empty slot", () => {
+      render(<TaskDetailView task={withLinks} />)
+
+      expect(
+        within(slotRow(LAYOUT_SLOT)).getByRole("link", { name: /^Canva/ })
+      ).toBeInTheDocument()
+      expect(
+        within(slotRow(WRITER_SLOT)).getByText("added by Paolo")
+      ).toBeVisible()
+      expect(within(slotRow(CARTOON_SLOT)).queryByRole("link")).toBeNull()
+      expect(
+        within(slotRow(CARTOON_SLOT)).queryByText(/Add the link/)
+      ).toBeNull()
+    })
+
+    it("offers + Add a link, the hint and remove buttons only from the capability ids", () => {
+      render(
+        <TaskDetailView
+          task={{
+            ...withLinks,
+            deliverableAddSlotIds: [CARTOON_SLOT],
+            deliverableRemoveSlotIds: [LAYOUT_SLOT],
+          }}
+        />
+      )
+
+      expect(
+        within(slotRow(CARTOON_SLOT)).getByRole("button", {
+          name: "Add a link for Cartoonist",
+        })
+      ).toBeInTheDocument()
+      expect(
+        within(slotRow(CARTOON_SLOT)).getByText(
+          "Add the link to your work here when it's ready."
+        )
+      ).toBeInTheDocument()
+      expect(
+        within(slotRow(LAYOUT_SLOT)).getByRole("button", {
+          name: "Remove Canva link 1 from Layout Artist",
+        })
+      ).toBeInTheDocument()
+      // The writer's slot isn't in either list.
+      expect(within(slotRow(WRITER_SLOT)).queryByRole("button")).toBeNull()
+      // Layout is at the edge but not in the add ids: a full slot.
+      expect(
+        within(slotRow(LAYOUT_SLOT)).getByText("5 of 5 links")
+      ).toBeInTheDocument()
+    })
+
+    it("offers the approver a remove button on every link of the task", () => {
+      render(
+        <TaskDetailView task={{ ...withLinks, canRemoveDeliverables: true }} />
+      )
+
+      expect(
+        screen.getAllByRole("button", { name: /^Remove .* link \d from / })
+      ).toHaveLength(2)
+    })
+
+    it("copies every deliverable link under its role after Reference", async () => {
+      const writeText = vi.fn().mockResolvedValue(undefined)
+      const user = userEvent.setup({ writeToClipboard: false })
+      vi.stubGlobal("navigator", { clipboard: { writeText } })
+      render(<TaskDetailView task={withLinks} />)
+
+      await user.click(
+        screen.getByRole("button", { name: "Copy for Messenger" })
+      )
+
+      expect(writeText).toHaveBeenCalledWith(
+        `📌 Lay out the spread — Layout Artist / Cartoonist / Writer · due Sat, Oct 31, 11:30 PM\nhttps://pillar.example/dashboard/tasks/${TASK.id}\n\nReference\n• example.com: https://example.com/brief\n\nLayout Artist\n• Canva: https://www.canva.com/design/DAF1/edit\n\nWriter\n• Google Docs: https://docs.google.com/document/d/1Mn/edit`
+      )
+    })
+
+    it("carries every deliverable link into Reassign's Messenger text, whichever slot is reassigned", async () => {
+      const user = userEvent.setup()
+      reassignSlotAction.mockResolvedValue({
+        ok: true,
+        data: { slotId: CARTOON_SLOT },
+      })
+      render(
+        <TaskDetailView
+          task={{ ...withLinks, canReassign: true }}
+          reassignOptions={REASSIGN_OPTIONS}
+        />
+      )
+
+      await user.click(
+        screen.getByRole("button", { name: /^Reassign\s?\(Cartoonist\)$/ })
+      )
+      const dialog = screen.getByRole("dialog")
+      await user.click(
+        within(dialog).getByRole("radio", { name: "Staff Writer · 1 active" })
+      )
+      await user.click(within(dialog).getByRole("button", { name: "Reassign" }))
+      await waitFor(() => expect(toastSuccess).toHaveBeenCalled())
+
+      const writeText = vi.fn().mockResolvedValue(undefined)
+      vi.stubGlobal("navigator", { clipboard: { writeText } })
+      await toastSuccess.mock.calls[0][1].action.onClick()
+      expect(writeText).toHaveBeenCalledExactlyOnceWith(
+        `📌 Lay out the spread — Cartoonist · due Sat, Oct 31, 11:30 PM\nhttps://pillar.example/dashboard/tasks/${TASK.id}\n\nReference\n• example.com: https://example.com/brief\n\nLayout Artist\n• Canva: https://www.canva.com/design/DAF1/edit\n\nWriter\n• Google Docs: https://docs.google.com/document/d/1Mn/edit`
+      )
+    })
+
+    it("makes the page heading a focus target", () => {
+      render(<TaskDetailView task={TASK} />)
+
+      const heading = screen.getByRole("heading", { level: 1 })
+      expect(heading).toHaveAttribute("id", "task-heading")
+      expect(heading).toHaveAttribute("tabindex", "-1")
+    })
+
+    it("has no axe violations with links, remove buttons and an open field", async () => {
+      const user = userEvent.setup()
+      const { container } = render(
+        <TaskDetailView
+          task={{
+            ...withLinks,
+            deliverableAddSlotIds: [CARTOON_SLOT],
+            deliverableRemoveSlotIds: [CARTOON_SLOT],
+            canRemoveDeliverables: true,
+          }}
+        />
+      )
+      await user.click(
+        screen.getByRole("button", { name: "Add a link for Cartoonist" })
+      )
+
+      expect(await axeViolations(container)).toEqual([])
+    })
   })
 
   it("omits the reference links section and the description when they're empty", () => {

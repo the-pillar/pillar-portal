@@ -8,7 +8,19 @@ import {
 import { createClient } from "@/lib/supabase/server"
 
 import type { SlotState, TaskColumn } from "../status"
+import { getDeliverableLinks } from "./deliverable-links"
 import { FORMER_MEMBER, nameMap, taskIdSchema } from "./shared"
+
+/** One deliverable link on a slot, oldest first. */
+export type TaskDetailLink = {
+  id: string
+  url: string
+  /**
+   * "added by <name>": null when the slot's own member added it, else the
+   * adder's name ("Former member" when they've left).
+   */
+  addedByName: string | null
+}
 
 export type TaskDetailSlot = {
   id: string
@@ -30,6 +42,8 @@ export type TaskDetailSlot = {
    * drop its microseconds.
    */
   updatedAt: string
+  /** The slot's deliverable links, in the order they were added. */
+  links: TaskDetailLink[]
 }
 
 /** The approver's note on a sent-back task, until its next column move. */
@@ -86,6 +100,14 @@ export type TaskDetail = {
    */
   canReassign: boolean
   /**
+   * The slots it may add deliverable links to, the slots it may remove them
+   * from as the slot's holder, and whether it may remove any link on the task
+   * (the approver): from task_capabilities, never decided here.
+   */
+  deliverableAddSlotIds: string[]
+  deliverableRemoveSlotIds: string[]
+  canRemoveDeliverables: boolean
+  /**
    * The task's version, `updated_at` exactly as PostgREST returned it, which
    * a confirmation passes back (AD-21). Never parsed: a `Date` would drop
    * its microseconds.
@@ -105,8 +127,8 @@ export type TaskDetail = {
  * is), or null when the id is malformed or names no task the caller can
  * read. Throws on any query error.
  *
- * The task (with its owner's name and any revision note), its slots and
- * task_capabilities are read together; the names of the slot members and the
+ * The task (with its owner's name and any revision note), its slots,
+ * task_capabilities and its deliverable links are read together; the names of the slot members and the
  * note's author (from member_directory, never `members`) and the readable
  * reasons then follow, since they need those rows.
  */
@@ -115,22 +137,24 @@ export async function getTaskDetail(id: string): Promise<TaskDetail | null> {
 
   const supabase = await createClient()
 
-  const [taskResult, slotsResult, capabilitiesResult] = await Promise.all([
-    supabase
-      .from("tasks")
-      .select(
-        "id, title, description, due_at, reference_urls, column, revision_note, revision_note_by, revision_note_at, updated_at, moved_at, done_at, owning_section_id, owning_desk_id, sections(name), desks(name)"
-      )
-      .eq("id", id)
-      .maybeSingle(),
-    supabase
-      .from("task_assignments")
-      .select("id, member_id, role, state, updated_at")
-      .eq("task_id", id)
-      .order("created_at")
-      .order("id"),
-    supabase.rpc("task_capabilities", { ids: [id] }),
-  ])
+  const [taskResult, slotsResult, capabilitiesResult, links] =
+    await Promise.all([
+      supabase
+        .from("tasks")
+        .select(
+          "id, title, description, due_at, reference_urls, column, revision_note, revision_note_by, revision_note_at, updated_at, moved_at, done_at, owning_section_id, owning_desk_id, sections(name), desks(name)"
+        )
+        .eq("id", id)
+        .maybeSingle(),
+      supabase
+        .from("task_assignments")
+        .select("id, member_id, role, state, updated_at")
+        .eq("task_id", id)
+        .order("created_at")
+        .order("id"),
+      supabase.rpc("task_capabilities", { ids: [id] }),
+      getDeliverableLinks([id]),
+    ])
 
   if (taskResult.error) {
     throw new Error("getTaskDetail: reading tasks failed", {
@@ -222,6 +246,14 @@ export async function getTaskDetail(id: string): Promise<TaskDetail | null> {
       state: slot.state,
       reason: reasonBySlotId.get(slot.id) ?? null,
       updatedAt: slot.updated_at,
+      links: links
+        .filter((link) => link.slotId === slot.id)
+        .map((link) => ({
+          id: link.id,
+          url: link.url,
+          addedByName:
+            link.addedBy === slot.member_id ? null : link.addedByName,
+        })),
     })),
     allowedMoves: capabilities?.allowed_moves ?? [],
     respondableSlotIds: capabilities?.respondable_slot_ids ?? [],
@@ -230,6 +262,9 @@ export async function getTaskDetail(id: string): Promise<TaskDetail | null> {
     canReopen: capabilities?.can_reopen ?? false,
     canManage: capabilities?.can_manage ?? false,
     canReassign: capabilities?.can_reassign ?? false,
+    deliverableAddSlotIds: capabilities?.deliverable_add_slot_ids ?? [],
+    deliverableRemoveSlotIds: capabilities?.deliverable_remove_slot_ids ?? [],
+    canRemoveDeliverables: capabilities?.can_remove_deliverables ?? false,
     updatedAt: task.updated_at,
     movedAt: task.moved_at,
     roleLabels: PRODUCTION_ROLE_LABELS,

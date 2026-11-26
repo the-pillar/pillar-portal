@@ -45,9 +45,14 @@ import {
   type UpdateTaskState,
 } from "../actions"
 import { duePresets, type DuePreset } from "../due-presets"
-import { taskErrorMessage, type TaskErrorCode } from "../errors"
+import {
+  slotHasLinksMessage,
+  slotHasLinksRole,
+  taskErrorMessage,
+  type TaskErrorCode,
+} from "../errors"
 import { ReferenceLinksField } from "./reference-links-field"
-import { buildMessengerMessage } from "../messenger"
+import { buildMessengerMessage, type MessengerDeliverables } from "../messenger"
 import type { TaskEdit, TaskEditSlot } from "../queries/task-edit"
 import type { SlotMemberOption, TaskFormOptions } from "../queries/task-form"
 import {
@@ -195,7 +200,8 @@ function blankToNull(value: unknown): string | null {
 function messengerMessage(
   taskId: string,
   data: TaskFormValues,
-  roleLabels: TaskFormOptions["roleLabels"]
+  roleLabels: TaskFormOptions["roleLabels"],
+  deliverables: MessengerDeliverables[]
 ): string | null {
   try {
     return buildMessengerMessage(
@@ -205,6 +211,7 @@ function messengerMessage(
         roles: data.slots.map((slot) => slot.role),
         dueAt: phtInputToUtc(data.dueAt),
         referenceUrls: data.referenceUrls,
+        deliverables,
       },
       clientEnv.NEXT_PUBLIC_SITE_URL,
       roleLabels
@@ -280,6 +287,7 @@ export function TaskForm({
     trigger,
     setError,
     clearErrors,
+    getValues,
     reset,
     formState: { errors, isSubmitting, isSubmitted, isDirty },
   } = useForm<TaskFormValues>({
@@ -314,7 +322,26 @@ export function TaskForm({
   )
   const presets: DuePreset[] = mounted ? duePresets(new Date()) : []
 
-  const { fields, append, remove } = useFieldArray({ control, name: "slots" })
+  const { fields, append, remove, insert } = useFieldArray({
+    control,
+    name: "slots",
+  })
+  // The slot update_task refused to drop because it holds deliverable links,
+  // put back where it was with the message under its row; focus then goes to
+  // its member picker.
+  const [linkRefusal, setLinkRefusal] = useState<{
+    slotId: string
+    message: string
+  } | null>(null)
+  // A fresh object each time, so a second refusal of the same slot refocuses.
+  const [focusSlot, setFocusSlot] = useState<{ slotId: string } | null>(null)
+  useEffect(() => {
+    if (focusSlot === null) return
+    const index = getValues("slots").findIndex(
+      (slot) => slot.id === focusSlot.slotId
+    )
+    document.getElementById(`${idPrefix}-slot-${index}-member`)?.focus()
+  }, [focusSlot, getValues, idPrefix])
 
   const owningSectionId = useWatch({ control, name: "owningSectionId" })
   const owningDeskId = useWatch({ control, name: "owningDeskId" })
@@ -376,7 +403,8 @@ export function TaskForm({
       toast.error(taskErrorMessage(result.code))
       return
     }
-    const text = messengerMessage(result.data.id, data, options.roleLabels)
+    // A new task has no deliverable links.
+    const text = messengerMessage(result.data.id, data, options.roleLabels, [])
     if (onCreated) {
       onCreated(result.data.id, text)
       return
@@ -393,7 +421,38 @@ export function TaskForm({
     )
   }
 
+  // Puts back the stored slot the save left out and the database refused to
+  // drop, at its old place, keeping every other edit. False when no stored
+  // slot is missing (the page then shows the refusal as any other).
+  function restoreLinkedSlot(role: string | null): boolean {
+    const present = new Set(
+      getValues("slots").flatMap((slot) => (slot.id ? [slot.id] : []))
+    )
+    const missing = (task?.slots ?? [])
+      .map((slot, index) => ({ slot, index }))
+      .filter(({ slot }) => !present.has(slot.id))
+      .filter(({ slot }) => role === null || slot.role === role)
+    const found =
+      missing.find(({ slot }) => slot.linkCount > 0) ?? missing.at(0)
+    if (!found) return false
+    const { slot, index } = found
+    const at = Math.min(index, getValues("slots").length)
+    insert(at, {
+      id: slot.id,
+      loadedMemberId: slot.memberId,
+      role: slot.role,
+      memberId: slot.memberId,
+    })
+    setLinkRefusal({
+      slotId: slot.id,
+      message: slotHasLinksMessage(options.roleLabels[slot.role]),
+    })
+    setFocusSlot({ slotId: slot.id })
+    return true
+  }
+
   async function onUpdate(data: TaskFormValues) {
+    setLinkRefusal(null)
     let result: UpdateTaskState
     try {
       result = await updateTaskAction(data)
@@ -406,13 +465,24 @@ export function TaskForm({
         showLinksRefused()
         return
       }
+      if (
+        result.code === "tasks.slot_has_links" &&
+        restoreLinkedSlot(slotHasLinksRole(result.params))
+      ) {
+        return
+      }
       toast.error(taskErrorMessage(result.code))
       if (RELOAD_CODES.has(result.code)) refreshAfterFailure(router)
       return
     }
     const { taskId, newAssignee } = result.data
     const text = newAssignee
-      ? messengerMessage(taskId, data, options.roleLabels)
+      ? messengerMessage(
+          taskId,
+          data,
+          options.roleLabels,
+          task?.deliverables ?? []
+        )
       : null
     toast.success(
       "Task saved.",
@@ -561,6 +631,7 @@ export function TaskForm({
                 setValue={setValue}
                 errors={errors}
                 showErrors={isSubmitted}
+                linkRefusal={linkRefusal}
                 onRemove={
                   !slotsLocked && fields.length > 1
                     ? () => remove(index)
@@ -613,6 +684,7 @@ function SlotRow({
   setValue,
   errors,
   showErrors,
+  linkRefusal,
   onRemove,
 }: {
   idPrefix: string
@@ -627,6 +699,8 @@ function SlotRow({
   errors: FieldErrors<TaskFormValues>
   /** False until the form is submitted: see the useForm comment. */
   showErrors: boolean
+  /** The refusal to drop a slot that holds deliverable links, with that slot's id. */
+  linkRefusal: { slotId: string; message: string } | null
   onRemove?: () => void
 }) {
   const role = useWatch({ control, name: `slots.${index}.role` })
@@ -664,6 +738,11 @@ function SlotRow({
       : undefined
   const memberOptions = current ? [...listed, current] : listed
   const rowErrors = showErrors ? errors.slots?.[index] : undefined
+  const refusal =
+    slotId !== undefined && linkRefusal?.slotId === slotId
+      ? linkRefusal.message
+      : null
+  const refusalId = `${idPrefix}-slot-${index}-links-refusal`
 
   // A member chosen for the old role isn't necessarily valid for the new
   // one, and the Select would just show it as unselected without this: the
@@ -677,114 +756,130 @@ function SlotRow({
   }, [role, index, setValue])
 
   return (
-    <div className="flex flex-col gap-3 rounded-lg bg-muted p-3 sm:flex-row sm:items-start">
-      {existing ? (
-        <Field
-          className="flex-1"
-          aria-labelledby={`${idPrefix}-slot-${index}-role-label`}
-        >
-          <FieldTitle id={`${idPrefix}-slot-${index}-role-label`}>
-            Role
-          </FieldTitle>
-          <p className="flex min-h-8 items-center">
-            {options.roleLabels[existing.role]}
-          </p>
-        </Field>
-      ) : (
-        <Field className="flex-1" data-invalid={!!rowErrors?.role || undefined}>
-          <FieldLabel htmlFor={`${idPrefix}-slot-${index}-role`}>
-            Role
-          </FieldLabel>
-          <Controller
-            control={control}
-            name={`slots.${index}.role`}
-            render={({ field }) => (
-              <Select value={field.value} onValueChange={field.onChange}>
-                <SelectTrigger
-                  id={`${idPrefix}-slot-${index}-role`}
-                  aria-invalid={!!rowErrors?.role}
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {PRODUCTION_ROLES.map((productionRole) => (
-                    <SelectItem key={productionRole} value={productionRole}>
-                      {options.roleLabels[productionRole]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+    <div className="rounded-lg bg-muted p-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+        {existing ? (
+          <Field
+            className="flex-1"
+            aria-labelledby={`${idPrefix}-slot-${index}-role-label`}
+          >
+            <FieldTitle id={`${idPrefix}-slot-${index}-role-label`}>
+              Role
+            </FieldTitle>
+            <p className="flex min-h-8 items-center">
+              {options.roleLabels[existing.role]}
+            </p>
+            {existing.linkCount > 0 && (
+              <p className="text-sm text-muted-foreground">
+                {existing.linkCount === 1
+                  ? "1 deliverable link"
+                  : `${existing.linkCount} deliverable links`}
+              </p>
             )}
-          />
-          <FieldError errors={[rowErrors?.role]} />
-        </Field>
-      )}
+          </Field>
+        ) : (
+          <Field
+            className="flex-1"
+            data-invalid={!!rowErrors?.role || undefined}
+          >
+            <FieldLabel htmlFor={`${idPrefix}-slot-${index}-role`}>
+              Role
+            </FieldLabel>
+            <Controller
+              control={control}
+              name={`slots.${index}.role`}
+              render={({ field }) => (
+                <Select value={field.value} onValueChange={field.onChange}>
+                  <SelectTrigger
+                    id={`${idPrefix}-slot-${index}-role`}
+                    aria-invalid={!!rowErrors?.role}
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PRODUCTION_ROLES.map((productionRole) => (
+                      <SelectItem key={productionRole} value={productionRole}>
+                        {options.roleLabels[productionRole]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            />
+            <FieldError errors={[rowErrors?.role]} />
+          </Field>
+        )}
 
-      {readOnly && existing ? (
-        <Field
-          className="flex-1"
-          aria-labelledby={`${idPrefix}-slot-${index}-member-label`}
-        >
-          <FieldTitle id={`${idPrefix}-slot-${index}-member-label`}>
-            Member
-          </FieldTitle>
-          <p className="flex min-h-8 items-center">{existing.memberName}</p>
-        </Field>
-      ) : (
-        <Field
-          className="flex-1"
-          data-invalid={!!rowErrors?.memberId || undefined}
-        >
-          <FieldLabel htmlFor={`${idPrefix}-slot-${index}-member`}>
-            Member
-          </FieldLabel>
-          <Controller
-            control={control}
-            name={`slots.${index}.memberId`}
-            render={({ field }) => (
-              <Select value={field.value} onValueChange={field.onChange}>
-                <SelectTrigger
-                  id={`${idPrefix}-slot-${index}-member`}
-                  aria-invalid={!!rowErrors?.memberId}
-                >
-                  <SelectValue placeholder="Choose a member" />
-                </SelectTrigger>
-                <SelectContent>
-                  {memberOptions.map((member) => (
-                    <SelectItem key={member.id} value={member.id}>
-                      {memberLabel(member)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-          />
-          <FieldError errors={[rowErrors?.memberId]} />
-          {roleMembers.length > 0 &&
-            roleMembers.length < options.allMembers.length && (
-              <label className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
-                <input
-                  type="checkbox"
-                  checked={showEveryone}
-                  onChange={(event) => setShowEveryone(event.target.checked)}
-                />
-                Show everyone
-              </label>
-            )}
-        </Field>
-      )}
+        {readOnly && existing ? (
+          <Field
+            className="flex-1"
+            aria-labelledby={`${idPrefix}-slot-${index}-member-label`}
+          >
+            <FieldTitle id={`${idPrefix}-slot-${index}-member-label`}>
+              Member
+            </FieldTitle>
+            <p className="flex min-h-8 items-center">{existing.memberName}</p>
+          </Field>
+        ) : (
+          <Field
+            className="flex-1"
+            data-invalid={!!rowErrors?.memberId || undefined}
+          >
+            <FieldLabel htmlFor={`${idPrefix}-slot-${index}-member`}>
+              Member
+            </FieldLabel>
+            <Controller
+              control={control}
+              name={`slots.${index}.memberId`}
+              render={({ field }) => (
+                <Select value={field.value} onValueChange={field.onChange}>
+                  <SelectTrigger
+                    id={`${idPrefix}-slot-${index}-member`}
+                    aria-invalid={!!rowErrors?.memberId}
+                    aria-describedby={refusal !== null ? refusalId : undefined}
+                  >
+                    <SelectValue placeholder="Choose a member" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {memberOptions.map((member) => (
+                      <SelectItem key={member.id} value={member.id}>
+                        {memberLabel(member)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            />
+            <FieldError errors={[rowErrors?.memberId]} />
+            {roleMembers.length > 0 &&
+              roleMembers.length < options.allMembers.length && (
+                <label className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    checked={showEveryone}
+                    onChange={(event) => setShowEveryone(event.target.checked)}
+                  />
+                  Show everyone
+                </label>
+              )}
+          </Field>
+        )}
 
-      {onRemove && (
-        <Button
-          type="button"
-          variant="ghost"
-          onClick={onRemove}
-          aria-label={`Remove slot ${index + 1}`}
-          className="sm:mt-6"
-        >
-          Remove
-        </Button>
-      )}
+        {onRemove && (
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onRemove}
+            aria-label={`Remove slot ${index + 1}`}
+            className="sm:mt-6"
+          >
+            Remove
+          </Button>
+        )}
+      </div>
+      <FieldError id={refusalId} className="mt-2">
+        {refusal}
+      </FieldError>
     </div>
   )
 }

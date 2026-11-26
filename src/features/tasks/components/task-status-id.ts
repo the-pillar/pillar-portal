@@ -4,3 +4,6 @@
 // "use client" module, a server component such as TaskDetailView would get a
 // client reference, not the string.
 export const TASK_STATUS_ID = "task-status"
+
+/** Task detail's h1, where focus lands when a slot is gone. */
+export const TASK_HEADING_ID = "task-heading"

@@ -9,7 +9,7 @@ import { formatInPht } from "@/lib/time"
 import { cn } from "@/lib/utils"
 
 import { buildCalendarEvent, googleCalendarUrl } from "../calendar"
-import { buildMessengerMessage } from "../messenger"
+import { buildMessengerMessage, deliverablesByRole } from "../messenger"
 import type { ReassignOptions } from "../queries/reassign"
 import type { TaskDetail } from "../queries/task-detail"
 import { DEFAULT_RETURN_LINK, type ReturnLink } from "../return-link"
@@ -23,11 +23,12 @@ import { CopyForMessenger } from "./copy-for-messenger"
 import { HandBack } from "./hand-back"
 import { LinkRow } from "./link-row"
 import { ReassignSlot } from "./reassign-slot"
+import { SlotDeliverables } from "./slot-deliverables"
 import { SlotResponse } from "./slot-response"
 import { TaskColumnControl } from "./task-column-control"
 import { TaskManage } from "./task-manage"
 import { TaskReview } from "./task-review"
-import { TASK_STATUS_ID } from "./task-status-id"
+import { TASK_HEADING_ID, TASK_STATUS_ID } from "./task-status-id"
 
 const DUE_FORMAT = "EEE, MMM d, yyyy 'at' h:mm a"
 const DONE_FORMAT = "MMM d"
@@ -70,6 +71,15 @@ export function TaskDetailView({
     (slot) => respondable.has(slot.id) || handBackable.has(slot.id)
   )
   const barSlot = openSlots.length === 1 ? openSlots[0] : null
+  // Deliverable controls come from task_capabilities' three fields alone.
+  const deliverableAdd = new Set(task.deliverableAddSlotIds)
+  const deliverableRemove = new Set(task.deliverableRemoveSlotIds)
+  const deliverables = deliverablesByRole(
+    task.slots,
+    task.slots.flatMap((slot) =>
+      slot.links.map((link) => ({ slotId: slot.id, url: link.url }))
+    )
+  )
   const overdue = isTaskOverdue(task.dueAt, task.column)
   const googleUrl = googleCalendarUrl(
     buildCalendarEvent(
@@ -91,6 +101,7 @@ export function TaskDetailView({
       roles: task.slots.map((slot) => slot.role),
       dueAt: task.dueAt,
       referenceUrls: task.referenceUrls,
+      deliverables,
     },
     clientEnv.NEXT_PUBLIC_SITE_URL,
     task.roleLabels
@@ -114,7 +125,11 @@ export function TaskDetailView({
         {task.ownerName}
       </p>
 
-      <h1 className="mt-2 font-heading text-display break-words text-navy">
+      <h1
+        id={TASK_HEADING_ID}
+        tabIndex={-1}
+        className="mt-2 rounded-sm font-heading text-display break-words text-navy outline-offset-4 focus-visible:outline-2"
+      >
         {task.title}
       </h1>
 
@@ -278,6 +293,20 @@ export function TaskDetailView({
                   label={SLOT_STATE_LABELS[slot.state]}
                 />
               </div>
+              <SlotDeliverables
+                slotId={slot.id}
+                roleLabel={roleLabel}
+                links={slot.links}
+                canAdd={deliverableAdd.has(slot.id)}
+                canRemove={
+                  deliverableRemove.has(slot.id) || task.canRemoveDeliverables
+                }
+                full={
+                  deliverableRemove.has(slot.id) && !deliverableAdd.has(slot.id)
+                }
+                rowId={rowId}
+                headingId={TASK_HEADING_ID}
+              />
               {slot.reason !== null && (
                 <p className="mt-1 text-sm break-words text-muted-foreground">
                   Reason: {slot.reason}
@@ -306,6 +335,7 @@ export function TaskDetailView({
                     taskTitle={task.title}
                     taskDueAt={task.dueAt}
                     taskReferenceUrls={task.referenceUrls}
+                    taskDeliverables={deliverables}
                     slotId={slot.id}
                     role={slot.role}
                     memberId={slot.memberId}

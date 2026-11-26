@@ -199,6 +199,33 @@
   html:has([data-action-bar]) body main {
     padding-bottom: calc(var(--action-bar-height, 7rem) + 8px);
   }
+  /* While a text field on the page has focus, the bar stops floating and
+     flows in place after the status row (DESIGN.md's under-480px rule), so
+     the keyboard never hides a field or Add. It stays mounted, so a reason
+     being typed in it is never lost. Unlayered, so it beats the utilities. */
+  body:has(
+      input:not(
+          [type="checkbox"],
+          [type="radio"],
+          [type="button"],
+          [type="submit"],
+          [type="reset"],
+          [type="file"],
+          [type="range"],
+          [type="color"],
+          [type="image"],
+          [type="hidden"]
+        ):focus,
+      textarea:focus
+    )
+    [data-action-bar] {
+    position: static;
+    max-height: none;
+    overflow: visible;
+    border-top-width: 0;
+    background: transparent;
+    padding: 0;
+  }
 }
 
 /* The floating New task button (DESIGN.md › New task button) sits 16px from
