@@ -61,6 +61,7 @@ export function ReassignSlot({
   taskId,
   taskTitle,
   taskDueAt,
+  taskReferenceUrls,
   slotId,
   role,
   memberId,
@@ -77,6 +78,8 @@ export function ReassignSlot({
   taskTitle: string
   /** UTC ISO timestamp, for the Messenger message. */
   taskDueAt: string
+  /** The task's saved reference links, for the Messenger message. */
+  taskReferenceUrls: string[]
   slotId: string
   role: ProductionRole
   /** The slot's member now. */
@@ -160,7 +163,13 @@ export function ReassignSlot({
 
   function messengerText() {
     return buildMessengerMessage(
-      { id: taskId, title: taskTitle, roles: [role], dueAt: taskDueAt },
+      {
+        id: taskId,
+        title: taskTitle,
+        roles: [role],
+        dueAt: taskDueAt,
+        referenceUrls: taskReferenceUrls,
+      },
       clientEnv.NEXT_PUBLIC_SITE_URL,
       options.roleLabels
     )

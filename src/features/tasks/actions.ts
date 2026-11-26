@@ -22,6 +22,35 @@ import {
 } from "./schemas"
 import type { SlotState, TaskColumn } from "./status"
 
+type Functions = Database["public"]["Functions"]
+type ListArgs<A> = Extract<A, { reference_urls: string[] }>
+
+// The list overloads' Args, with only the parameters whose SQL type allows a
+// null widened: the generator can't see that a plpgsql parameter accepts one,
+// though create_task and update_task treat a null in each as meaningful.
+// `satisfies` refuses a wrong overload and any missing or extra key.
+type Nullable<A, K extends keyof A> = Omit<A, K> & {
+  [P in K]: A[P] | null
+}
+type CreateTaskArgs = Nullable<
+  ListArgs<Functions["create_task"]["Args"]>,
+  "description" | "owning_section_id" | "owning_desk_id"
+>
+type UpdateTaskArgs = Nullable<
+  ListArgs<Functions["update_task"]["Args"]>,
+  "description"
+>
+
+type WidenedArgs = { create_task: CreateTaskArgs; update_task: UpdateTaskArgs }
+
+// The one place the widened nulls meet the generated Args, which can't
+// express them: this helper holds the only `as` in these RPC args.
+function rpcArgs<N extends keyof WidenedArgs>(
+  args: WidenedArgs[N]
+): ListArgs<Functions[N]["Args"]> {
+  return args as ListArgs<Functions[N]["Args"]>
+}
+
 // AD-3's result shape, shared by every action in the slice.
 type ActionError = {
   ok: false
@@ -74,6 +103,7 @@ export type ReassignSlotState =
 const CREATE_ERROR_CODES: ReadonlySet<TaskErrorCode> = new Set([
   "auth.not_active",
   "tasks.not_admin",
+  "tasks.invalid_links",
 ])
 
 const COMMAND_ERROR_CODES: ReadonlySet<TaskErrorCode> = new Set([
@@ -136,6 +166,7 @@ const UPDATE_ERROR_CODES: ReadonlySet<TaskErrorCode> = new Set([
   "tasks.duplicate_slot",
   "tasks.invalid_slot_member",
   "tasks.not_allowed",
+  "tasks.invalid_links",
 ])
 
 // reassign_slot: the approver's codes, a Done task (tasks.not_allowed: the
@@ -179,25 +210,23 @@ export async function createTaskAction(
   }
 
   const supabase = await createClient()
-  // The generated Args type doesn't mark owning_section_id, owning_desk_id,
-  // description or reference_url nullable (the generator can't see that a
-  // plpgsql parameter's SQL type allows null), though create_task's own body
-  // treats a null in any of them as meaningful. The cast reflects what the
-  // database actually accepts.
   const args = {
     title: parsed.data.title,
     description: parsed.data.description,
     owning_section_id: parsed.data.owningSectionId,
     owning_desk_id: parsed.data.owningDeskId,
     due_at: dueAt.toISOString(),
-    reference_url: parsed.data.referenceUrl,
+    reference_urls: parsed.data.referenceUrls,
     slots: parsed.data.slots.map((slot) => ({
       role: slot.role,
       member_id: slot.memberId,
     })),
-  } as Database["public"]["Functions"]["create_task"]["Args"]
+  } satisfies CreateTaskArgs
 
-  const { data, error } = await supabase.rpc("create_task", args)
+  const { data, error } = await supabase.rpc(
+    "create_task",
+    rpcArgs<"create_task">(args)
+  )
 
   if (error) {
     return {
@@ -490,14 +519,12 @@ export async function updateTaskAction(
   }
 
   const supabase = await createClient()
-  // As create's: the generated Args type doesn't mark description or
-  // reference_url nullable, though update_task stores a null in either.
   const args = {
     task_id: taskId,
     title: parsed.data.title,
     description: parsed.data.description,
     due_at: dueAt.toISOString(),
-    reference_url: parsed.data.referenceUrl,
+    reference_urls: parsed.data.referenceUrls,
     slots: parsed.data.slots.map((slot) => ({
       ...(slot.id !== undefined
         ? { id: slot.id, loaded_member_id: slot.loadedMemberId }
@@ -505,9 +532,12 @@ export async function updateTaskAction(
       role: slot.role,
       member_id: slot.memberId,
     })),
-  } as Database["public"]["Functions"]["update_task"]["Args"]
+  } satisfies UpdateTaskArgs
 
-  const { data, error } = await supabase.rpc("update_task", args)
+  const { data, error } = await supabase.rpc(
+    "update_task",
+    rpcArgs<"update_task">(args)
+  )
 
   if (error) {
     return {

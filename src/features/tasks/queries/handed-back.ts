@@ -24,6 +24,8 @@ export type HandedBackSlot = {
   taskTitle: string
   /** UTC ISO timestamp; shown in PHT. */
   dueAt: string
+  /** The saved reference links, for the reassign Messenger text. */
+  referenceUrls: string[]
   role: ProductionRole
   /** Resolved here for the same client-bundle reason as TaskFormOptions's (./task-form.ts). */
   roleLabel: string
@@ -57,7 +59,7 @@ async function reassignableHandedBack(supabase: ServerClient, where: string) {
   const tasksResult = await supabase
     .from("tasks")
     .select(
-      "id, title, due_at, task_assignments!inner(id, role, member_id, updated_at, assignment_reasons(reason))"
+      "id, title, due_at, reference_urls, task_assignments!inner(id, role, member_id, updated_at, assignment_reasons(reason))"
     )
     .eq("task_assignments.state", "needs_reassignment")
     .neq("column", "done")
@@ -121,6 +123,7 @@ async function handedBackSlots(
       taskId: task.id,
       taskTitle: task.title,
       dueAt: task.due_at,
+      referenceUrls: task.reference_urls,
       role: slot.role,
       roleLabel: PRODUCTION_ROLE_LABELS[slot.role],
       memberId: slot.member_id,

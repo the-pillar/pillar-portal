@@ -18,7 +18,7 @@ export async function getTaskForCalendar(
   const supabase = await createClient()
   const { data, error } = await supabase
     .from("tasks")
-    .select("id, title, description, due_at, reference_url")
+    .select("id, title, description, due_at, reference_urls")
     .eq("id", id)
     .maybeSingle()
   if (error || !data) return null
@@ -28,6 +28,6 @@ export async function getTaskForCalendar(
     title: data.title,
     description: data.description,
     dueAt: data.due_at,
-    referenceUrl: data.reference_url,
+    referenceUrls: data.reference_urls,
   }
 }

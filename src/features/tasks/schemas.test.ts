@@ -27,7 +27,7 @@ const VALID = {
   owningSectionId: "news",
   owningDeskId: null,
   dueAt: "2026-10-31T23:30",
-  referenceUrl: null,
+  referenceUrls: [],
   slots: [
     {
       role: "layout_artist" as const,
@@ -47,13 +47,26 @@ describe("taskCreateSchema", () => {
     expect(taskCreateSchema.safeParse(VALID).success).toBe(true)
   })
 
-  it("accepts a description, and an https(s) reference link", () => {
+  it("accepts a description, and up to five reference links", () => {
     const result = taskCreateSchema.safeParse({
       ...VALID,
       description: "Cover the spread for the November issue.",
-      referenceUrl: "https://docs.example.com/brief",
+      referenceUrls: Array.from(
+        { length: 5 },
+        (_, i) => `https://docs.example.com/brief/${i}`
+      ),
     })
     expect(result.success).toBe(true)
+  })
+
+  it("cleans each link, and keeps an empty list as []", () => {
+    expect(
+      taskCreateSchema.parse({
+        ...VALID,
+        referenceUrls: [" canva.com/x ", "HTTPS://a.com"],
+      }).referenceUrls
+    ).toEqual(["https://canva.com/x", "https://a.com"])
+    expect(taskCreateSchema.parse(VALID).referenceUrls).toEqual([])
   })
 
   it("rejects a blank title", () => {
@@ -105,17 +118,37 @@ describe("taskCreateSchema", () => {
     }
   )
 
-  it("rejects a malformed reference link", () => {
-    const issues = issuesFor({ ...VALID, referenceUrl: "not-a-url" })
-    expect(issues.some((i) => i.path.join(".") === "referenceUrl")).toBe(true)
-  })
-
-  it("rejects a reference link over 2048 characters", () => {
+  it("names the row of a refused link, with the field's copy", () => {
     const issues = issuesFor({
       ...VALID,
-      referenceUrl: `https://example.com/${"x".repeat(2048)}`,
+      referenceUrls: ["https://a.com", "hello"],
     })
-    expect(issues.some((i) => i.path.join(".") === "referenceUrl")).toBe(true)
+    expect(issues).toEqual([
+      expect.objectContaining({
+        path: ["referenceUrls", 1],
+        message:
+          "This doesn't look like a link. Copy the full address from your browser.",
+      }),
+    ])
+  })
+
+  it("refuses a lone surrogate in a link", () => {
+    const issues = issuesFor({
+      ...VALID,
+      referenceUrls: ["https://a.com/\uD800"],
+    })
+    expect(issues.some((i) => i.path.join(".") === "referenceUrls.0")).toBe(
+      true
+    )
+  })
+
+  it("refuses six links, null and a missing list, never cutting to five", () => {
+    const six = Array.from({ length: 6 }, (_, i) => `https://a.com/${i}`)
+    expect(issuesFor({ ...VALID, referenceUrls: six })).not.toHaveLength(0)
+    expect(issuesFor({ ...VALID, referenceUrls: null })).not.toHaveLength(0)
+    expect(issuesFor({ ...VALID, referenceUrls: undefined })).not.toHaveLength(
+      0
+    )
   })
 
   it("rejects no slots", () => {
@@ -401,7 +434,7 @@ describe("taskUpdateSchema", () => {
     title: "Lay out the spread",
     description: null,
     dueAt: "2026-10-31T23:30",
-    referenceUrl: null,
+    referenceUrls: [],
     slots: [
       {
         id: SLOT_ID,
@@ -419,7 +452,10 @@ describe("taskUpdateSchema", () => {
   }
 
   it("accepts the task, its fields, and slots with an id and the member it loaded (existing) or neither (new)", () => {
-    expect(taskUpdateSchema.parse(EDIT)).toEqual(EDIT)
+    expect(taskUpdateSchema.parse(EDIT)).toEqual({
+      ...EDIT,
+      loadedReferenceUrls: [],
+    })
   })
 
   it.each([
@@ -462,17 +498,72 @@ describe("taskUpdateSchema", () => {
         owningSectionId: "news",
         owningDeskId: null,
       })
-    ).toEqual(EDIT)
+    ).toEqual({ ...EDIT, loadedReferenceUrls: [] })
   })
 
-  it("trims the title and the reference link, as create does", () => {
+  it("trims the title and cleans the reference links, as create does", () => {
     const parsed = taskUpdateSchema.parse({
       ...EDIT,
       title: "  Lay out the spread  ",
-      referenceUrl: " https://example.com/brief ",
+      referenceUrls: [" example.com/brief "],
     })
     expect(parsed.title).toBe("Lay out the spread")
-    expect(parsed.referenceUrl).toBe("https://example.com/brief")
+    expect(parsed.referenceUrls).toEqual(["https://example.com/brief"])
+  })
+
+  it("never refuses a link equal to one the form loaded, and leaves it as is", () => {
+    const loaded = "https://example.com/has a space"
+    const parsed = taskUpdateSchema.parse({
+      ...EDIT,
+      referenceUrls: [loaded, "canva.com/x"],
+      loadedReferenceUrls: [loaded],
+    })
+    expect(parsed.referenceUrls).toEqual([loaded, "https://canva.com/x"])
+  })
+
+  it("refuses U+0000 and a lone surrogate even in a loaded link", () => {
+    for (const bad of [
+      "https://a.com/" + String.fromCharCode(0),
+      "https://a.com/" + String.fromCharCode(0xd800),
+    ]) {
+      const result = taskUpdateSchema.safeParse({
+        ...EDIT,
+        referenceUrls: [bad],
+        loadedReferenceUrls: [bad],
+      })
+      expect(result.error?.issues).toEqual([
+        expect.objectContaining({ path: ["referenceUrls", 0] }),
+      ])
+    }
+  })
+
+  it("refuses a changed link, naming its row, even beside a loaded one", () => {
+    const result = taskUpdateSchema.safeParse({
+      ...EDIT,
+      referenceUrls: ["https://example.com/ok", "mailto:a@b.com"],
+      loadedReferenceUrls: ["https://example.com/ok"],
+    })
+    expect(result.error?.issues).toEqual([
+      expect.objectContaining({
+        path: ["referenceUrls", 1],
+        message: "Only web links work here, like https://…",
+      }),
+    ])
+  })
+
+  it("still requires a non-empty element and no more than five", () => {
+    expect(
+      taskUpdateSchema.safeParse({ ...EDIT, referenceUrls: [""] }).success
+    ).toBe(false)
+    expect(
+      taskUpdateSchema.safeParse({
+        ...EDIT,
+        referenceUrls: Array.from(
+          { length: 6 },
+          (_, i) => `https://a.com/${i}`
+        ),
+      }).success
+    ).toBe(false)
   })
 
   it.each([
@@ -488,8 +579,8 @@ describe("taskUpdateSchema", () => {
     ["a malformed due date", { dueAt: "2026-10-31" }, "dueAt"],
     [
       "a malformed reference link",
-      { referenceUrl: "not-a-url" },
-      "referenceUrl",
+      { referenceUrls: ["not-a-url"] },
+      "referenceUrls.0",
     ],
     ["no slots", { slots: [] }, "slots"],
     [
@@ -636,18 +727,8 @@ describe("characters that can't be saved", () => {
     title: "Lay out the spread",
     description: null,
     dueAt: "2026-10-31T23:30",
-    referenceUrl: null,
+    referenceUrls: [],
     slots: [{ role: "writer" as const, memberId: VALID.slots[0].memberId }],
-  }
-
-  // A link holding the value: spaces inside it become dashes (a link has
-  // none), and the ones around it stay, for trim.
-  const asLink = (value: string) => {
-    const inner = value.trim()
-    return value.replace(
-      inner,
-      `https://example.com/${inner.replaceAll(" ", "-")}`
-    )
   }
 
   // Each field, with the value put where that schema reads it.
@@ -665,12 +746,6 @@ describe("characters that can't be saved", () => {
       "description",
     ],
     [
-      "the create reference link",
-      taskCreateSchema,
-      (v: string) => ({ ...VALID, referenceUrl: asLink(v) }),
-      "referenceUrl",
-    ],
-    [
       "the edit title",
       taskUpdateSchema,
       (v: string) => ({ ...EDIT, title: v }),
@@ -681,12 +756,6 @@ describe("characters that can't be saved", () => {
       taskUpdateSchema,
       (v: string) => ({ ...EDIT, description: v }),
       "description",
-    ],
-    [
-      "the edit reference link",
-      taskUpdateSchema,
-      (v: string) => ({ ...EDIT, referenceUrl: asLink(v) }),
-      "referenceUrl",
     ],
     [
       "the Can't take this reason",
@@ -762,7 +831,7 @@ describe("slots with no member yet", () => {
         title: "Lay out the spread",
         description: null,
         dueAt: "2026-10-31T23:30",
-        referenceUrl: null,
+        referenceUrls: [],
       },
     ],
   ] as const)(

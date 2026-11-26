@@ -173,7 +173,7 @@ const TASK_ROW = {
   title: "Lay out the spread",
   description: "Two pages.",
   due_at: "2026-10-31T15:30:00+00:00",
-  reference_url: "https://example.com/brief",
+  reference_urls: ["https://example.com/brief"],
   column: "to_do",
   revision_note: null,
   revision_note_by: null,
@@ -306,7 +306,7 @@ describe("getTaskDetail", () => {
     const tasks = calls.find((c) => c.table === "tasks")!
     expect(tasks.calls).toContainEqual([
       "select",
-      "id, title, description, due_at, reference_url, column, revision_note, revision_note_by, revision_note_at, updated_at, moved_at, done_at, owning_section_id, owning_desk_id, sections(name), desks(name)",
+      "id, title, description, due_at, reference_urls, column, revision_note, revision_note_by, revision_note_at, updated_at, moved_at, done_at, owning_section_id, owning_desk_id, sections(name), desks(name)",
     ])
     expect(tasks.calls).toContainEqual(["eq", "id", TASK_ID])
     const slots = calls.find((c) => c.table === "task_assignments")!
@@ -356,7 +356,7 @@ describe("getTaskDetail", () => {
       ownerName: "Layout",
       ownerId: "layout",
       dueAt: "2026-10-31T15:30:00+00:00",
-      referenceUrl: "https://example.com/brief",
+      referenceUrls: ["https://example.com/brief"],
       doneAt: null,
       column: "to_do",
       revisionNote: null,
@@ -951,7 +951,7 @@ describe("getTaskForCalendar", () => {
         title: "T",
         description: null,
         due_at: "2026-10-10T09:00:00+00:00",
-        reference_url: "https://x.test",
+        reference_urls: ["https://x.test"],
       },
       error: null,
     })
@@ -960,7 +960,7 @@ describe("getTaskForCalendar", () => {
       title: "T",
       description: null,
       dueAt: "2026-10-10T09:00:00+00:00",
-      referenceUrl: "https://x.test",
+      referenceUrls: ["https://x.test"],
     })
   })
 

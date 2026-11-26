@@ -3,6 +3,14 @@ import { z } from "zod"
 import { Constants } from "@/lib/supabase/database.types"
 import { DATETIME_LOCAL_PATTERN } from "@/lib/time"
 
+import {
+  LINK_ERRORS,
+  LINKS_MAX,
+  hasUnsavableCharacter,
+  linkError,
+  normalizeLink,
+  referenceLinksSchema,
+} from "./links"
 import { TASK_COLUMNS } from "./status"
 
 // The production_role enum's members, straight from the generated database
@@ -18,8 +26,6 @@ export const PRODUCTION_ROLES = Constants.public.Enums.production_role
 
 const TITLE_MAX = 200
 const DESCRIPTION_MAX = 5000
-const REFERENCE_URL_MAX = 2048
-const REFERENCE_URL_PATTERN = /^https?:\/\/\S+$/
 
 // U+0000, or half of a surrogate pair with no other half: Postgres's text
 // can hold neither (22P05), and the action would record that as an
@@ -62,13 +68,6 @@ const taskFieldsSchema = z.object({
     .string()
     .min(1, { message: "Add a due date" })
     .regex(DATETIME_LOCAL_PATTERN, { message: "Add a due date" }),
-  referenceUrl: savableText(
-    z
-      .string()
-      .trim()
-      .max(REFERENCE_URL_MAX, { message: "That link is too long" })
-      .regex(REFERENCE_URL_PATTERN, { message: "Enter a valid link" })
-  ).nullable(),
 })
 
 function slotsSchema<T extends z.ZodType>(slot: T) {
@@ -98,7 +97,8 @@ const REPEATED_PAIR = {
 /**
  * The admin task-creation form's shape. Mirrors the database limits in
  * supabase/migrations/<ts>_tasks_tasks.sql exactly (title <= 200, description
- * <= 5000, reference_url `^https?://\S+$` <= 2048, at least one slot), so a
+ * <= 5000, at least one slot; the reference links per `private.is_valid_link`,
+ * see links.ts), so a
  * submission that passes this never reaches the database's CHECK
  * constraints, which stay as the backstop for a caller that bypasses the UI.
  *
@@ -111,6 +111,7 @@ export const taskCreateSchema = taskFieldsSchema
   .extend({
     owningSectionId: z.string().nullable(),
     owningDeskId: z.string().nullable(),
+    referenceUrls: referenceLinksSchema,
     slots: slotsSchema(slotSchema),
   })
   .refine(
@@ -143,9 +144,46 @@ const slotUpdateSchema = slotSchema
 export const taskUpdateSchema = taskFieldsSchema
   .extend({
     taskId: z.uuid(),
+    // The links as the form holds them: checked in the refine below, since
+    // an element equal to one the form loaded is never refused (the database's
+    // is_valid_link stays the authority).
+    referenceUrls: z
+      .array(z.string().min(1))
+      .max(LINKS_MAX, { message: LINK_ERRORS.tooMany }),
+    loadedReferenceUrls: z.array(z.string()).max(LINKS_MAX).default([]),
     slots: slotsSchema(slotUpdateSchema),
   })
+  .superRefine((data, ctx) => {
+    data.referenceUrls.forEach((link, index) => {
+      // A loaded link is never refused for its shape, only for what
+      // Postgres can't store at all.
+      if (data.loadedReferenceUrls.includes(link)) {
+        if (hasUnsavableCharacter(link)) {
+          ctx.addIssue({
+            code: "custom",
+            message: LINK_ERRORS.notALink,
+            path: ["referenceUrls", index],
+          })
+        }
+        return
+      }
+      const error = linkError(normalizeLink(link))
+      if (error) {
+        ctx.addIssue({
+          code: "custom",
+          message: LINK_ERRORS[error],
+          path: ["referenceUrls", index],
+        })
+      }
+    })
+  })
   .refine(hasNoRepeatedPair, REPEATED_PAIR)
+  .transform((data) => ({
+    ...data,
+    referenceUrls: data.referenceUrls.map((link) =>
+      data.loadedReferenceUrls.includes(link) ? link : normalizeLink(link)
+    ),
+  }))
 
 export type TaskCreateInput = z.infer<typeof taskCreateSchema>
 export type TaskSlotInput = z.infer<typeof slotSchema>

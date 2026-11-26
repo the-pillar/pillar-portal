@@ -151,6 +151,7 @@ function Page({
                 taskTitle="Lay out the spread"
                 // 23:30 PHT on Saturday, October 31, 2026.
                 taskDueAt="2026-10-31T15:30:00+00:00"
+                taskReferenceUrls={[]}
                 slotId={SLOT_ID}
                 role={role}
                 memberId={memberId}

@@ -46,6 +46,7 @@ import {
 } from "../actions"
 import { duePresets, type DuePreset } from "../due-presets"
 import { taskErrorMessage, type TaskErrorCode } from "../errors"
+import { ReferenceLinksField } from "./reference-links-field"
 import { buildMessengerMessage } from "../messenger"
 import type { TaskEdit, TaskEditSlot } from "../queries/task-edit"
 import type { SlotMemberOption, TaskFormOptions } from "../queries/task-form"
@@ -69,8 +70,10 @@ const EMPTY_SLOT = { role: PRODUCTION_ROLES[0], memberId: "" } as const
  * a reassignment since is refused as stale), ride along unseen; the owner
  * stays null, since edit mode never shows or sends it.
  */
-type TaskFormValues = Omit<TaskCreateInput, "slots"> & {
+export type TaskFormValues = Omit<TaskCreateInput, "slots"> & {
   taskId?: string
+  /** Edit mode: the links as loaded, which a save never refuses. */
+  loadedReferenceUrls?: string[]
   slots: TaskUpdateSlotInput[]
 }
 
@@ -89,7 +92,7 @@ function emptyValues(
     owningSectionId: owner?.owningSectionId ?? null,
     owningDeskId: owner?.owningDeskId ?? null,
     dueAt,
-    referenceUrl: null,
+    referenceUrls: [""],
     slots: [{ ...EMPTY_SLOT }],
   }
 }
@@ -114,7 +117,9 @@ function editValues(task: TaskEdit): TaskFormValues {
     owningSectionId: null,
     owningDeskId: null,
     dueAt: task.dueAtInput,
-    referenceUrl: task.referenceUrl,
+    referenceUrls:
+      task.referenceUrls.length > 0 ? [...task.referenceUrls] : [""],
+    loadedReferenceUrls: [...task.referenceUrls],
     slots: task.slots.map((slot) => ({
       id: slot.id,
       loadedMemberId: slot.memberId,
@@ -124,14 +129,45 @@ function editValues(task: TaskEdit): TaskFormValues {
   }
 }
 
+// Empty link rows are dropped before the schema sees them (they are dropped on
+// save), and its errors, numbered by the rows it was given, are put back on
+// the rows the form shows.
+function dropEmptyLinks(
+  resolver: Resolver<TaskFormValues>
+): Resolver<TaskFormValues> {
+  return async (values, context, options) => {
+    const rows = values.referenceUrls ?? []
+    const kept = rows.flatMap((row, index) =>
+      row.trim() !== "" ? [index] : []
+    )
+    const result = await resolver(
+      { ...values, referenceUrls: kept.map((index) => rows[index]) },
+      context,
+      options
+    )
+    const linkErrors = result.errors.referenceUrls
+    if (!Array.isArray(linkErrors)) return result
+    const remapped: typeof linkErrors = []
+    linkErrors.forEach((error, k) => {
+      if (error) remapped[kept[k]] = error
+    })
+    return {
+      ...result,
+      errors: { ...result.errors, referenceUrls: remapped },
+    } as typeof result
+  }
+}
+
 // Each mode validates with its own action's schema, so the form refuses
 // exactly what the action would. Both read these values: create's drops the
 // ids, update's the owner (which its schema doesn't know, hence the wider
 // cast) and requires the taskId edit mode always holds.
-const createResolver = zodResolver(taskCreateSchema) as Resolver<TaskFormValues>
-const updateResolver = zodResolver(
-  taskUpdateSchema
-) as unknown as Resolver<TaskFormValues>
+const createResolver = dropEmptyLinks(
+  zodResolver(taskCreateSchema) as Resolver<TaskFormValues>
+)
+const updateResolver = dropEmptyLinks(
+  zodResolver(taskUpdateSchema) as unknown as Resolver<TaskFormValues>
+)
 
 // The refusals after which the page re-reads the task, so the keyed form
 // opens again on the latest (UX-DR56), or the page shows why it can't: the
@@ -168,6 +204,7 @@ function messengerMessage(
         title: data.title,
         roles: data.slots.map((slot) => slot.role),
         dueAt: phtInputToUtc(data.dueAt),
+        referenceUrls: data.referenceUrls,
       },
       clientEnv.NEXT_PUBLIC_SITE_URL,
       roleLabels
@@ -181,7 +218,7 @@ function messengerMessage(
  * The admin task form (spec-1-5-admin-task-creation.md): title, description,
  * one owner (a content section or a desk, never Writers — `options.owners`
  * simply never includes it), one or more role slots, a due date entered in
- * PHT, and an optional reference link. On success it toasts "Task created"
+ * PHT, and up to five optional reference links. On success it toasts "Task created"
  * and resets, keeping the owner so an admin creating several tasks for the
  * same section or desk doesn't re-pick it every time.
  *
@@ -241,6 +278,8 @@ export function TaskForm({
     control,
     setValue,
     trigger,
+    setError,
+    clearErrors,
     reset,
     formState: { errors, isSubmitting, isSubmitted, isDirty },
   } = useForm<TaskFormValues>({
@@ -311,6 +350,16 @@ export function TaskForm({
     void trigger(["owningSectionId", "owningDeskId"])
   }
 
+  // The server refused the list: its copy sits under the field, not in a
+  // toast, and clears with the next submit's validation.
+  function showLinksRefused() {
+    // Array fields carry a `root` error, which react-hook-form's name type
+    // leaves out for this shape.
+    setError("referenceUrls.root" as "referenceUrls", {
+      message: taskErrorMessage("tasks.invalid_links"),
+    })
+  }
+
   async function onCreate(data: TaskFormValues) {
     let result: CreateTaskState
     try {
@@ -320,6 +369,10 @@ export function TaskForm({
       return
     }
     if (!result.ok) {
+      if (result.code === "tasks.invalid_links") {
+        showLinksRefused()
+        return
+      }
       toast.error(taskErrorMessage(result.code))
       return
     }
@@ -349,6 +402,10 @@ export function TaskForm({
       return
     }
     if (!result.ok) {
+      if (result.code === "tasks.invalid_links") {
+        showLinksRefused()
+        return
+      }
       toast.error(taskErrorMessage(result.code))
       if (RELOAD_CODES.has(result.code)) refreshAfterFailure(router)
       return
@@ -365,12 +422,32 @@ export function TaskForm({
     router.push(`/dashboard/tasks/${taskId}`)
   }
 
+  // react-hook-form focuses only the fields it registered; the link rows
+  // aren't, so the first row with an error gets focus when no field above
+  // them has one.
+  function focusFirstLinkError(invalid: FieldErrors<TaskFormValues>) {
+    if (
+      invalid.title ||
+      invalid.description ||
+      invalid.owningSectionId ||
+      invalid.dueAt
+    ) {
+      return
+    }
+    const rows = invalid.referenceUrls
+    if (!Array.isArray(rows)) return
+    const first = rows.findIndex(Boolean)
+    if (first !== -1) {
+      document.getElementById(`${idPrefix}-reference-link-${first}`)?.focus()
+    }
+  }
+
   const slotsRootError = isSubmitted ? errors.slots?.root : undefined
 
   return (
     <form
       id={formId}
-      onSubmit={handleSubmit(task ? onUpdate : onCreate)}
+      onSubmit={handleSubmit(task ? onUpdate : onCreate, focusFirstLinkError)}
       noValidate
       className="flex flex-col gap-6"
     >
@@ -459,18 +536,15 @@ export function TaskForm({
           <FieldError errors={[errors.dueAt]} />
         </Field>
 
-        <Field data-invalid={!!errors.referenceUrl || undefined}>
-          <FieldLabel htmlFor={`${idPrefix}-reference-url`}>
-            Reference link
-          </FieldLabel>
-          <Input
-            id={`${idPrefix}-reference-url`}
-            type="url"
-            aria-invalid={!!errors.referenceUrl}
-            {...register("referenceUrl", { setValueAs: blankToNull })}
-          />
-          <FieldError errors={[errors.referenceUrl]} />
-        </Field>
+        <ReferenceLinksField
+          idPrefix={idPrefix}
+          control={control}
+          setValue={setValue}
+          trigger={trigger}
+          clearErrors={clearErrors}
+          errors={errors}
+          loaded={task?.referenceUrls}
+        />
 
         <FieldSet>
           <FieldLegend>Role slots</FieldLegend>

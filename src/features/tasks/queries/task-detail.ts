@@ -51,7 +51,7 @@ export type TaskDetail = {
   ownerId: string
   /** UTC ISO timestamp; shown in PHT. */
   dueAt: string
-  referenceUrl: string | null
+  referenceUrls: string[]
   /** When it was marked done (UTC ISO), null while it isn't Done. */
   doneAt: string | null
   column: TaskColumn
@@ -119,7 +119,7 @@ export async function getTaskDetail(id: string): Promise<TaskDetail | null> {
     supabase
       .from("tasks")
       .select(
-        "id, title, description, due_at, reference_url, column, revision_note, revision_note_by, revision_note_at, updated_at, moved_at, done_at, owning_section_id, owning_desk_id, sections(name), desks(name)"
+        "id, title, description, due_at, reference_urls, column, revision_note, revision_note_by, revision_note_at, updated_at, moved_at, done_at, owning_section_id, owning_desk_id, sections(name), desks(name)"
       )
       .eq("id", id)
       .maybeSingle(),
@@ -199,7 +199,7 @@ export async function getTaskDetail(id: string): Promise<TaskDetail | null> {
     ownerName: task.sections?.name ?? task.desks?.name ?? "",
     ownerId: task.owning_section_id ?? task.owning_desk_id ?? "",
     dueAt: task.due_at,
-    referenceUrl: task.reference_url,
+    referenceUrls: task.reference_urls,
     doneAt: task.done_at ?? null,
     column: task.column,
     revisionNote:

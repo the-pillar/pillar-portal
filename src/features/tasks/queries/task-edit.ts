@@ -26,7 +26,7 @@ export type TaskEdit = {
   ownerName: string
   /** The due date as the form's datetime-local value, in PHT. */
   dueAtInput: string
-  referenceUrl: string | null
+  referenceUrls: string[]
   /** Slots in the order they were created. */
   slots: TaskEditSlot[]
   /**
@@ -64,7 +64,7 @@ export async function getTaskEdit(id: string): Promise<TaskEdit | null> {
     supabase
       .from("tasks")
       .select(
-        "id, title, description, due_at, reference_url, column, updated_at, sections(name), desks(name)"
+        "id, title, description, due_at, reference_urls, column, updated_at, sections(name), desks(name)"
       )
       .eq("id", id)
       .maybeSingle(),
@@ -124,7 +124,7 @@ export async function getTaskEdit(id: string): Promise<TaskEdit | null> {
     description: task.description,
     ownerName: task.sections?.name ?? task.desks?.name ?? "",
     dueAtInput: utcToPhtInput(task.due_at),
-    referenceUrl: task.reference_url,
+    referenceUrls: task.reference_urls,
     slots: slots.map((slot) => ({
       id: slot.id,
       role: slot.role,

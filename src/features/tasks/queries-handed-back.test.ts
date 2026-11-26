@@ -58,6 +58,7 @@ const TASKS = [
     id: T1,
     title: "Lay out the spread",
     due_at: "2099-01-01T00:00:00+00:00",
+    reference_urls: [],
     task_assignments: [
       {
         id: S1,
@@ -79,6 +80,7 @@ const TASKS = [
     id: T2,
     title: "Write the story",
     due_at: "2099-01-02T00:00:00+00:00",
+    reference_urls: [],
     task_assignments: [
       {
         id: S3,
@@ -93,6 +95,7 @@ const TASKS = [
     id: T3,
     title: "Draw the strip",
     due_at: "2099-01-03T00:00:00+00:00",
+    reference_urls: [],
     task_assignments: [
       {
         id: S4,
@@ -206,7 +209,7 @@ describe("getHandedBackQueue", () => {
       {
         method: "select",
         args: [
-          "id, title, due_at, task_assignments!inner(id, role, member_id, updated_at, assignment_reasons(reason))",
+          "id, title, due_at, reference_urls, task_assignments!inner(id, role, member_id, updated_at, assignment_reasons(reason))",
         ],
       },
       { method: "eq", args: ["task_assignments.state", "needs_reassignment"] },
@@ -246,6 +249,7 @@ describe("getHandedBackQueue", () => {
         taskId: T1,
         taskTitle: "Lay out the spread",
         dueAt: "2099-01-01T00:00:00+00:00",
+        referenceUrls: [],
         role: "layout_artist",
         roleLabel: "Layout Artist",
         memberId: LAYOUT,
@@ -258,6 +262,7 @@ describe("getHandedBackQueue", () => {
         taskId: T1,
         taskTitle: "Lay out the spread",
         dueAt: "2099-01-01T00:00:00+00:00",
+        referenceUrls: [],
         role: "cartoonist",
         roleLabel: "Cartoonist",
         memberId: WRITER,
@@ -271,6 +276,7 @@ describe("getHandedBackQueue", () => {
         taskId: T3,
         taskTitle: "Draw the strip",
         dueAt: "2099-01-03T00:00:00+00:00",
+        referenceUrls: [],
         role: "cartoonist",
         roleLabel: "Cartoonist",
         memberId: GONE,
