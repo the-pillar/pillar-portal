@@ -47,6 +47,17 @@ describe("check:hex", () => {
     expect(result.status).toBe(0)
   })
 
+  it("exempts the generated email tokens, and only that file in the slice", () => {
+    const result = checkHex({
+      "src/features/email/tokens.ts": 'export const navy = "#07253f"\n',
+      "src/features/email/shell.tsx": 'export const navy = "#07253f"\n',
+    })
+
+    expect(result.status).toBe(1)
+    expect(result.output).toContain("src/features/email/shell.tsx:1")
+    expect(result.output).not.toContain("tokens.ts")
+  })
+
   it("ignores # that is not a color (anchors, character references)", () => {
     const result = checkHex({
       "src/app/page.tsx":

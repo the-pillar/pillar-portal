@@ -230,6 +230,42 @@ describe("eslint architecture rules", { timeout: 30_000 }, () => {
     expect(rules(inside)).not.toContain("no-restricted-imports")
   })
 
+  it("reports importing resend outside src/features/email, and allows it inside", async () => {
+    const RESEND = 'import { Resend } from "resend"\nexport const r = Resend\n'
+    for (const file of [
+      "src/features/tasks/x.ts",
+      "src/lib/x.ts",
+      "src/app/x/route.ts",
+      "scripts/x.mjs",
+    ]) {
+      const outside = await lint({ [file]: RESEND }, file)
+      expect(outside, file).toContainEqual(
+        expect.objectContaining({
+          ruleId: "no-restricted-imports",
+          message: expect.stringContaining("Only src/features/email"),
+        })
+      )
+    }
+
+    const inside = await lint(
+      { "src/features/email/transport.ts": RESEND },
+      "src/features/email/transport.ts"
+    )
+    expect(rules(inside)).not.toContain("no-restricted-imports")
+  })
+
+  it("still bans sonner and process inside the email slice", async () => {
+    const messages = await lint(
+      {
+        "src/features/email/x.ts":
+          'import { toast } from "sonner"\nexport const t = [toast, process.env]\n',
+      },
+      "src/features/email/x.ts"
+    )
+    expect(rules(messages)).toContain("no-restricted-imports")
+    expect(rules(messages)).toContain("no-restricted-globals")
+  })
+
   const ADMIN_CLIENT = {
     "src/lib/supabase/admin.ts":
       "export const createAdminClient = () => null\n",
@@ -259,6 +295,7 @@ describe("eslint architecture rules", { timeout: 30_000 }, () => {
   it.each([
     "src/lib/record-error-event.ts",
     "src/app/api/health/route.ts",
+    "src/features/email/sender.ts",
     "src/lib/supabase/admin.test.ts",
   ])("allows %s to import the secret-key client", async (file) => {
     const messages = await lint(

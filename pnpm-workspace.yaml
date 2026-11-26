@@ -4,6 +4,7 @@ allowBuilds:
   sharp: true
   unrs-resolver: true
   msw: false
+  esbuild: false
 
 # pnpm 12 refuses packages published inside its minimumReleaseAge window, and
 # when an install needs one it adds an entry under minimumReleaseAgeExclude

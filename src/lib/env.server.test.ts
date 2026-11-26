@@ -16,6 +16,12 @@ type Env = {
   NEXT_PUBLIC_SUPABASE_URL?: string
   SUPABASE_SECRET_KEY?: string
   VERCEL_ENV?: string
+  EMAIL_MODE?: string
+  RESEND_API_KEY?: string
+  EMAIL_FROM?: string
+  EMAIL_DAILY_LIMIT?: string
+  EMAIL_MONTHLY_LIMIT?: string
+  EMAIL_CONFIRMATION_DAILY_CAP?: string
 }
 
 // Stubs every variable the module reads (unset unless given, but for a valid
@@ -29,6 +35,12 @@ async function loadServerEnv(env: Env = {}) {
   vi.stubEnv("PROTOTYPE_PERSONAS", env.PROTOTYPE_PERSONAS)
   vi.stubEnv("PROTOTYPE_PERSONA_PASSWORD", env.PROTOTYPE_PERSONA_PASSWORD)
   vi.stubEnv("VERCEL_ENV", env.VERCEL_ENV)
+  vi.stubEnv("EMAIL_MODE", env.EMAIL_MODE)
+  vi.stubEnv("RESEND_API_KEY", env.RESEND_API_KEY)
+  vi.stubEnv("EMAIL_FROM", env.EMAIL_FROM)
+  vi.stubEnv("EMAIL_DAILY_LIMIT", env.EMAIL_DAILY_LIMIT)
+  vi.stubEnv("EMAIL_MONTHLY_LIMIT", env.EMAIL_MONTHLY_LIMIT)
+  vi.stubEnv("EMAIL_CONFIRMATION_DAILY_CAP", env.EMAIL_CONFIRMATION_DAILY_CAP)
   vi.stubEnv(
     "NEXT_PUBLIC_SUPABASE_URL",
     "NEXT_PUBLIC_SUPABASE_URL" in env
@@ -47,8 +59,14 @@ describe("serverEnv", () => {
   it("lists exactly the server-only variables in its schema", async () => {
     const { serverEnvSchema } = await loadServerEnv()
     expect(Object.keys(serverEnvSchema.shape).sort()).toEqual([
+      "EMAIL_CONFIRMATION_DAILY_CAP",
+      "EMAIL_DAILY_LIMIT",
+      "EMAIL_FROM",
+      "EMAIL_MODE",
+      "EMAIL_MONTHLY_LIMIT",
       "PROTOTYPE_PERSONAS",
       "PROTOTYPE_PERSONA_PASSWORD",
+      "RESEND_API_KEY",
       "SUPABASE_SECRET_KEY",
     ])
   })
@@ -190,6 +208,122 @@ describe("serverEnv", () => {
   )
 })
 
+describe("emailConfig", () => {
+  const PRODUCTION_SUPABASE_URL = "https://abcdefghijklmnopqrst.supabase.co"
+  // Key-shaped, built at runtime so no key literal sits in the source.
+  const RESEND_KEY = "re_" + "a-key-for-these-tests-only"
+  const FROM = "The Pillar <portal@example.com>"
+  const production = {
+    VERCEL_ENV: "production",
+    NEXT_PUBLIC_SUPABASE_URL: PRODUCTION_SUPABASE_URL,
+  }
+
+  it("defaults to sink mode and the free plan's limits, with no key", async () => {
+    const { emailConfig } = await loadServerEnv()
+    expect(emailConfig).toEqual({
+      mode: "sink",
+      resendApiKey: undefined,
+      from: undefined,
+      dailyLimit: 100,
+      monthlyLimit: 3000,
+      confirmationCap: 30,
+    })
+  })
+
+  it("coerces the limits to numbers and treats empty values as unset", async () => {
+    const { emailConfig } = await loadServerEnv({
+      EMAIL_MODE: "",
+      EMAIL_DAILY_LIMIT: "80",
+      EMAIL_MONTHLY_LIMIT: "2500",
+      EMAIL_CONFIRMATION_DAILY_CAP: "",
+    })
+    expect(emailConfig).toMatchObject({
+      mode: "sink",
+      dailyLimit: 80,
+      monthlyLimit: 2500,
+      confirmationCap: 30,
+    })
+  })
+
+  it.each(["0", "-1", "1.5", "many"])(
+    "refuses a limit of %s, naming it",
+    async (value) => {
+      await expect(loadServerEnv({ EMAIL_DAILY_LIMIT: value })).rejects.toThrow(
+        /EMAIL_DAILY_LIMIT: must be a positive whole number/
+      )
+    }
+  )
+
+  it("refuses an EMAIL_MODE other than sink or send, naming it", async () => {
+    await expect(loadServerEnv({ EMAIL_MODE: "live" })).rejects.toThrow(
+      /EMAIL_MODE: must be "sink" or "send"/
+    )
+  })
+
+  it("refuses a key that isn't a Resend key, without repeating it", async () => {
+    const error = await loadServerEnv({ RESEND_API_KEY: "not-a-key" }).catch(
+      (thrown: unknown) => thrown
+    )
+    expect((error as Error).message).toMatch(/RESEND_API_KEY: must be a Resend/)
+    expect((error as Error).message).not.toContain("not-a-key")
+  })
+
+  it("refuses a From that isn't an address, naming it", async () => {
+    await expect(loadServerEnv({ EMAIL_FROM: "The Pillar" })).rejects.toThrow(
+      /EMAIL_FROM: must be an address/
+    )
+  })
+
+  it("sends from production with the key and the From address", async () => {
+    const { emailConfig } = await loadServerEnv({
+      ...production,
+      EMAIL_MODE: "send",
+      RESEND_API_KEY: RESEND_KEY,
+      EMAIL_FROM: FROM,
+    })
+    expect(emailConfig).toMatchObject({
+      mode: "send",
+      resendApiKey: RESEND_KEY,
+      from: FROM,
+    })
+  })
+
+  it.each([
+    [
+      "the staging project",
+      { ...production, NEXT_PUBLIC_SUPABASE_URL: STAGING_SUPABASE_URL },
+    ],
+    ["the local stack", { NEXT_PUBLIC_SUPABASE_URL: LOCAL_SUPABASE_URL }],
+    ["a preview deploy", { ...production, VERCEL_ENV: "preview" }],
+  ])("refuses send mode on %s, naming EMAIL_MODE", async (_label, where) => {
+    await expect(
+      loadServerEnv({
+        ...where,
+        EMAIL_MODE: "send",
+        RESEND_API_KEY: RESEND_KEY,
+        EMAIL_FROM: FROM,
+      })
+    ).rejects.toThrow(/EMAIL_MODE: must not be "send" outside production/)
+  })
+
+  it.each(["RESEND_API_KEY", "EMAIL_FROM"] as const)(
+    "refuses send mode without %s, naming it",
+    async (missing) => {
+      await expect(
+        loadServerEnv({
+          ...production,
+          EMAIL_MODE: "send",
+          RESEND_API_KEY: RESEND_KEY,
+          EMAIL_FROM: FROM,
+          [missing]: undefined,
+        })
+      ).rejects.toThrow(
+        new RegExp(`${missing}: required when EMAIL_MODE is send`)
+      )
+    }
+  )
+})
+
 describe("isProduction", () => {
   const PRODUCTION_SUPABASE_URL = "https://abcdefghijklmnopqrst.supabase.co"
 
@@ -251,6 +385,19 @@ describe(".env.example", () => {
     expect(serverEnv.PROTOTYPE_PERSONA_PASSWORD).toBe(
       example.PROTOTYPE_PERSONA_PASSWORD
     )
+  })
+
+  it("leaves the email variables unset or in sink mode, so a copy of it never sends", async () => {
+    const example = parseEnv(
+      readFileSync(new URL("../../.env.example", import.meta.url), "utf8")
+    )
+    expect(["", "sink", undefined]).toContain(example.EMAIL_MODE)
+    expect(example.RESEND_API_KEY ?? "").toBe("")
+    const { emailConfig } = await loadServerEnv({
+      EMAIL_MODE: example.EMAIL_MODE,
+      EMAIL_FROM: example.EMAIL_FROM,
+    })
+    expect(emailConfig.mode).toBe("sink")
   })
 
   it("names SUPABASE_SECRET_KEY but leaves it empty: each machine copies its own", () => {

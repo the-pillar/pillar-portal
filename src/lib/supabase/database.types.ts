@@ -104,6 +104,91 @@ export type Database = {
         }
         Relationships: []
       }
+      email_outbox: {
+        Row: {
+          attempt_count: number
+          created_at: string
+          dedupe_key: string
+          error: string | null
+          id: string
+          kind: Database["public"]["Enums"]["email_kind"]
+          payload: Json
+          priority: number
+          provider_attempted_at: string | null
+          provider_message_id: string | null
+          recipient_address: string | null
+          recipient_member_id: string
+          requires_action: boolean
+          sent_at: string | null
+          status: Database["public"]["Enums"]["outbox_status"]
+          task_id: string | null
+          template: string
+          updated_at: string
+        }
+        Insert: {
+          attempt_count?: number
+          created_at?: string
+          dedupe_key: string
+          error?: string | null
+          id?: string
+          kind: Database["public"]["Enums"]["email_kind"]
+          payload?: Json
+          priority: number
+          provider_attempted_at?: string | null
+          provider_message_id?: string | null
+          recipient_address?: string | null
+          recipient_member_id: string
+          requires_action?: boolean
+          sent_at?: string | null
+          status?: Database["public"]["Enums"]["outbox_status"]
+          task_id?: string | null
+          template: string
+          updated_at?: string
+        }
+        Update: {
+          attempt_count?: number
+          created_at?: string
+          dedupe_key?: string
+          error?: string | null
+          id?: string
+          kind?: Database["public"]["Enums"]["email_kind"]
+          payload?: Json
+          priority?: number
+          provider_attempted_at?: string | null
+          provider_message_id?: string | null
+          recipient_address?: string | null
+          recipient_member_id?: string
+          requires_action?: boolean
+          sent_at?: string | null
+          status?: Database["public"]["Enums"]["outbox_status"]
+          task_id?: string | null
+          template?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_outbox_recipient_member_id_fkey"
+            columns: ["recipient_member_id"]
+            isOneToOne: false
+            referencedRelation: "member_directory"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_outbox_recipient_member_id_fkey"
+            columns: ["recipient_member_id"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_outbox_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       error_events: {
         Row: {
           code: string
@@ -671,6 +756,22 @@ export type Database = {
           expires_at: string
         }[]
       }
+      claim_email_batch: {
+        Args: {
+          confirmation_cap: number
+          daily_limit: number
+          max_rows: number
+          monthly_limit: number
+        }
+        Returns: {
+          attempt: number
+          dedupe_key: string
+          id: string
+          kind: Database["public"]["Enums"]["email_kind"]
+          payload: Json
+          template: string
+        }[]
+      }
       create_task:
         | {
             Args: {
@@ -717,6 +818,18 @@ export type Database = {
       }
       health_check: { Args: never; Returns: boolean }
       mark_done: { Args: { task_id: string }; Returns: undefined }
+      mark_email_failed: {
+        Args: { attempt: number; error: string; outbox_id: string }
+        Returns: boolean
+      }
+      mark_email_sent: {
+        Args: {
+          attempt: number
+          outbox_id: string
+          provider_message_id: string
+        }
+        Returns: boolean
+      }
       mark_shared_session: { Args: never; Returns: string }
       member_capabilities: {
         Args: { ids: string[] }
@@ -783,6 +896,13 @@ export type Database = {
           isOneToOne: false
           isSetofReturn: true
         }
+      }
+      prepare_email_send: {
+        Args: { attempt: number; outbox_id: string }
+        Returns: {
+          address: string
+          outcome: string
+        }[]
       }
       reassign_slot: {
         Args: {
@@ -876,6 +996,12 @@ export type Database = {
           }
     }
     Enums: {
+      email_kind:
+        | "reminder"
+        | "decision"
+        | "confirmation"
+        | "status_code"
+        | "report_notice"
       job_status: "ok" | "failed" | "skipped"
       member_role: "pending" | "staff" | "editorial_admin"
       onboarding_step:
@@ -884,6 +1010,14 @@ export type Database = {
         | "checklist_done"
         | "first_run_shown"
         | "first_run_closed"
+      outbox_status:
+        | "queued"
+        | "sending"
+        | "sent"
+        | "failed"
+        | "bounced"
+        | "canceled"
+        | "dropped"
       production_role:
         | "writer"
         | "layout_artist"
@@ -1020,6 +1154,13 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      email_kind: [
+        "reminder",
+        "decision",
+        "confirmation",
+        "status_code",
+        "report_notice",
+      ],
       job_status: ["ok", "failed", "skipped"],
       member_role: ["pending", "staff", "editorial_admin"],
       onboarding_step: [
@@ -1028,6 +1169,15 @@ export const Constants = {
         "checklist_done",
         "first_run_shown",
         "first_run_closed",
+      ],
+      outbox_status: [
+        "queued",
+        "sending",
+        "sent",
+        "failed",
+        "bounced",
+        "canceled",
+        "dropped",
       ],
       production_role: [
         "writer",
