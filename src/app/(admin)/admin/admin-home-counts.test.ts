@@ -41,12 +41,14 @@ describe("ADMIN_HOME_COUNTS", () => {
         id: "pending-approvals",
         label: "Awaiting approval",
         href: "/admin/members",
+        family: "progress",
         count: countPendingApprovalsForViewer,
       },
       {
         id: "handed-back",
         label: "Needs reassignment",
         href: "/admin/tasks",
+        family: "attention",
         linkLabel: "Reassign in Tasks",
         rows: expect.any(Function),
       },
@@ -54,6 +56,7 @@ describe("ADMIN_HOME_COUNTS", () => {
         id: "review-queue",
         label: "Waiting for your review",
         href: "/admin/tasks",
+        family: "progress",
         count: countReviewQueueForViewer,
       },
     ])

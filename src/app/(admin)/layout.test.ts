@@ -1,5 +1,5 @@
 import { Suspense } from "react"
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 // vi.mock factories run before this file's imports, so what they share with
 // the tests is created in vi.hoisted.
@@ -9,8 +9,13 @@ const {
   AdminBannerSlot,
   NoticeToast,
   OfflineToast,
+  getNewTaskLayoutData,
+  NewTaskButton,
+  NewTaskSheet,
   SharedSessionWatcher,
   StepUpProvider,
+  getMyOnboarding,
+  recordCopiedTaskAction,
   RedirectError,
 } = vi.hoisted(() => {
   // Like Next's redirect(), which requireAdmin calls, the mock throws.
@@ -25,13 +30,23 @@ const {
     AdminBannerSlot: vi.fn(() => null),
     NoticeToast: vi.fn(() => null),
     OfflineToast: vi.fn(() => null),
+    getNewTaskLayoutData: vi.fn(),
+    NewTaskButton: vi.fn(() => null),
+    NewTaskSheet: vi.fn(() => null),
     SharedSessionWatcher: vi.fn(() => null),
     StepUpProvider: vi.fn(() => null),
+    getMyOnboarding: vi.fn(),
+    recordCopiedTaskAction: vi.fn(),
     RedirectError,
   }
 })
 
 // require-admin.test.ts covers who requireAdmin redirects, and where.
+vi.mock("@/features/tasks", () => ({
+  getNewTaskLayoutData,
+  NewTaskButton,
+  NewTaskSheet,
+}))
 vi.mock("./require-admin", () => ({ requireAdmin }))
 vi.mock("./admin-shell", () => ({ AdminShell }))
 vi.mock("./admin-banners", () => ({ AdminBannerSlot }))
@@ -43,6 +58,8 @@ vi.mock("../offline-toast", () => ({ OfflineToast }))
 vi.mock("@/features/members", () => ({
   SharedSessionWatcher,
   StepUpProvider,
+  getMyOnboarding,
+  recordCopiedTaskAction,
 }))
 
 import type { CurrentMember } from "@/features/members"
@@ -55,6 +72,16 @@ const MEMBER = {
   role: "editorial_admin",
   state: "active",
 } satisfies CurrentMember
+
+const NEW_TASK = {
+  options: { owners: [], slotMembersByRole: {}, allMembers: [] },
+  homeOwner: null,
+}
+
+beforeEach(() => {
+  getNewTaskLayoutData.mockResolvedValue(null)
+  getMyOnboarding.mockResolvedValue(null)
+})
 
 afterEach(() => {
   vi.clearAllMocks()
@@ -84,6 +111,8 @@ describe("AdminLayout", () => {
     expect(element.props).toEqual({
       member: MEMBER,
       banners: expect.objectContaining({ type: AdminBannerSlot, props: {} }),
+      newTask: undefined,
+      onboarding: undefined,
       children: [
         expect.objectContaining({
           type: Suspense,
@@ -92,6 +121,7 @@ describe("AdminLayout", () => {
             children: expect.objectContaining({ type: NoticeToast }),
           }),
         }),
+        null,
         expect.objectContaining({ type: OfflineToast }),
         expect.objectContaining({ type: SharedSessionWatcher }),
         expect.objectContaining({
@@ -102,5 +132,40 @@ describe("AdminLayout", () => {
     })
     // The slot reads its sources only when React renders it, after the check.
     expect(AdminBannerSlot).not.toHaveBeenCalled()
+  })
+
+  it("mounts the New task button and the sheet in Suspense only when can_create_task allows", async () => {
+    requireAdmin.mockResolvedValue(MEMBER)
+    getNewTaskLayoutData.mockResolvedValue(NEW_TASK)
+
+    const element = await AdminLayout({ children: "page" })
+
+    expect(element.props.newTask).toEqual(
+      expect.objectContaining({ type: NewTaskButton })
+    )
+    expect(element.props.children[1]).toEqual(
+      expect.objectContaining({
+        type: Suspense,
+        props: expect.objectContaining({
+          children: expect.objectContaining({
+            type: NewTaskSheet,
+            props: {
+              options: NEW_TASK.options,
+              homeOwner: null,
+              onCopied: recordCopiedTaskAction,
+            },
+          }),
+        }),
+      })
+    )
+  })
+
+  it("offers the Show the tour again item when my_onboarding says tour and checklist", async () => {
+    requireAdmin.mockResolvedValue(MEMBER)
+    getMyOnboarding.mockResolvedValue({ tourAndChecklist: true })
+
+    const element = await AdminLayout({ children: "page" })
+
+    expect(element.props.onboarding).toBe("tour")
   })
 })

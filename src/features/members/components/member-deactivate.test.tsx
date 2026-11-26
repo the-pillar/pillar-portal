@@ -17,7 +17,7 @@ const { deactivateMemberAction, refresh, toastError, toastSuccess } =
 
 vi.mock("../actions", () => ({ deactivateMemberAction }))
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }))
-vi.mock("sonner", () => ({
+vi.mock("@/components/ui/toast", () => ({
   toast: { error: toastError, success: toastSuccess },
 }))
 

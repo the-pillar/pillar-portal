@@ -5,7 +5,7 @@ import { z } from "zod"
 import { initialsOf, WRITERS_DESK_ID } from "@/features/members"
 import type { createClient } from "@/lib/supabase/server"
 
-import type { OwnerFilter, TaskOwnerOption } from "../board"
+import type { TaskOwnerOption } from "../board"
 import { isTaskOverdue, type SlotState, type TaskColumn } from "../status"
 
 // What more than one view's reads share. index.ts exports only the card types
@@ -30,6 +30,9 @@ export function ownerOptions(
       .map((desk) => ({ kind: "desk" as const, id: desk.id, name: desk.name })),
   ]
 }
+
+/** PostgREST's `max_rows` (supabase/config.toml): a read that returns this many may be cut short. */
+export const MAX_ROWS = 1000
 
 export const FORMER_MEMBER = "Former member"
 
@@ -70,6 +73,15 @@ export type TaskCardData = {
    * every slot they hold on the task.
    */
   assignees: TaskCardAssignee[]
+  /**
+   * The owning section's or desk's id, which colors the owner label
+   * (`data-owner`). Empty for a read that doesn't select it.
+   */
+  ownerId?: string
+  /** The viewer holds an open slot on it (Board reads only; default false). */
+  yours?: boolean
+  /** When it was marked Done, as PostgREST returned it; null before then. */
+  doneAt?: string | null
 }
 
 export function byDueThenId(
@@ -89,6 +101,10 @@ type CardTask = {
   revision_note_at: string | null
   sections: { name: string } | null
   desks: { name: string } | null
+  // Only the Board's and the Planner's select carry these.
+  owning_section_id?: string | null
+  owning_desk_id?: string | null
+  done_at?: string | null
 }
 
 /** One task card's data, from the task, its slots (in slot order) and the names. */
@@ -132,6 +148,8 @@ export function toTaskCard(
       (slot) => slot.state === "needs_reassignment"
     ),
     assignees,
+    ownerId: task.owning_section_id ?? task.owning_desk_id ?? "",
+    doneAt: task.done_at ?? null,
   }
 }
 
@@ -156,29 +174,10 @@ export function taskCardsQuery(supabase: ServerClient) {
   return supabase
     .from("tasks")
     .select(
-      "id, title, due_at, column, revision_note_at, sections(name), desks(name), task_assignments(member_id, state)"
+      "id, title, due_at, column, revision_note_at, owning_section_id, owning_desk_id, moved_at, moved_by, created_by, done_at, sections(name), desks(name), task_assignments(member_id, state)"
     )
     .order("due_at")
     .order("id")
     .order("created_at", { referencedTable: "task_assignments" })
     .order("id", { referencedTable: "task_assignments" })
-}
-
-type TaskCardsQuery = ReturnType<typeof taskCardsQuery>
-
-/** Narrows a card query to the tasks an owner filter names. */
-export function withOwnerFilter(
-  query: TaskCardsQuery,
-  filter: OwnerFilter
-): TaskCardsQuery {
-  switch (filter.kind) {
-    case "section":
-      return query.eq("owning_section_id", filter.id)
-    case "desk":
-      return query.eq("owning_desk_id", filter.id)
-    case "articles":
-      return query.not("owning_section_id", "is", null)
-    case "all":
-      return query
-  }
 }

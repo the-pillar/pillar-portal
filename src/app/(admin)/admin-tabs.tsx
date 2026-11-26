@@ -11,7 +11,8 @@ import { ADMIN_NAV_LINKS, isCurrentAdminLink } from "./admin-nav"
 /**
  * The admin nav below `lg` (owner decision, 2026-10-20: visible tabs, not a
  * hamburger Sheet): a row in the header's `nav` slot, styled like the member
- * header's DashboardTabs. The tabs share the row while they fit; once they
+ * header's DashboardTabs (idle `tab-idle-on-navy`, the current tab a white
+ * pill with navy text). The tabs share the row while they fit; once they
  * don't (Reports and Recruitment make five), the row scrolls sideways, its
  * scrollbar hidden, and the current tab is scrolled fully into view on load,
  * on each navigation and whenever the row's size changes (a window shrunk
@@ -45,7 +46,7 @@ export function AdminTabs() {
     <nav
       ref={rowRef}
       aria-label="Admin areas"
-      className="flex [scrollbar-width:none] gap-1 overflow-x-auto overscroll-x-contain lg:hidden [&::-webkit-scrollbar]:hidden"
+      className="flex [scrollbar-width:none] gap-1 overflow-x-auto overscroll-x-contain py-row-padding lg:hidden [&::-webkit-scrollbar]:hidden"
     >
       {ADMIN_NAV_LINKS.map((link) => {
         const current = isCurrentAdminLink(pathname, link)
@@ -54,10 +55,13 @@ export function AdminTabs() {
             key={link.href}
             href={link.href}
             aria-current={current ? "page" : undefined}
+            data-tour={link.href === "/admin/members" ? "members" : undefined}
             className={cn(
-              "flex min-h-11 flex-1 shrink-0 items-center justify-center rounded-t-sm border-b-3 border-transparent px-3 text-sm font-semibold whitespace-nowrap text-white/72 hover:text-white",
-              current && "border-white text-white",
-              "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-white"
+              "flex min-h-11 flex-1 shrink-0 items-center justify-center rounded-md px-3 text-sm font-semibold whitespace-nowrap text-tab-idle-on-navy hover:text-white",
+              current
+                ? "bg-white text-navy hover:text-navy focus-visible:outline-ring"
+                : "focus-visible:outline-ring-on-dark",
+              "focus-visible:outline-2 focus-visible:-outline-offset-2"
             )}
           >
             {link.label}

@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react"
 import { MessageSquareShare } from "lucide-react"
-import { toast } from "sonner"
+import { Button } from "@/components/ui/button"
+import { toast } from "@/components/ui/toast"
 
 import { copyText, MESSENGER_COPIED, MESSENGER_HINT } from "../messenger"
 
@@ -10,7 +11,14 @@ import { copyText, MESSENGER_COPIED, MESSENGER_HINT } from "../messenger"
  * Task detail's Copy for Messenger. Where the clipboard is out of reach
  * (some in-app browsers) the message appears in a selected text box instead.
  */
-export function CopyForMessenger({ message }: { message: string }) {
+export function CopyForMessenger({
+  message,
+  onCopied,
+}: {
+  message: string
+  /** Called after a copy that worked (Story 8.9 records it). */
+  onCopied?: () => void | Promise<unknown>
+}) {
   const [manual, setManual] = useState(false)
   const [failures, setFailures] = useState(0)
   const button = useRef<HTMLButtonElement>(null)
@@ -28,6 +36,7 @@ export function CopyForMessenger({ message }: { message: string }) {
       if (manual) button.current?.focus()
       setManual(false)
       toast.success(MESSENGER_COPIED)
+      void Promise.resolve(onCopied?.()).catch(() => undefined)
     } else {
       setManual(true)
       setFailures((n) => n + 1)
@@ -36,15 +45,16 @@ export function CopyForMessenger({ message }: { message: string }) {
 
   return (
     <div className="flex flex-col gap-2">
-      <button
+      <Button
         ref={button}
         type="button"
+        variant="outline"
         onClick={copy}
-        className="inline-flex min-h-11 items-center gap-2 self-start rounded-md border border-input bg-background px-3 text-sm font-medium focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden"
+        className="min-h-11 px-3"
       >
         <MessageSquareShare aria-hidden className="size-4" />
         Copy for Messenger
-      </button>
+      </Button>
       {manual && (
         <div className="flex flex-col gap-1">
           <label htmlFor="messenger-message" className="sr-only">

@@ -34,6 +34,7 @@ const TASK: TaskCardData = {
   id: "00000000-0000-4000-8000-000000000021",
   title: "Lay out the spread",
   ownerName: "Layout",
+  ownerId: "layout",
   // 23:30 PHT on Saturday, October 31, 2026.
   dueAt: "2026-10-31T15:30:00+00:00",
   column: "doing",
@@ -68,6 +69,14 @@ describe("TaskCard", () => {
     expect(ref.current).toBe(link)
   })
 
+  it("carries the view's URL as from when given one", () => {
+    render(<TaskCard task={TASK} from="/dashboard" />)
+
+    expect(
+      screen.getByRole("link", { name: "Lay out the spread" })
+    ).toHaveAttribute("href", `/dashboard/tasks/${TASK.id}?from=%2Fdashboard`)
+  })
+
   it("links to Task detail, named by the title alone", () => {
     render(<TaskCard task={TASK} />)
 
@@ -90,29 +99,57 @@ describe("TaskCard", () => {
   it("shows the owner, the PHT due date and the column with its label", () => {
     render(<TaskCard task={TASK} />)
 
-    expect(screen.getByText(/Layout · Due/).textContent).toContain(
-      "Sat, Oct 31, 11:30 PM"
-    )
+    expect(screen.getByText("Layout")).toHaveAttribute("data-owner", "layout")
+    expect(screen.getByText("Sat, Oct 31, 11:30 PM")).toBeInTheDocument()
     expect(screen.getByText("Doing")).toBeInTheDocument()
   })
 
-  it('shows a sent-back task\'s status as "Sent back" beside an attention dot, in place of its column', () => {
-    const { container } = render(
-      <TaskCard task={{ ...TASK, sentBack: true }} />
-    )
+  it("shows a sent-back task's Sent back badge, with its column still named by the status dot", () => {
+    render(<TaskCard task={{ ...TASK, sentBack: true }} />)
 
-    expect(screen.getByText("Sent back")).toBeInTheDocument()
-    expect(screen.queryByText("Doing")).toBeNull()
-    expect(container.querySelector("[data-family]")).toHaveAttribute(
-      "data-family",
-      "attention"
-    )
+    expect(screen.getAllByText("Sent back")).toHaveLength(1)
+    expect(screen.getByText("Doing")).toBeInTheDocument()
   })
 
   it("shows no badge when nothing calls for one", () => {
     render(<TaskCard task={TASK} />)
 
     expect(screen.queryByRole("img")).not.toBeInTheDocument()
+  })
+
+  it("leaves the status dot off the Board", () => {
+    render(<TaskCard task={TASK} showStatus={false} />)
+    expect(screen.queryByText("Doing")).toBeNull()
+  })
+
+  it("shows the Overdue due chip, a Done chip with its date, and the Yours tag after the title", () => {
+    const { rerender, container } = render(
+      <TaskCard task={{ ...TASK, overdue: true, yours: true }} />
+    )
+    expect(screen.getByText(/Overdue ·/).closest("p")).toHaveAttribute(
+      "data-due",
+      "overdue"
+    )
+    const link = screen.getByRole("link", { name: "Lay out the spread" })
+    const yours = screen.getByText("Yours")
+    expect(
+      link.compareDocumentPosition(yours) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
+
+    rerender(
+      <TaskCard
+        task={{
+          ...TASK,
+          column: "done",
+          doneAt: "2026-11-10T04:00:00+00:00",
+        }}
+      />
+    )
+    expect(container.querySelector("[data-due]")).toHaveAttribute(
+      "data-due",
+      "done"
+    )
+    expect(screen.getByText("Nov 10")).toBeInTheDocument()
   })
 
   it("shows Awaiting response, Needs reassignment and Overdue when they apply", () => {
@@ -133,9 +170,7 @@ describe("TaskCard", () => {
     expect(
       screen.getByRole("img", { name: "Status: Needs reassignment" })
     ).toBeInTheDocument()
-    expect(
-      screen.getByRole("img", { name: "Status: Overdue" })
-    ).toBeInTheDocument()
+    expect(screen.getByText(/Overdue ·/)).toBeInTheDocument()
   })
 
   it("shows at most three avatars and then +n, with every name read out", () => {
@@ -159,19 +194,18 @@ describe("TaskCard", () => {
     ).toHaveClass("sr-only")
   })
 
-  it("dims the avatar of an assignee who handed back every slot, through the DESIGN.md token, and marks them in the names read out", () => {
+  it("rings the avatar of an assignee who handed back every slot, never dims it, colors it by member and marks them in the names read out", () => {
     const assignees = [
       assignee(1, "Editor-in-Chief", "EC", true),
       assignee(2, "Staff Layout Artist", "SL"),
     ]
     render(<TaskCard task={{ ...TASK, assignees }} />)
 
-    const dimmed = screen.getByText("EC").closest("[data-slot=avatar]")
-    expect(dimmed).toHaveClass("opacity-(--avatar-handed-back-opacity)")
+    const ringed = screen.getByText("EC").closest("[data-slot=avatar]")
+    expect(ringed).toHaveAttribute("data-handed-back")
+    expect(ringed).toHaveAttribute("data-avatar")
     const plain = screen.getByText("SL").closest("[data-slot=avatar]")
-    expect(plain).not.toHaveClass("opacity-(--avatar-handed-back-opacity)")
-    // Dimmed, never hidden.
-    expect(screen.getByText("EC")).toBeInTheDocument()
+    expect(plain).not.toHaveAttribute("data-handed-back")
     expect(
       screen.getByText(
         "Assigned to Editor-in-Chief (handed back), Staff Layout Artist"

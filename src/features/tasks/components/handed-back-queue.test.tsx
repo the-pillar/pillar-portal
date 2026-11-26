@@ -29,7 +29,7 @@ const { reassignSlotAction, refresh, toastSuccess, toastError } = vi.hoisted(
 
 vi.mock("../actions", () => ({ reassignSlotAction }))
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }))
-vi.mock("sonner", () => ({
+vi.mock("@/components/ui/toast", () => ({
   toast: { success: toastSuccess, error: toastError },
 }))
 vi.mock("@/lib/env.client", () => ({
@@ -87,6 +87,8 @@ const RENAMED: HandedBackSlot = {
   taskTitle: "3.7 check (edit) renamed",
   // 23:30 PHT on Saturday, October 31, 2026.
   dueAt: "2026-10-31T15:30:00+00:00",
+  referenceUrls: [],
+  deliverables: [],
   role: "cartoonist",
   roleLabel: "Cartoonist",
   memberId: EIC.id,
@@ -100,6 +102,8 @@ const NEXT_WEEK: HandedBackSlot = {
   taskTitle: "test due next week",
   // 09:00 PHT on Monday, November 9, 2026.
   dueAt: "2026-11-09T01:00:00+00:00",
+  referenceUrls: [],
+  deliverables: [],
   role: "layout_artist",
   roleLabel: "Layout Artist",
   memberId: STAFF_LAYOUT.id,
@@ -111,9 +115,11 @@ const NEXT_WEEK: HandedBackSlot = {
 function Page({
   slots,
   options = OPTIONS,
+  onCopied,
 }: {
   slots: HandedBackSlot[]
   options?: ReassignOptions | null
+  onCopied?: () => void
 }) {
   return (
     <main>
@@ -124,6 +130,7 @@ function Page({
         slots={slots}
         options={options}
         focusTargetId="admin-tasks-heading"
+        onCopied={onCopied}
       />
     </main>
   )
@@ -219,7 +226,10 @@ describe("HandedBackQueue", () => {
     const row = rowFor("3.7 check (edit) renamed")
     expect(
       within(row).getByRole("link", { name: "3.7 check (edit) renamed" })
-    ).toHaveAttribute("href", `/dashboard/tasks/${RENAMED.taskId}`)
+    ).toHaveAttribute(
+      "href",
+      `/dashboard/tasks/${RENAMED.taskId}?from=%2Fadmin%2Ftasks`
+    )
     expect(
       within(row).getByText("Cartoonist · Editor-in-Chief")
     ).toBeInTheDocument()
@@ -270,6 +280,78 @@ describe("HandedBackQueue", () => {
       "Staff Cartoonist · 0 active",
       "Editor-in-Chief · 4 active (current)",
     ])
+  })
+
+  it("passes onCopied to each row's reassign toast", async () => {
+    const user = userEvent.setup()
+    const onCopied = vi.fn()
+    reassignSlotAction.mockResolvedValue({
+      ok: true,
+      data: { slotId: RENAMED.slotId },
+    })
+    render(<Page slots={[RENAMED]} onCopied={onCopied} />)
+    await user.click(reassign("Cartoonist", "3.7 check (edit) renamed"))
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("radio", {
+        name: "Staff Cartoonist · 0 active",
+      })
+    )
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: "Reassign",
+      })
+    )
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull())
+
+    vi.stubGlobal("navigator", {
+      clipboard: { writeText: vi.fn().mockResolvedValue(undefined) },
+    })
+    await toastSuccess.mock.calls[0][1].action.onClick()
+
+    expect(onCopied).toHaveBeenCalledOnce()
+  })
+
+  it("carries the task's deliverable links into the row's Messenger text", async () => {
+    const user = userEvent.setup()
+    reassignSlotAction.mockResolvedValue({
+      ok: true,
+      data: { slotId: RENAMED.slotId },
+    })
+    render(
+      <Page
+        slots={[
+          {
+            ...RENAMED,
+            deliverables: [
+              {
+                role: "layout_artist",
+                urls: ["https://www.canva.com/design/DAF1/edit"],
+              },
+            ],
+          },
+        ]}
+      />
+    )
+    await user.click(reassign("Cartoonist", "3.7 check (edit) renamed"))
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("radio", {
+        name: "Staff Cartoonist · 0 active",
+      })
+    )
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: "Reassign",
+      })
+    )
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull())
+
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    vi.stubGlobal("navigator", { clipboard: { writeText } })
+    await toastSuccess.mock.calls[0][1].action.onClick()
+
+    expect(writeText.mock.calls[0][0]).toContain(
+      "\n\nLayout Artist\n• Canva: https://www.canva.com/design/DAF1/edit"
+    )
   })
 
   it("reassigns a row, toasts with Copy for Messenger, and focuses the h1 as the row leaves with the count", async () => {

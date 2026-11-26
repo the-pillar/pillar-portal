@@ -10,7 +10,7 @@ import {
 import { requireAdmin } from "../../require-admin"
 
 export const metadata: Metadata = {
-  title: "Members · The Pillar Portal",
+  title: "Members",
 }
 
 // Any admin approves or declines new sign-ins here (Story 2.2). The admin

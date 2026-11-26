@@ -25,12 +25,14 @@ vi.mock("@/lib/env.client", () => ({
 }))
 
 import {
+  addDeliverableLinksAction,
   createTaskAction,
   deleteTaskAction,
   handBackSlotAction,
   markDoneAction,
   moveTaskAction,
   reassignSlotAction,
+  removeDeliverableLinkAction,
   reopenTaskAction,
   respondToSlotAction,
   sendBackTaskAction,
@@ -45,7 +47,7 @@ const VALID_INPUT = {
   owningSectionId: "news",
   owningDeskId: null,
   dueAt: "2026-10-31T23:30",
-  referenceUrl: null,
+  referenceUrls: [],
   slots: [{ role: "layout_artist", memberId: MEMBER_ID }],
 }
 
@@ -62,6 +64,50 @@ afterEach(() => {
 })
 
 describe("createTaskAction", () => {
+  it("cleans the links and sends the list, an empty one as []", async () => {
+    rpc.mockResolvedValue({ data: "task-1", error: null })
+
+    await createTaskAction({
+      ...VALID_INPUT,
+      referenceUrls: ["canva.com/x", "HTTPS://Drive.google.com/y"],
+    })
+    expect(rpc.mock.calls[0][1].reference_urls).toEqual([
+      "https://canva.com/x",
+      "https://Drive.google.com/y",
+    ])
+
+    await createTaskAction(VALID_INPUT)
+    expect(rpc.mock.calls[1][1].reference_urls).toEqual([])
+  })
+
+  it.each([
+    ["a link that isn't one", ["hello"]],
+    ["a mailto link", ["mailto:a@b.com"]],
+    ["six links", Array.from({ length: 6 }, (_, i) => `https://a.com/${i}`)],
+    ["a missing list", undefined],
+    ["a null list", null],
+  ])("rejects %s without calling the database", async (_name, links) => {
+    const result = await createTaskAction({
+      ...VALID_INPUT,
+      referenceUrls: links,
+    })
+
+    expect(result).toEqual({ ok: false, code: "tasks.create_failed" })
+    expect(createClient).not.toHaveBeenCalled()
+  })
+
+  it("maps the database's refusal of the list to its own copy, unrecorded", async () => {
+    rpc.mockResolvedValue({
+      data: null,
+      error: { code: "P0001", message: "tasks.invalid_links" },
+    })
+
+    const result = await createTaskAction(VALID_INPUT)
+
+    expect(result).toEqual({ ok: false, code: "tasks.invalid_links" })
+    expect(after).not.toHaveBeenCalled()
+  })
+
   it("rejects invalid input without calling the database", async () => {
     const result = await createTaskAction({ ...VALID_INPUT, title: "" })
 
@@ -80,10 +126,22 @@ describe("createTaskAction", () => {
       owning_section_id: "news",
       owning_desk_id: null,
       due_at: "2026-10-31T15:30:00.000Z",
-      reference_url: null,
+      reference_urls: [],
       slots: [{ role: "layout_artist", member_id: MEMBER_ID }],
     })
-    expect(revalidatePath).toHaveBeenCalledExactlyOnceWith("/admin/tasks")
+    // Admin home's "Create a task" checklist item ticks live (Story 8.9).
+    expect(revalidatePath).toHaveBeenCalledTimes(3)
+    expect(revalidatePath).toHaveBeenNthCalledWith(1, "/admin/tasks")
+    expect(revalidatePath).toHaveBeenNthCalledWith(
+      2,
+      "/(member)/dashboard",
+      "layout"
+    )
+    expect(revalidatePath).toHaveBeenNthCalledWith(
+      3,
+      "/(admin)/admin",
+      "layout"
+    )
     expect(result).toEqual({ ok: true, data: { id: "task-1" } })
   })
 
@@ -146,7 +204,7 @@ const VALID_EDIT = {
   title: "Lay out the spread",
   description: null,
   dueAt: "2026-10-31T23:30",
-  referenceUrl: null,
+  referenceUrls: [],
   slots: [
     {
       id: SLOT_ID,
@@ -166,7 +224,10 @@ const VALID_REASSIGN = {
 
 describe("respondToSlotAction", () => {
   it("rejects invalid input without calling the database", async () => {
-    const result = await respondToSlotAction({ slotId: "abc", response: "on_it" })
+    const result = await respondToSlotAction({
+      slotId: "abc",
+      response: "on_it",
+    })
 
     expect(result).toEqual({ ok: false, code: "tasks.save_failed" })
     expect(createClient).not.toHaveBeenCalled()
@@ -185,7 +246,10 @@ describe("respondToSlotAction", () => {
       slot_id: SLOT_ID,
       response: "on_it",
     })
-    expect(revalidatePath).toHaveBeenCalledExactlyOnceWith("/(member)/dashboard", "layout")
+    expect(revalidatePath).toHaveBeenCalledExactlyOnceWith(
+      "/(member)/dashboard",
+      "layout"
+    )
     expect(result).toEqual({ ok: true, data: { state: "on_it" } })
   })
 
@@ -237,7 +301,10 @@ describe("respondToSlotAction", () => {
     async (message) => {
       rpc.mockResolvedValue({ data: null, error: { message } })
 
-      const result = await respondToSlotAction({ slotId: SLOT_ID, response: "on_it" })
+      const result = await respondToSlotAction({
+        slotId: SLOT_ID,
+        response: "on_it",
+      })
 
       expect(result).toEqual({ ok: false, code: message })
       expect(revalidatePath).not.toHaveBeenCalled()
@@ -251,7 +318,10 @@ describe("respondToSlotAction", () => {
   ])("maps any other error (%s) to tasks.save_failed", async (message) => {
     rpc.mockResolvedValue({ data: null, error: { message } })
 
-    const result = await respondToSlotAction({ slotId: SLOT_ID, response: "on_it" })
+    const result = await respondToSlotAction({
+      slotId: SLOT_ID,
+      response: "on_it",
+    })
 
     expect(result).toEqual({ ok: false, code: "tasks.save_failed" })
   })
@@ -259,23 +329,87 @@ describe("respondToSlotAction", () => {
 
 describe("moveTaskAction", () => {
   it("rejects invalid input without calling the database", async () => {
-    const result = await moveTaskAction({ taskId: TASK_ID, toColumn: "archived" })
+    const result = await moveTaskAction({
+      taskId: TASK_ID,
+      toColumn: "archived",
+      expectedMovedAt: "2026-11-15T01:02:03.123456+00:00",
+    })
 
     expect(result).toEqual({ ok: false, code: "tasks.save_failed" })
     expect(createClient).not.toHaveBeenCalled()
   })
 
   it("calls move_task, then revalidates the dashboard and returns the new column", async () => {
-    rpc.mockResolvedValue({ data: null, error: null })
+    rpc.mockResolvedValue({
+      data: "2026-11-15T02:00:00.654321+00:00",
+      error: null,
+    })
 
-    const result = await moveTaskAction({ taskId: TASK_ID, toColumn: "for_review" })
+    const result = await moveTaskAction({
+      taskId: TASK_ID,
+      toColumn: "for_review",
+      expectedMovedAt: "2026-11-15T01:02:03.123456+00:00",
+    })
 
     expect(rpc).toHaveBeenCalledExactlyOnceWith("move_task", {
       task_id: TASK_ID,
       to_column: "for_review",
+      expected_moved_at: "2026-11-15T01:02:03.123456+00:00",
     })
-    expect(revalidatePath).toHaveBeenCalledExactlyOnceWith("/(member)/dashboard", "layout")
-    expect(result).toEqual({ ok: true, data: { column: "for_review" } })
+    expect(revalidatePath).toHaveBeenCalledExactlyOnceWith(
+      "/(member)/dashboard",
+      "layout"
+    )
+    // The version comes back exactly as the database wrote it.
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        column: "for_review",
+        movedAt: "2026-11-15T02:00:00.654321+00:00",
+      },
+    })
+  })
+
+  it("maps tasks.stale with the column and the mover's name from the error's details", async () => {
+    rpc.mockResolvedValue({
+      data: null,
+      error: {
+        message: "tasks.stale",
+        details: JSON.stringify({
+          column: "for_review",
+          moved_by: TASK_ID,
+          moved_by_name: "Ben Baker",
+        }),
+      },
+    })
+
+    const result = await moveTaskAction({
+      taskId: TASK_ID,
+      toColumn: "doing",
+      expectedMovedAt: "2026-11-15T01:02:03.123456+00:00",
+    })
+
+    expect(result).toEqual({
+      ok: false,
+      code: "tasks.stale",
+      params: { column: "for_review", movedByName: "Ben Baker" },
+    })
+    expect(after).not.toHaveBeenCalled()
+  })
+
+  it("maps tasks.stale with unreadable details to no params", async () => {
+    rpc.mockResolvedValue({
+      data: null,
+      error: { message: "tasks.stale", details: "not json" },
+    })
+
+    const result = await moveTaskAction({
+      taskId: TASK_ID,
+      toColumn: "doing",
+      expectedMovedAt: "2026-11-15T01:02:03.123456+00:00",
+    })
+
+    expect(result).toEqual({ ok: false, code: "tasks.stale" })
   })
 
   it.each(["auth.not_active", "tasks.not_found", "tasks.not_allowed"])(
@@ -283,7 +417,11 @@ describe("moveTaskAction", () => {
     async (message) => {
       rpc.mockResolvedValue({ data: null, error: { message } })
 
-      const result = await moveTaskAction({ taskId: TASK_ID, toColumn: "doing" })
+      const result = await moveTaskAction({
+        taskId: TASK_ID,
+        toColumn: "doing",
+        expectedMovedAt: "2026-11-15T01:02:03.123456+00:00",
+      })
 
       expect(result).toEqual({ ok: false, code: message })
       expect(revalidatePath).not.toHaveBeenCalled()
@@ -293,9 +431,215 @@ describe("moveTaskAction", () => {
   it("maps any other error to tasks.save_failed", async () => {
     rpc.mockResolvedValue({ data: null, error: { message: "fetch failed" } })
 
-    const result = await moveTaskAction({ taskId: TASK_ID, toColumn: "doing" })
+    const result = await moveTaskAction({
+      taskId: TASK_ID,
+      toColumn: "doing",
+      expectedMovedAt: "2026-11-15T01:02:03.123456+00:00",
+    })
 
     expect(result).toEqual({ ok: false, code: "tasks.save_failed" })
+  })
+})
+
+describe("updateTaskAction with deliverable links", () => {
+  it("carries the role tasks.slot_has_links names, and records nothing", async () => {
+    rpc.mockResolvedValue({
+      data: null,
+      error: {
+        code: "P0001",
+        message: "tasks.slot_has_links",
+        details: JSON.stringify({ role: "layout_artist" }),
+      },
+    })
+
+    const result = await updateTaskAction(VALID_EDIT)
+
+    expect(result).toEqual({
+      ok: false,
+      code: "tasks.slot_has_links",
+      params: { role: "layout_artist" },
+    })
+    expect(after).not.toHaveBeenCalled()
+  })
+
+  it("answers tasks.slot_has_links without params when details are unreadable", async () => {
+    rpc.mockResolvedValue({
+      data: null,
+      error: {
+        code: "P0001",
+        message: "tasks.slot_has_links",
+        details: "not json",
+      },
+    })
+
+    const result = await updateTaskAction(VALID_EDIT)
+
+    expect(result).toEqual({ ok: false, code: "tasks.slot_has_links" })
+  })
+})
+
+const LINK_SLOT = "00000000-0000-4000-8000-000000000031"
+const LINK_ID = "00000000-0000-4000-8000-000000000041"
+
+describe("addDeliverableLinksAction", () => {
+  it("cleans the links, calls add_deliverable_links once and revalidates both areas", async () => {
+    rpc.mockResolvedValue({ data: null, error: null })
+
+    const result = await addDeliverableLinksAction({
+      slotId: LINK_SLOT,
+      urls: ["canva.com/design/x", "HTTPS://example.com/y"],
+    })
+
+    expect(rpc).toHaveBeenCalledExactlyOnceWith("add_deliverable_links", {
+      slot_id: LINK_SLOT,
+      urls: ["https://canva.com/design/x", "https://example.com/y"],
+    })
+    expect(revalidatePath.mock.calls).toEqual([
+      ["/(member)/dashboard", "layout"],
+      ["/(admin)/admin", "layout"],
+    ])
+    expect(result).toEqual({ ok: true, data: { slotId: LINK_SLOT, count: 2 } })
+  })
+
+  it.each([
+    ["no links", { slotId: LINK_SLOT, urls: [] }],
+    [
+      "six links",
+      { slotId: LINK_SLOT, urls: Array(6).fill("https://a.example/x") },
+    ],
+    ["a bad link", { slotId: LINK_SLOT, urls: ["mailto:a@b"] }],
+    ["a bad id", { slotId: "nope", urls: ["https://a.example/x"] }],
+  ])(
+    "refuses %s without calling the database or recording",
+    async (_, input) => {
+      const result = await addDeliverableLinksAction(input)
+
+      expect(result).toEqual({
+        ok: false,
+        code: "tasks.invalid_links",
+        params: { reason: "link" },
+      })
+      expect(rpc).not.toHaveBeenCalled()
+      expect(after).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each([["auth.not_active"], ["tasks.not_found"], ["tasks.not_allowed"]])(
+    "maps %s without recording it",
+    async (message) => {
+      rpc.mockResolvedValue({ data: null, error: { code: "P0001", message } })
+
+      const result = await addDeliverableLinksAction({
+        slotId: LINK_SLOT,
+        urls: ["https://a.example/x"],
+      })
+
+      expect(result).toEqual({ ok: false, code: message })
+      expect(after).not.toHaveBeenCalled()
+      expect(revalidatePath).not.toHaveBeenCalled()
+    }
+  )
+
+  it("carries a refused limit's reason and room left", async () => {
+    rpc.mockResolvedValue({
+      data: null,
+      error: {
+        code: "P0001",
+        message: "tasks.invalid_links",
+        details: JSON.stringify({ reason: "limit", remaining: 1 }),
+      },
+    })
+
+    const result = await addDeliverableLinksAction({
+      slotId: LINK_SLOT,
+      urls: ["https://a.example/x"],
+    })
+
+    expect(result).toEqual({
+      ok: false,
+      code: "tasks.invalid_links",
+      params: { reason: "limit", remaining: 1 },
+    })
+    expect(after).not.toHaveBeenCalled()
+  })
+
+  it("maps anything else to tasks.save_failed and records it", async () => {
+    rpc.mockResolvedValue({
+      data: null,
+      error: { code: "XX000", message: "boom" },
+    })
+
+    const result = await addDeliverableLinksAction({
+      slotId: LINK_SLOT,
+      urls: ["https://a.example/x"],
+    })
+    await runAfter()
+
+    expect(result).toEqual({ ok: false, code: "tasks.save_failed" })
+    expect(recordErrorEvent).toHaveBeenCalledWith(
+      { code: "XX000", message: "boom" },
+      expect.objectContaining({ route: "action addDeliverableLinksAction" })
+    )
+  })
+})
+
+describe("removeDeliverableLinkAction", () => {
+  it("passes the id and says whether it removed one", async () => {
+    rpc.mockResolvedValue({ data: true, error: null })
+
+    const result = await removeDeliverableLinkAction({ linkId: LINK_ID })
+
+    expect(rpc).toHaveBeenCalledExactlyOnceWith("remove_deliverable_link", {
+      link_id: LINK_ID,
+    })
+    expect(result).toEqual({ ok: true, data: { removed: true } })
+    expect(revalidatePath.mock.calls).toEqual([
+      ["/(member)/dashboard", "layout"],
+      ["/(admin)/admin", "layout"],
+    ])
+  })
+
+  it("answers removed: false for a link already gone", async () => {
+    rpc.mockResolvedValue({ data: false, error: null })
+
+    expect(await removeDeliverableLinkAction({ linkId: LINK_ID })).toEqual({
+      ok: true,
+      data: { removed: false },
+    })
+  })
+
+  it.each(["auth.not_active", "tasks.not_allowed"])(
+    "maps %s without recording it",
+    async (message) => {
+      rpc.mockResolvedValue({ data: null, error: { code: "P0001", message } })
+
+      expect(await removeDeliverableLinkAction({ linkId: LINK_ID })).toEqual({
+        ok: false,
+        code: message,
+      })
+      expect(after).not.toHaveBeenCalled()
+    }
+  )
+
+  it("refuses a bad id without calling the database", async () => {
+    expect(await removeDeliverableLinkAction({ linkId: "x" })).toEqual({
+      ok: false,
+      code: "tasks.save_failed",
+    })
+    expect(rpc).not.toHaveBeenCalled()
+  })
+
+  it("records an unexpected error and answers tasks.save_failed", async () => {
+    rpc.mockResolvedValue({
+      data: null,
+      error: { code: "XX000", message: "boom" },
+    })
+
+    const result = await removeDeliverableLinkAction({ linkId: LINK_ID })
+    await runAfter()
+
+    expect(result).toEqual({ ok: false, code: "tasks.save_failed" })
+    expect(recordErrorEvent).toHaveBeenCalledTimes(1)
   })
 })
 
@@ -304,8 +648,11 @@ describe("error copy", () => {
     const { TASK_ERROR_COPY } = await import("./errors")
     expect(TASK_ERROR_COPY).toEqual({
       "auth.not_active": "Sign in to do that.",
+      "tasks.invalid_links":
+        "A link didn't save. Check the links and try again.",
       "tasks.not_admin": "Only the Editorial Board can create tasks.",
-      "tasks.duplicate_slot": "The same member already has that role — remove one.",
+      "tasks.duplicate_slot":
+        "The same member already has that role — remove one.",
       // EXPERIENCE.md's Save failed line, as every other save shows it.
       "tasks.create_failed": "Couldn't save — try again.",
       "tasks.not_found": "This task was deleted or the link is wrong.",
@@ -317,6 +664,8 @@ describe("error copy", () => {
       // A member who left while the edit form was open: the stale line.
       "tasks.invalid_slot_member":
         "Something changed since you opened this. Review the latest and try again.",
+      "tasks.slot_has_links":
+        "A slot has deliverable links. Remove them on the task first, or reassign the slot.",
     })
   })
 })
@@ -351,7 +700,10 @@ describe("handBackSlotAction", () => {
       slot_id: SLOT_ID,
       reason: "Out sick",
     })
-    expect(revalidatePath).toHaveBeenCalledExactlyOnceWith("/(member)/dashboard", "layout")
+    expect(revalidatePath).toHaveBeenCalledExactlyOnceWith(
+      "/(member)/dashboard",
+      "layout"
+    )
     expect(result).toEqual({ ok: true, data: { state: "needs_reassignment" } })
   })
 
@@ -370,14 +722,17 @@ describe("handBackSlotAction", () => {
     ["tasks.not_found", "tasks.not_found"],
     ["tasks.not_allowed", "tasks.not_allowed"],
     ["something unexpected", "tasks.save_failed"],
-  ])("maps the database error %s to %s without revalidating", async (message, code) => {
-    rpc.mockResolvedValue({ data: null, error: { message } })
+  ])(
+    "maps the database error %s to %s without revalidating",
+    async (message, code) => {
+      rpc.mockResolvedValue({ data: null, error: { message } })
 
-    const result = await handBackSlotAction({ slotId: SLOT_ID })
+      const result = await handBackSlotAction({ slotId: SLOT_ID })
 
-    expect(result).toEqual({ ok: false, code })
-    expect(revalidatePath).not.toHaveBeenCalled()
-  })
+      expect(result).toEqual({ ok: false, code })
+      expect(revalidatePath).not.toHaveBeenCalled()
+    }
+  )
 })
 
 describe.each([
@@ -412,14 +767,17 @@ describe.each([
     ["tasks.stale", "tasks.stale"],
     ["tasks.not_allowed", "tasks.save_failed"],
     ["fetch failed", "tasks.save_failed"],
-  ])("maps the database error %s to %s without revalidating", async (message, code) => {
-    rpc.mockResolvedValue({ data: null, error: { message } })
+  ])(
+    "maps the database error %s to %s without revalidating",
+    async (message, code) => {
+      rpc.mockResolvedValue({ data: null, error: { message } })
 
-    const result = await action({ taskId: TASK_ID })
+      const result = await action({ taskId: TASK_ID })
 
-    expect(result).toEqual({ ok: false, code })
-    expect(revalidatePath).not.toHaveBeenCalled()
-  })
+      expect(result).toEqual({ ok: false, code })
+      expect(revalidatePath).not.toHaveBeenCalled()
+    }
+  )
 })
 
 describe("sendBackTaskAction", () => {
@@ -466,14 +824,17 @@ describe("sendBackTaskAction", () => {
     ["tasks.stale", "tasks.stale"],
     ["tasks.invalid_note", "tasks.save_failed"],
     ["something unexpected", "tasks.save_failed"],
-  ])("maps the database error %s to %s without revalidating", async (message, code) => {
-    rpc.mockResolvedValue({ data: null, error: { message } })
+  ])(
+    "maps the database error %s to %s without revalidating",
+    async (message, code) => {
+      rpc.mockResolvedValue({ data: null, error: { message } })
 
-    const result = await sendBackTaskAction({ taskId: TASK_ID, note: "Fix" })
+      const result = await sendBackTaskAction({ taskId: TASK_ID, note: "Fix" })
 
-    expect(result).toEqual({ ok: false, code })
-    expect(revalidatePath).not.toHaveBeenCalled()
-  })
+      expect(result).toEqual({ ok: false, code })
+      expect(revalidatePath).not.toHaveBeenCalled()
+    }
+  )
 })
 
 describe("deleteTaskAction", () => {
@@ -550,7 +911,8 @@ describe("updateTaskAction", () => {
     title: "  Lay out the spread, v2  ",
     description: null,
     dueAt: "2026-10-31T23:30",
-    referenceUrl: "https://example.com/brief",
+    referenceUrls: ["https://example.com/brief"],
+    loadedReferenceUrls: [],
     slots: [
       {
         id: SLOT_ID,
@@ -592,12 +954,54 @@ describe("updateTaskAction", () => {
         ],
       },
     ],
-    ["a due date that can't convert", { ...EDIT_INPUT, dueAt: "2026-02-30T10:00" }],
+    [
+      "a due date that can't convert",
+      { ...EDIT_INPUT, dueAt: "2026-02-30T10:00" },
+    ],
   ])("rejects %s without calling the database", async (_name, input) => {
     const result = await updateTaskAction(input)
 
     expect(result).toEqual({ ok: false, code: "tasks.save_failed" })
     expect(createClient).not.toHaveBeenCalled()
+  })
+
+  it("never refuses a link equal to one the form loaded, and cleans the rest", async () => {
+    rpc.mockResolvedValue({ data: false, error: null })
+    const loaded = "https://example.com/has a space"
+
+    const result = await updateTaskAction({
+      ...EDIT_INPUT,
+      referenceUrls: [loaded, "canva.com/x"],
+      loadedReferenceUrls: [loaded],
+    })
+
+    expect(result.ok).toBe(true)
+    expect(rpc.mock.calls[0][1].reference_urls).toEqual([
+      loaded,
+      "https://canva.com/x",
+    ])
+  })
+
+  it("refuses a link that isn't the loaded one when it is invalid", async () => {
+    const result = await updateTaskAction({
+      ...EDIT_INPUT,
+      referenceUrls: ["https://example.com/has a space"],
+      loadedReferenceUrls: ["https://example.com/other"],
+    })
+
+    expect(result).toEqual({ ok: false, code: "tasks.save_failed" })
+  })
+
+  it("maps the database's refusal of the list to its own copy, unrecorded", async () => {
+    rpc.mockResolvedValue({
+      data: null,
+      error: { code: "P0001", message: "tasks.invalid_links" },
+    })
+
+    const result = await updateTaskAction(EDIT_INPUT)
+
+    expect(result).toEqual({ ok: false, code: "tasks.invalid_links" })
+    expect(after).not.toHaveBeenCalled()
   })
 
   it("calls update_task with the trimmed fields, the PHT due date as a UTC instant and the slots (an id and the loaded member only on an existing one), then revalidates the dashboard and the admin pages", async () => {
@@ -610,7 +1014,7 @@ describe("updateTaskAction", () => {
       title: "Lay out the spread, v2",
       description: null,
       due_at: "2026-10-31T15:30:00.000Z",
-      reference_url: "https://example.com/brief",
+      reference_urls: ["https://example.com/brief"],
       slots: [
         {
           id: SLOT_ID,
@@ -622,9 +1026,7 @@ describe("updateTaskAction", () => {
       ],
     })
     expect(rpc.mock.calls[0][1].slots[1]).not.toHaveProperty("id")
-    expect(rpc.mock.calls[0][1].slots[1]).not.toHaveProperty(
-      "loaded_member_id"
-    )
+    expect(rpc.mock.calls[0][1].slots[1]).not.toHaveProperty("loaded_member_id")
     expect(revalidatePath.mock.calls).toEqual([
       ["/(member)/dashboard", "layout"],
       ["/(admin)/admin", "layout"],
@@ -654,6 +1056,7 @@ describe("updateTaskAction", () => {
     ["tasks.duplicate_slot", "tasks.duplicate_slot"],
     ["tasks.invalid_slot_member", "tasks.invalid_slot_member"],
     ["tasks.not_allowed", "tasks.not_allowed"],
+    ["tasks.slot_has_links", "tasks.slot_has_links"],
     ["tasks.no_slots", "tasks.save_failed"],
     ["fetch failed", "tasks.save_failed"],
   ])(
@@ -797,7 +1200,12 @@ describe("recording unexpected errors", () => {
     ],
     [
       "moveTaskAction",
-      () => moveTaskAction({ taskId: TASK_ID, toColumn: "doing" }),
+      () =>
+        moveTaskAction({
+          taskId: TASK_ID,
+          toColumn: "doing",
+          expectedMovedAt: "2026-11-15T01:02:03.123456+00:00",
+        }),
       { route: "action moveTaskAction", entityType: "task", entityId: TASK_ID },
     ],
     [
@@ -817,7 +1225,11 @@ describe("recording unexpected errors", () => {
     [
       "reopenTaskAction",
       () => reopenTaskAction({ taskId: TASK_ID }),
-      { route: "action reopenTaskAction", entityType: "task", entityId: TASK_ID },
+      {
+        route: "action reopenTaskAction",
+        entityType: "task",
+        entityId: TASK_ID,
+      },
     ],
     [
       "deleteTaskAction",
@@ -826,12 +1238,20 @@ describe("recording unexpected errors", () => {
           taskId: TASK_ID,
           expectedUpdatedAt: "2026-10-30T02:15:42.123456+00:00",
         }),
-      { route: "action deleteTaskAction", entityType: "task", entityId: TASK_ID },
+      {
+        route: "action deleteTaskAction",
+        entityType: "task",
+        entityId: TASK_ID,
+      },
     ],
     [
       "updateTaskAction",
       () => updateTaskAction({ ...VALID_EDIT, taskId: TASK_ID }),
-      { route: "action updateTaskAction", entityType: "task", entityId: TASK_ID },
+      {
+        route: "action updateTaskAction",
+        entityType: "task",
+        entityId: TASK_ID,
+      },
     ],
     [
       "reassignSlotAction",
@@ -920,7 +1340,12 @@ describe("recording unexpected errors", () => {
     ],
     [
       "moveTaskAction",
-      () => moveTaskAction({ taskId: TASK_ID, toColumn: "doing" }),
+      () =>
+        moveTaskAction({
+          taskId: TASK_ID,
+          toColumn: "doing",
+          expectedMovedAt: "2026-11-15T01:02:03.123456+00:00",
+        }),
       "auth.not_active",
     ],
     [
@@ -961,6 +1386,16 @@ describe("recording unexpected errors", () => {
       "updateTaskAction",
       () => updateTaskAction(VALID_EDIT),
       "tasks.not_allowed",
+    ],
+    [
+      "updateTaskAction",
+      () => updateTaskAction(VALID_EDIT),
+      "tasks.invalid_links",
+    ],
+    [
+      "createTaskAction",
+      () => createTaskAction(VALID_INPUT),
+      "tasks.invalid_links",
     ],
   ])("%s doesn't record a known code (%s)", async (_name, call, message) => {
     rpc.mockResolvedValue({ data: null, error: { code: "P0001", message } })
@@ -1041,7 +1476,11 @@ describe("recording unexpected errors", () => {
   it("doesn't record a success", async () => {
     rpc.mockResolvedValue({ data: null, error: null })
 
-    await moveTaskAction({ taskId: TASK_ID, toColumn: "doing" })
+    await moveTaskAction({
+      taskId: TASK_ID,
+      toColumn: "doing",
+      expectedMovedAt: "2026-11-15T01:02:03.123456+00:00",
+    })
 
     expect(after).not.toHaveBeenCalled()
   })

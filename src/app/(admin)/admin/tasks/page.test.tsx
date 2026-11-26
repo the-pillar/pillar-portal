@@ -1,5 +1,12 @@
+// @vitest-environment jsdom
+import "@testing-library/jest-dom/vitest"
+
+import { cleanup, render } from "@testing-library/react"
+import axe from "axe-core"
 import type { ReactElement } from "react"
 import { afterEach, describe, expect, it, vi } from "vitest"
+
+import { Button } from "@/components/ui/button"
 
 // vi.mock factories run before this file's imports, so what they share with
 // the tests is created in vi.hoisted.
@@ -8,19 +15,29 @@ const {
   getReviewQueue,
   getHandedBackQueue,
   getReassignOptions,
-  TaskForm,
+  canCreateTask,
+  NewTaskLink,
   ReviewQueue,
   HandedBackQueue,
   requireAdmin,
+  recordCopiedTaskAction,
 } = vi.hoisted(() => ({
   getTaskFormOptions: vi.fn(),
   getReviewQueue: vi.fn(),
   getHandedBackQueue: vi.fn(),
   getReassignOptions: vi.fn(),
-  TaskForm: vi.fn(() => null),
+  canCreateTask: vi.fn(),
+  NewTaskLink: vi.fn(
+    ({ label, className }: { label?: string; className?: string }) => (
+      <button type="button" className={className}>
+        {label}
+      </button>
+    )
+  ),
   ReviewQueue: vi.fn(() => null),
   HandedBackQueue: vi.fn(() => null),
   requireAdmin: vi.fn(),
+  recordCopiedTaskAction: vi.fn(),
 }))
 
 vi.mock("@/features/tasks", () => ({
@@ -28,11 +45,13 @@ vi.mock("@/features/tasks", () => ({
   getReviewQueue,
   getHandedBackQueue,
   getReassignOptions,
-  TaskForm,
+  canCreateTask,
+  NewTaskLink,
   ReviewQueue,
   HandedBackQueue,
 }))
 vi.mock("../../require-admin", () => ({ requireAdmin }))
+vi.mock("@/features/members", () => ({ recordCopiedTaskAction }))
 
 import AdminTasksPage, { metadata } from "./page"
 
@@ -87,34 +106,38 @@ type PageElement = ReactElement<{
   slots?: unknown
   focusTargetId?: string
   options?: unknown
+  label?: string
+  asChild?: boolean
 }>
 
 afterEach(() => {
+  cleanup()
   vi.clearAllMocks()
 })
 
 function mockReads({
   handedBack = HANDED_BACK as unknown[],
   queue = QUEUE as unknown[],
+  canCreate = true,
 } = {}) {
   requireAdmin.mockResolvedValue({ role: "editorial_admin" })
   getHandedBackQueue.mockResolvedValue(handedBack)
   getReviewQueue.mockResolvedValue(queue)
   getTaskFormOptions.mockResolvedValue(OPTIONS)
   getReassignOptions.mockResolvedValue(REASSIGN_OPTIONS)
+  canCreateTask.mockResolvedValue(canCreate)
 }
 
 describe("AdminTasksPage", () => {
   it("is titled Tasks", () => {
-    expect(metadata.title).toBe("Tasks · The Pillar Portal")
+    expect(metadata.title).toBe("Tasks")
   })
 
-  it("renders the h1, then Needs reassignment, then the review queue, then 'Create a task' and the form", async () => {
+  it("renders the h1, then Needs reassignment, then the review queue, then the New task button", async () => {
     mockReads()
 
     const page = (await AdminTasksPage()) as PageElement
-    const [h1, handedBack, queue, h2, wrapper] = page.props
-      .children as PageElement[]
+    const [h1, handedBack, queue, button] = page.props.children as PageElement[]
 
     expect(h1.type).toBe("h1")
     expect(h1.props.children).toBe("Tasks")
@@ -128,17 +151,39 @@ describe("AdminTasksPage", () => {
       slots: HANDED_BACK,
       options: REASSIGN_OPTIONS,
       focusTargetId: h1.props.id,
+      onCopied: recordCopiedTaskAction,
     })
 
     expect(queue.type).toBe(ReviewQueue)
     expect(queue.props).toEqual({ tasks: QUEUE, focusTargetId: h1.props.id })
 
-    expect(h2.type).toBe("h2")
-    expect(h2.props.children).toBe("Create a task")
+    // A primary Button wrapping the sheet's link (asChild).
+    expect(button.type).toBe(Button)
+    expect(button.props.asChild).toBe(true)
+    const link = button.props.children as PageElement
+    expect(link.type).toBe(NewTaskLink)
+    expect(link.props.label).toBe("New task")
+  })
 
-    const form = wrapper.props.children as PageElement
-    expect(form.type).toBe(TaskForm)
-    expect(form.props).toEqual({ options: OPTIONS })
+  it("has no axe violations", async () => {
+    mockReads()
+
+    const { container } = render((await AdminTasksPage()) as ReactElement)
+
+    // color-contrast can't be computed in jsdom (it is always "incomplete").
+    const results = await axe.run(container, {
+      rules: { "color-contrast": { enabled: false } },
+    })
+    expect(results.violations).toEqual([])
+  })
+
+  it("offers no New task button without can_create_task", async () => {
+    mockReads({ canCreate: false })
+
+    const page = (await AdminTasksPage()) as PageElement
+    const [, , , button] = page.props.children as PageElement[]
+
+    expect(button).toBeFalsy()
   })
 
   it("builds the picker's options from the form options already read, reading them once", async () => {
@@ -163,6 +208,7 @@ describe("AdminTasksPage", () => {
       slots: [],
       options: null,
       focusTargetId: "admin-tasks-heading",
+      onCopied: recordCopiedTaskAction,
     })
   })
 

@@ -1,5 +1,7 @@
 import { STALE_COPY } from "@/lib/command-copy"
 
+import { TASK_COLUMN_LABELS, TASK_COLUMNS, type TaskColumn } from "./status"
+
 // Error codes the tasks slice's actions return, and the copy each one shows.
 // Raw Postgres errors never reach the UI (mirrors
 // src/features/members/errors.ts).
@@ -59,10 +61,96 @@ export const TASK_ERROR_COPY = {
   "tasks.not_approver": "Only the task's head or a top editor can do that.",
   "tasks.stale": STALE_COPY,
   "tasks.invalid_slot_member": STALE_COPY,
+  "tasks.invalid_links": "A link didn't save. Check the links and try again.",
+  // update_task's refusal names the role, which the edit form puts in
+  // slotHasLinksMessage's sentence; this is the bare fallback.
+  "tasks.slot_has_links":
+    "A slot has deliverable links. Remove them on the task first, or reassign the slot.",
 } as const
 
 export type TaskErrorCode = keyof typeof TASK_ERROR_COPY
 
-export function taskErrorMessage(code: TaskErrorCode): string {
+/** The column a refused move says the card is in now, from the stale params. */
+export function staleColumn(
+  params: Record<string, unknown> | undefined
+): TaskColumn | null {
+  const column = params?.column
+  return (TASK_COLUMNS as readonly unknown[]).includes(column)
+    ? (column as TaskColumn)
+    : null
+}
+
+/**
+ * The toast for a refusal. A stale move that says where the card went reads
+ * "That card moved — it's now in <column>." (EXPERIENCE.md › Drop refused);
+ * every other code, and a stale one without params (Task detail's other
+ * commands), keeps its fixed copy.
+ */
+export function taskErrorMessage(
+  code: TaskErrorCode,
+  params?: Record<string, unknown>
+): string {
+  if (code === "tasks.stale") {
+    const column = staleColumn(params)
+    if (column) {
+      return `That card moved — it's now in ${TASK_COLUMN_LABELS[column]}.`
+    }
+  }
   return TASK_ERROR_COPY[code]
+}
+
+/** The toast when Undo finds the card moved again (EXPERIENCE.md › Undo no longer applies). */
+export function undoStaleMessage(
+  params: Record<string, unknown> | undefined
+): string {
+  const name = params?.movedByName
+  return typeof name === "string" && name !== ""
+    ? `Can't undo — ${name} moved this card since.`
+    : "Can't undo — someone moved this card since."
+}
+
+/** The edit form's line under a slot row that update_task refused to drop. */
+export function slotHasLinksMessage(roleLabel: string): string {
+  return `${roleLabel} has deliverable links. Remove them on the task first, or reassign the slot.`
+}
+
+/** The role update_task's `tasks.slot_has_links` names, from its params. */
+export function slotHasLinksRole(
+  params: Record<string, unknown> | undefined
+): string | null {
+  return typeof params?.role === "string" ? params.role : null
+}
+
+/** The refusal copy for adding deliverable links (EXPERIENCE.md › Link limit reached, Can't add links now). */
+export function deliverableAddMessage(
+  code: TaskErrorCode,
+  params?: Record<string, unknown>
+): string {
+  switch (code) {
+    case "tasks.invalid_links": {
+      if (params?.reason === "limit") {
+        const remaining = Number(params.remaining)
+        if (!Number.isInteger(remaining) || remaining <= 0) {
+          return "This slot already has 5 links."
+        }
+        return remaining === 1
+          ? "Only 1 more link fits on this slot."
+          : `Only ${remaining} more links fit on this slot.`
+      }
+      return TASK_ERROR_COPY["tasks.invalid_links"]
+    }
+    case "tasks.not_allowed":
+      return "You can't add links to this slot anymore."
+    case "tasks.not_found":
+      return "This task or slot is gone."
+    default:
+      return TASK_ERROR_COPY[code]
+  }
+}
+
+/** The refusal copy for removing a deliverable link (EXPERIENCE.md › Remove a link). */
+export function deliverableRemoveMessage(code: TaskErrorCode): string {
+  return code === "tasks.not_allowed"
+    ? "You can't remove this link anymore."
+    : TASK_ERROR_COPY[code]
 }

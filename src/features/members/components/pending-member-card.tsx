@@ -1,7 +1,7 @@
 "use client"
 
 import { useId, useRef, useState } from "react"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/toast"
 
 import {
   AlertDialog,
@@ -27,6 +27,7 @@ import { approveMemberAction, declineMemberAction } from "../actions"
 import { memberErrorMessage } from "../errors"
 import type { PositionGroup } from "../position-groups"
 import type { PendingMember } from "../queries"
+import { MemberAvatar } from "./member-avatar"
 import { MemberNameEditor } from "./member-name-editor"
 import { PositionPicker, usePositionChoice } from "./position-picker"
 
@@ -153,16 +154,23 @@ export function PendingMemberCard({
 
   return (
     <li ref={rootRef} className="rounded-lg bg-card p-card-padding shadow-card">
-      <MemberNameEditor
-        member={member}
-        as="h3"
-        nameClassName="font-semibold break-words"
-      />
-      <p className="text-sm break-all text-muted-foreground">{member.email}</p>
-      <p className="text-sm text-muted-foreground">
-        Signed in{" "}
-        <time dateTime={member.signedInAt}>{member.signedInLabel}</time>
-      </p>
+      <div className="flex gap-3">
+        <MemberAvatar id={member.id} name={member.name} />
+        <div className="min-w-0 flex-1">
+          <MemberNameEditor
+            member={member}
+            as="h3"
+            nameClassName="font-semibold break-words"
+          />
+          <p className="text-sm break-all text-muted-foreground">
+            {member.email}
+          </p>
+          <p className="text-sm text-muted-foreground">
+            Signed in{" "}
+            <time dateTime={member.signedInAt}>{member.signedInLabel}</time>
+          </p>
+        </div>
+      </div>
 
       <div className="mt-3 flex flex-wrap gap-3">
         <Button

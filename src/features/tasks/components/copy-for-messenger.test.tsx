@@ -7,7 +7,7 @@ import axe from "axe-core"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 const { success } = vi.hoisted(() => ({ success: vi.fn() }))
-vi.mock("sonner", () => ({ toast: { success } }))
+vi.mock("@/components/ui/toast", () => ({ toast: { success } }))
 
 import { CopyForMessenger } from "./copy-for-messenger"
 
@@ -29,6 +29,41 @@ describe("CopyForMessenger", () => {
     expect(writeText).toHaveBeenCalledWith(MESSAGE)
     expect(success).toHaveBeenCalledWith("Copied — paste it in Messenger.")
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument()
+  })
+
+  it("shrugs off a rejecting onCopied: the toast still shows (vitest fails the run on an unhandled rejection)", async () => {
+    const user = userEvent.setup({ writeToClipboard: false })
+    vi.stubGlobal("navigator", {
+      clipboard: { writeText: vi.fn().mockResolvedValue(undefined) },
+    })
+    render(
+      <CopyForMessenger
+        message={MESSAGE}
+        onCopied={() => Promise.reject(new Error("network"))}
+      />
+    )
+    await user.click(screen.getByRole("button", { name: "Copy for Messenger" }))
+    await new Promise((resolve) => setTimeout(resolve, 10))
+
+    expect(success).toHaveBeenCalledWith("Copied — paste it in Messenger.")
+  })
+
+  it("calls onCopied after a copy that worked, and not after one that did not", async () => {
+    const onCopied = vi.fn()
+    const user = userEvent.setup({ writeToClipboard: false })
+    vi.stubGlobal("navigator", {
+      clipboard: { writeText: vi.fn().mockResolvedValue(undefined) },
+    })
+    render(<CopyForMessenger message={MESSAGE} onCopied={onCopied} />)
+    await user.click(screen.getByRole("button", { name: "Copy for Messenger" }))
+    expect(onCopied).toHaveBeenCalledOnce()
+
+    cleanup()
+    onCopied.mockClear()
+    vi.stubGlobal("navigator", {})
+    render(<CopyForMessenger message={MESSAGE} onCopied={onCopied} />)
+    await user.click(screen.getByRole("button", { name: "Copy for Messenger" }))
+    expect(onCopied).not.toHaveBeenCalled()
   })
 
   it.each([

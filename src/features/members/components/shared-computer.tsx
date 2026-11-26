@@ -46,7 +46,7 @@ export function SharedComputerCheckbox() {
         defaultChecked={false}
         aria-describedby="shared-computer-hint"
         onChange={(event) => setChecked(event.currentTarget.checked)}
-        className="mt-1 size-5 shrink-0 accent-navy"
+        className="mt-px size-[22px] shrink-0 accent-navy"
       />
       <div className="flex flex-col gap-1">
         <label htmlFor="shared-computer" className="text-base">

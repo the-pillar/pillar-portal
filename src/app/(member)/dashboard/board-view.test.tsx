@@ -4,44 +4,15 @@ import "@testing-library/jest-dom/vitest"
 import { cleanup, render, screen } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-const {
-  getMyHomeScope,
-  getBoardOwners,
-  BoardOwnerFilter,
-  TaskChangesRefresher,
-} = vi.hoisted(() => ({
-  getMyHomeScope: vi.fn(),
-  getBoardOwners: vi.fn(),
-  BoardOwnerFilter: vi.fn(({ value }: { value: string }) => (
-    <p>filter shows {value}</p>
-  )),
+const { TaskChangesRefresher, BoardColumns } = vi.hoisted(() => ({
   TaskChangesRefresher: vi.fn(() => <p>refresher</p>),
-}))
-
-// BoardColumns is an async Server Component, which React can't render on the
-// client: stub it, and check what it is given.
-const { BoardColumns } = vi.hoisted(() => ({
-  BoardColumns: vi.fn(({ filter }: { filter: unknown }) => (
-    <p>columns for {JSON.stringify(filter)}</p>
+  // An async Server Component, which React can't render on the client.
+  BoardColumns: vi.fn(({ viewerId }: { viewerId: string }) => (
+    <p>columns for {viewerId}</p>
   )),
 }))
 
-vi.mock("@/features/members", () => ({ getMyHomeScope }))
-vi.mock("@/features/tasks", async () => {
-  // vi.importActual isn't an import statement, so the slice-boundary lint
-  // rule (which wants @/features/tasks through its index) doesn't see it.
-  const board = await vi.importActual<typeof import("@/features/tasks/board")>(
-    "@/features/tasks/board"
-  )
-  return {
-    BOARD_ROW_HEIGHT: board.BOARD_ROW_HEIGHT,
-    ownerFilterParam: board.ownerFilterParam,
-    parseOwnerFilterParam: board.parseOwnerFilterParam,
-    getBoardOwners,
-    BoardOwnerFilter,
-    TaskChangesRefresher,
-  }
-})
+vi.mock("@/features/tasks", () => ({ TaskChangesRefresher }))
 vi.mock("./board-columns", () => ({ BoardColumns }))
 
 import {
@@ -68,109 +39,38 @@ function findElement(node: ReactNode, type: unknown): ReactElement | undefined {
   return findElement((node.props as { children?: ReactNode }).children, type)
 }
 
-const OWNERS = [
-  { kind: "section", id: "news", name: "News" },
-  { kind: "desk", id: "layout", name: "Layout" },
-  { kind: "desk", id: "photo", name: "Photo" },
-]
-
 afterEach(() => {
   cleanup()
   vi.clearAllMocks()
 })
 
-async function renderView(owner: unknown) {
-  return render(await BoardView({ owner }))
-}
-
 describe("BoardView", () => {
-  it("has the serif h1 Board, the filter, the live refresher and the columns", async () => {
-    getBoardOwners.mockResolvedValue(OWNERS)
-    getMyHomeScope.mockResolvedValue({ kind: "all" })
-
-    await renderView(undefined)
+  it("has the serif h1 Board, the live refresher and the columns", () => {
+    render(<BoardView viewerId="me" />)
 
     const h1 = screen.getByRole("heading", { level: 1, name: "Board" })
     expect(h1).toHaveClass("font-heading")
     expect(screen.getByText("refresher")).toBeInTheDocument()
-    expect(screen.getByText(/^filter shows/)).toBeInTheDocument()
-    expect(screen.getByText(/^columns for/)).toBeInTheDocument()
+    expect(screen.getByText("columns for me")).toBeInTheDocument()
   })
 
-  it("marks its root for the wide shell", async () => {
-    getBoardOwners.mockResolvedValue(OWNERS)
-    getMyHomeScope.mockResolvedValue({ kind: "all" })
-
-    const { container } = await renderView(undefined)
+  it("marks its root for the wide shell", () => {
+    const { container } = render(<BoardView viewerId="me" />)
 
     expect(container.firstElementChild).toHaveAttribute("data-wide-view")
   })
 
-  it("uses the owner parameter when it names a filter, without asking for the home scope", async () => {
-    getBoardOwners.mockResolvedValue(OWNERS)
-
-    await renderView("section:news")
-
-    expect(getMyHomeScope).not.toHaveBeenCalled()
-    expect(screen.getByText("filter shows section:news")).toBeInTheDocument()
-    expect(BoardColumns.mock.calls[0][0]).toEqual({
-      filter: { kind: "section", id: "news" },
-      owners: OWNERS,
-    })
-  })
-
-  it.each([
-    ["a missing owner", undefined],
-    ["the Writers desk", "desk:writers"],
-    ["an unknown id", "nope"],
-    ["a repeated owner", ["all", "articles"]],
-  ])("falls back to the home scope for %s", async (_label, owner) => {
-    getBoardOwners.mockResolvedValue(OWNERS)
-    getMyHomeScope.mockResolvedValue({ kind: "desk", id: "layout" })
-
-    await renderView(owner)
-
-    expect(getMyHomeScope).toHaveBeenCalledTimes(1)
-    expect(screen.getByText("filter shows desk:layout")).toBeInTheDocument()
-    expect(BoardColumns.mock.calls[0][0].filter).toEqual({
-      kind: "desk",
-      id: "layout",
-    })
-  })
-
-  it("falls back to All when the home scope names no listed owner", async () => {
-    getBoardOwners.mockResolvedValue(OWNERS)
-    getMyHomeScope.mockResolvedValue({ kind: "desk", id: "gone" })
-
-    await renderView(undefined)
-
-    expect(screen.getByText("filter shows all")).toBeInTheDocument()
-    expect(BoardColumns.mock.calls[0][0].filter).toEqual({ kind: "all" })
-  })
-
-  it("keys the columns' own Suspense boundary by the filter, with the filter and refresher outside it", async () => {
-    getBoardOwners.mockResolvedValue(OWNERS)
-
-    const tree = await BoardView({ owner: "desk:photo" })
+  it("loads the columns under one unkeyed Suspense boundary, with the refresher outside it", () => {
+    const tree = BoardView({ viewerId: "me" })
     const boundary = findElement(tree, Suspense)
 
-    expect(boundary?.key).toBe("desk:photo")
+    expect(boundary?.key).toBeNull()
     const props = boundary?.props as {
       fallback: ReactElement
       children: ReactNode
     }
     expect(props.fallback.type).toBe(BoardColumnsSkeleton)
     expect(findElement(props.children, BoardColumns)).toBeDefined()
-    expect(findElement(props.children, BoardOwnerFilter)).toBeUndefined()
     expect(findElement(props.children, TaskChangesRefresher)).toBeUndefined()
-  })
-
-  it("lets a query failure throw", async () => {
-    getBoardOwners.mockRejectedValue(new Error("boom"))
-    await expect(BoardView({ owner: undefined })).rejects.toThrow("boom")
-
-    getBoardOwners.mockResolvedValue(OWNERS)
-    getMyHomeScope.mockRejectedValue(new Error("scope boom"))
-    await expect(BoardView({ owner: undefined })).rejects.toThrow("scope boom")
   })
 })

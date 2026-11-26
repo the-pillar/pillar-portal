@@ -5,7 +5,7 @@ import { cleanup, render, screen } from "@testing-library/react"
 import axe from "axe-core"
 import { afterEach, describe, expect, it } from "vitest"
 
-import { PlannerMonthSkeleton, PlannerSkeleton } from "./planner-skeleton"
+import { PlannerSkeleton } from "./planner-skeleton"
 
 afterEach(cleanup)
 
@@ -34,29 +34,16 @@ describe("PlannerSkeleton", () => {
   })
 })
 
-describe("PlannerMonthSkeleton", () => {
-  it("outlines the grid from md and the day list below it", () => {
-    const { container } = render(<PlannerMonthSkeleton />)
+describe("PlannerSkeleton layout", () => {
+  it("outlines the chip row, the month row, and the grid or the day list by pointer", () => {
+    const { container } = render(<PlannerSkeleton />)
 
-    expect(screen.getByRole("status")).toHaveTextContent("Loading the planner")
-    expect(container.querySelector(".md\\:grid")?.children).toHaveLength(35)
-    expect(container.querySelector(".md\\:hidden")).not.toBeNull()
-  })
-
-  it.each([4, 6])(
-    "draws %i weeks when told, so a short or long month doesn't jump",
-    (weeks) => {
-      const { container } = render(<PlannerMonthSkeleton weeks={weeks} />)
-
-      expect(container.querySelector(".md\\:grid")?.children).toHaveLength(
-        weeks * 7
-      )
-    }
-  )
-
-  it("has no wide-view marker of its own (the Planner's root carries it)", () => {
-    const { container } = render(<PlannerMonthSkeleton />)
-
-    expect(container.querySelector("[data-wide-view]")).toBeNull()
+    // h1, three chips, month heading, controls, then the month's two forms.
+    expect(
+      container.querySelector(".md\\:not-any-pointer-coarse\\:grid")?.children
+    ).toHaveLength(35)
+    expect(
+      container.querySelector(".md\\:not-any-pointer-coarse\\:hidden")
+    ).not.toBeNull()
   })
 })

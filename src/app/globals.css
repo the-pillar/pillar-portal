@@ -20,13 +20,46 @@
 
   /* DESIGN.md semantic values, renamed because their DESIGN.md names collide
      with shadcn's variables (mapped onto them in :root below) */
-  --color-canvas: #f4f1eb; /* DESIGN.md background */
+  --color-canvas: #faf7f2; /* DESIGN.md background */
   --color-body: #1f1f1f; /* DESIGN.md foreground */
-  --color-tan-wash: #eee7dc; /* DESIGN.md muted */
+  --color-tan-wash: #efe6d6; /* DESIGN.md muted */
   --color-body-muted: #6b665e; /* DESIGN.md muted-foreground */
-  --color-hairline: #e2dfd9; /* DESIGN.md border */
+  --color-hairline: #e6ded0; /* DESIGN.md border */
   --color-field-edge: #86817a; /* DESIGN.md input */
   --color-card-edge: #f1f1f1;
+  --color-list-ink: #3a352e; /* text on tan pills, the neutral due chip */
+  --color-chip-fill: #f3efe8; /* neutral due chip on a card */
+  --color-chip-edge: #d9cdb8; /* idle filter-chip outline; decorative */
+  --color-navy-tint: #ebeef0; /* navy at 8% on white */
+  --color-tab-idle-on-navy: #cfd8e2; /* idle header tab text */
+  --color-ring-on-dark: #ffffff; /* focus ring on navy and ink surfaces */
+  --color-attention-strong: #b4532a; /* overdue due chip */
+  --color-positive-strong: #2e7d4f; /* done due chip, checklist ticks */
+
+  /* Owner categories: the colored label on a task card. Mapped to a
+     section or desk id by the [data-owner] rules below. */
+  --color-owner-news: #2d5ba8;
+  --color-owner-sports: #b23a48;
+  --color-owner-feature: #8c6a00;
+  --color-owner-scitech: #1f6f6b;
+  --color-owner-culture: #a3367a;
+  --color-owner-opinion: #4a5560;
+  --color-owner-editorial: #101010;
+  --color-owner-layout: #6b3f86;
+  --color-owner-cartoons: #5b4fcf;
+  --color-owner-photo: #0b6e99;
+  --color-owner-video: #5e6b1e;
+  --color-owner-broadcast: #8a4f2a;
+
+  /* Avatar fills, picked by avatarSlot(memberId) through [data-avatar]. */
+  --color-avatar-1: #07253f;
+  --color-avatar-2: #1f6f6b;
+  --color-avatar-3: #6b3f86;
+  --color-avatar-4: #2d5ba8;
+  --color-avatar-5: #8c6a00;
+  --color-avatar-6: #a3367a;
+  --color-avatar-7: #4a5560;
+  --color-avatar-8: #8a4f2a;
 
   /* Status accents: 8px dots and badge tints only, never large surfaces */
   --color-status-progress: #5e7c99;
@@ -46,49 +79,213 @@
   --radius-sm: 6px;
   --radius-md: 8px;
   --radius-lg: 10px;
-  --radius-xl: 12px;
+  --radius-xs: 5px;
+  --radius-xl: 14px;
   --radius-full: 9999px;
 
   /* Named spacing (Tailwind's 4-based scale is inherited) */
-  --spacing-card-padding: 14px;
+  --spacing-card-padding: 14px; /* until Story 8.6 restyles the task card */
+  --spacing-card-padding-y: 10px;
+  --spacing-card-padding-x: 12px;
+  --spacing-card-gap: 8px;
+  --spacing-list-padding: 10px;
+  --spacing-row-padding: 4px;
   --spacing-column-gap: 14px;
   --spacing-page-margin-mobile: 16px;
-  --spacing-page-margin-desktop: 32px;
+  --spacing-page-margin-desktop: 24px;
 
-  /* Fonts. Body stays on the shadcn sans ramp. The Elgraine Black demo font
-     is development-only and never committed; the stack falls back to Georgia. */
+  /* Fonts. Body stays on the shadcn sans ramp. The wordmark is set in the
+     serif until The Pillar licenses a wordmark font or supplies artwork. */
   --font-serif: Georgia, "Times New Roman", serif;
   --font-heading: var(--font-serif);
-  --font-wordmark: "Elgraine Black", Georgia, "Times New Roman", serif;
 
   /* Type ramp */
-  --text-wordmark: 28px;
-  --text-wordmark--line-height: 1;
-  --text-wordmark--font-weight: 900;
-  --text-wordmark--letter-spacing: 0.02em;
+  --text-wordmark-fallback: 19px;
+  --text-wordmark-fallback--line-height: 1;
+  --text-wordmark-fallback--font-weight: 700;
+  --text-wordmark-fallback--letter-spacing: normal;
   --text-display: 30px;
   --text-display--line-height: 1.2;
   --text-display--font-weight: 700;
   --text-display--letter-spacing: normal;
-  --text-heading: 20px;
-  --text-heading--line-height: 1.3;
+  --text-heading: 24px;
+  --text-heading--line-height: 1.25;
   --text-heading--font-weight: 700;
   --text-heading--letter-spacing: normal;
   --text-heading-sm: 16px;
   --text-heading-sm--line-height: 1.35;
   --text-heading-sm--font-weight: 700;
   --text-heading-sm--letter-spacing: normal;
+  --text-column-head: 16px;
+  --text-column-head--line-height: 1.3;
+  --text-column-head--font-weight: 700;
+  --text-column-head--letter-spacing: normal;
+  --text-card-title: 15px;
+  --text-card-title--line-height: 1.35;
+  --text-card-title--font-weight: 600;
+  --text-card-title--letter-spacing: normal;
+  --text-owner-label: 12px;
+  --text-owner-label--line-height: 1.4;
+  --text-owner-label--font-weight: 700;
+  --text-owner-label--letter-spacing: normal;
   --text-status-badge: 11.5px;
   --text-status-badge--font-weight: 600;
 
-  /* The single card shadow */
-  --shadow-card:
-    0 1px 2px rgba(16, 16, 16, 0.06), 0 1px 1px rgba(16, 16, 16, 0.03);
+  /* The Trello-style bottom edge, and the lift of a dragged card */
+  --shadow-card: 0 1px 0 rgba(16, 16, 16, 0.16);
+  --shadow-lift:
+    0 14px 28px rgba(16, 16, 16, 0.22), 0 2px 6px rgba(16, 16, 16, 0.12);
 
-  /* DESIGN.md components.task-card.avatar-handed-back-opacity: a task card's
-     avatar for a member who handed back every slot they hold on the task.
-     Dimmed, never hidden; the sr-only names mark them "(handed back)". */
-  --avatar-handed-back-opacity: 0.4;
+  /* Motion (DESIGN.md components.motion). The distance, scale and rotate
+     values are tokens so one reduced-motion rule can neutralize them. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-overshoot: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --motion-press: 120ms;
+  --motion-lift: 150ms;
+  --motion-panel: 180ms;
+  --motion-enter: 220ms;
+  --motion-exit: 150ms;
+  --motion-check: 300ms;
+  --motion-sheet-in: 300ms;
+  --motion-sheet-out: 200ms;
+  --motion-tour-in: 200ms;
+  --motion-tour-step: 150ms;
+  --motion-first-run-item: 240ms;
+  --motion-progress: 400ms;
+  --motion-card-leave: 250ms;
+  --motion-highlight-hold: 200ms;
+  --motion-highlight: 1200ms;
+  --motion-stagger: 50ms;
+  --motion-undo-window: 5000ms;
+  --motion-reduced-fade: 150ms;
+}
+
+/* The app header's height: its 56px row (`min-h-14`) and the 3px gold rule
+   (`border-b-3`) in app-header.tsx. Phone toasts sit just below it. */
+:root {
+  --app-header-height: 59px;
+}
+
+/* The member bottom tab bar (DESIGN.md › Bottom tab bar): at least 56px plus
+   the home-indicator inset. Content and scrollers clear it by that and 8px. */
+:root {
+  --bottom-tab-bar-height: calc(4.5rem + 1px + env(safe-area-inset-bottom));
+  --bottom-tab-bar-clear: calc(var(--bottom-tab-bar-height) + 8px);
+}
+
+/* Below md and at least 480px tall the tab bar is fixed; shorter, it flows in
+   place at the end of the page (DESIGN.md › Sticky budget). */
+@custom-variant tabbar-fixed (@media (max-width: 767px) and (min-height: 480px));
+
+@media (max-width: 767px) and (min-height: 480px) {
+  html:has([data-bottom-tab-bar]) {
+    scroll-padding-bottom: var(--bottom-tab-bar-clear);
+  }
+}
+
+/* Task detail's sticky action bar (DESIGN.md › Sticky action bar) takes the
+   tab bar's place while it is fixed: the tab bar hides (one fixed bar at
+   most), and content and scrollers clear the bar's measured height
+   (--action-bar-height, set by TaskColumnControl) plus 8px. A viewer with no
+   bar keeps the tab bar. */
+@media (max-width: 767px) and (min-height: 480px) {
+  body:has([data-action-bar]) [data-bottom-tab-bar] {
+    display: none;
+  }
+  html:has([data-action-bar]) {
+    scroll-padding-bottom: calc(var(--action-bar-height, 7rem) + 8px);
+  }
+  html:has([data-action-bar]) body main {
+    padding-bottom: calc(var(--action-bar-height, 7rem) + 8px);
+  }
+  /* While a text field on the page has focus, the bar stops floating and
+     flows in place after the status row (DESIGN.md's under-480px rule), so
+     the keyboard never hides a field or Add. It stays mounted, so a reason
+     being typed in it is never lost. Unlayered, so it beats the utilities. */
+  body:has(
+      input:not(
+          [type="checkbox"],
+          [type="radio"],
+          [type="button"],
+          [type="submit"],
+          [type="reset"],
+          [type="file"],
+          [type="range"],
+          [type="color"],
+          [type="image"],
+          [type="hidden"]
+        ):focus,
+      textarea:focus
+    )
+    [data-action-bar] {
+    position: static;
+    max-height: none;
+    overflow: visible;
+    border-top-width: 0;
+    background: transparent;
+    padding: 0;
+  }
+}
+
+/* The floating New task button (DESIGN.md › New task button) sits 16px from
+   the edge and is 44px tall. Below md, while it shows, content and scrollers
+   clear it too (Sticky budget); an open sheet, menu or dialog hides it. */
+:root {
+  --new-task-clear: 60px;
+}
+
+@media (max-width: 767px) {
+  body:has(
+      [role="dialog"]:not([data-onboarding-tour]),
+      [role="alertdialog"],
+      [role="menu"]
+    )
+    [data-new-task-button] {
+    display: none;
+  }
+  body:has([data-new-task-button]:not([data-hidden])) main {
+    padding-bottom: calc(2rem + var(--new-task-clear));
+  }
+  html:has([data-new-task-button]:not([data-hidden])) {
+    scroll-padding-bottom: calc(var(--new-task-clear) + 8px);
+  }
+}
+
+@media (max-width: 767px) and (min-height: 480px) {
+  html:has([data-bottom-tab-bar]):has(
+      [data-new-task-button]:not([data-hidden])
+    ) {
+    scroll-padding-bottom: calc(
+      var(--bottom-tab-bar-clear) + var(--new-task-clear)
+    );
+  }
+  html:has([data-bottom-tab-bar])
+    body:has([data-new-task-button]:not([data-hidden]))
+    main {
+    padding-bottom: calc(var(--bottom-tab-bar-clear) + var(--new-task-clear));
+  }
+}
+
+/* Motion distances, scales and rotations, kept outside @theme so the
+   reduced-motion rule can reset them on every element. */
+:root {
+  --motion-lift-rotate: 2.5deg;
+  --motion-lift-scale: 1.03;
+  --motion-press-scale-card: 0.98;
+  --motion-press-scale-chip: 0.96;
+  --motion-land-y: -6px;
+  --motion-land-scale: 0.97;
+  --motion-panel-y: -4px;
+  --motion-check-scale: 0.6;
+  --motion-first-run-y: 6px;
+  --motion-card-leave-y: 8px;
+  --motion-tour-scale: 0.96;
+
+  /* The onboarding tour's scrim and popover shadow (DESIGN.md ›
+     onboarding-tour). */
+  --tour-scrim: rgba(16, 16, 16, 0.3);
+  --tour-shadow: 0 14px 28px rgba(16, 16, 16, 0.22);
 }
 
 @theme inline {
@@ -175,23 +372,298 @@
   }
   body {
     @apply bg-background text-foreground;
+    padding-inline: env(safe-area-inset-left) env(safe-area-inset-right);
   }
   html {
     @apply font-sans;
   }
 }
 
-/* prefers-reduced-motion: no slide, zoom or card lift (EXPERIENCE.md ›
-   Accessibility Floor). Durations drop to 0.01ms rather than 0s or removing
-   the animations: each still jumps to its end state and reliably fires
-   animationend, which Radix menus wait for before they unmount. */
+/* Owner colors: --owner is the section or desk's label color, by its id
+   (the `sections` and `desks` rows). Any other id, or an unmapped one such as
+   the `writers` desk, takes the neutral fallback. TypeScript names no colors. */
+[data-owner] {
+  --owner: var(--color-list-ink);
+}
+[data-owner="news"] {
+  --owner: var(--color-owner-news);
+}
+[data-owner="sports"] {
+  --owner: var(--color-owner-sports);
+}
+[data-owner="feature"] {
+  --owner: var(--color-owner-feature);
+}
+[data-owner="scitech"] {
+  --owner: var(--color-owner-scitech);
+}
+[data-owner="culture"] {
+  --owner: var(--color-owner-culture);
+}
+[data-owner="opinion"] {
+  --owner: var(--color-owner-opinion);
+}
+[data-owner="editorial"] {
+  --owner: var(--color-owner-editorial);
+}
+[data-owner="layout"] {
+  --owner: var(--color-owner-layout);
+}
+[data-owner="cartoons"] {
+  --owner: var(--color-owner-cartoons);
+}
+[data-owner="photo"] {
+  --owner: var(--color-owner-photo);
+}
+[data-owner="video"] {
+  --owner: var(--color-owner-video);
+}
+[data-owner="broadcast"] {
+  --owner: var(--color-owner-broadcast);
+}
+
+/* Avatar fills: avatarSlot(memberId) renders data-avatar="1"…"8". */
+[data-avatar="1"] {
+  --avatar: var(--color-avatar-1);
+}
+[data-avatar="2"] {
+  --avatar: var(--color-avatar-2);
+}
+[data-avatar="3"] {
+  --avatar: var(--color-avatar-3);
+}
+[data-avatar="4"] {
+  --avatar: var(--color-avatar-4);
+}
+[data-avatar="5"] {
+  --avatar: var(--color-avatar-5);
+}
+[data-avatar="6"] {
+  --avatar: var(--color-avatar-6);
+}
+[data-avatar="7"] {
+  --avatar: var(--color-avatar-7);
+}
+[data-avatar="8"] {
+  --avatar: var(--color-avatar-8);
+}
+
+/* "You're on it." check on Task detail (DESIGN.md › Motion). */
+@keyframes check-pop {
+  from {
+    transform: scale(var(--motion-check-scale));
+  }
+}
+.check-pop {
+  animation: check-pop var(--motion-check) var(--ease-overshoot);
+}
+
+/* The staff first-run card's tips rise in one after another (DESIGN.md ›
+   Motion: first-run-item, stagger). */
+@keyframes first-run-item-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--motion-first-run-y));
+  }
+}
+.first-run-item {
+  animation: first-run-item-in var(--motion-first-run-item) var(--ease-out) both;
+}
+
+/* prefers-reduced-motion: nothing slides, scales or tilts (EXPERIENCE.md ›
+   Accessibility Floor, DESIGN.md › Motion). One unlayered rule, so it beats
+   every utility. It zeroes the motion tokens and tw-animate's enter and exit
+   variables, lets only fades and color tints transition, and caps durations
+   at --motion-reduced-fade: above zero, so each
+   animation still reaches its end state and fires animationend, which Radix
+   menus wait for before they unmount. It never sets `transform` or
+   `translate`: Radix popovers and centered dialogs position with them. Script
+   driven motion asks src/lib/reduced-motion.ts. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
-    animation-duration: 0.01ms !important;
+    --motion-lift-rotate: 0deg;
+    --motion-lift-scale: 1;
+    --motion-press-scale-card: 1;
+    --motion-press-scale-chip: 1;
+    --motion-land-y: 0px;
+    --motion-land-scale: 1;
+    --motion-panel-y: 0px;
+    --motion-check-scale: 1;
+    --motion-first-run-y: 0px;
+    --motion-card-leave-y: 0px;
+    --motion-tour-scale: 1;
+    /* The highlight still shows: it holds 1 second, then fades at
+       --motion-reduced-fade (the animation-duration cap below). */
+    --motion-highlight-hold: 1000ms;
+    --tw-enter-translate-x: 0;
+    --tw-enter-translate-y: 0;
+    --tw-enter-scale: 1;
+    --tw-enter-rotate: 0deg;
+    --tw-exit-translate-x: 0;
+    --tw-exit-translate-y: 0;
+    --tw-exit-scale: 1;
+    --tw-exit-rotate: 0deg;
+    animation-duration: var(--motion-reduced-fade) !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+    /* Only fades and color tints may transition: a duration on its own would
+       give every element (whose initial transition-property is `all`) a
+       150ms slide wherever a script moves it, such as a menu's position. */
+    transition-property:
+      opacity, color, background-color, border-color, outline-color,
+      text-decoration-color, fill, stroke !important;
+    transition-duration: var(--motion-reduced-fade) !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* The New task sheet (DESIGN.md › Motion): from the bottom below md, from the
+   right from md, in over --motion-sheet-in and out over --motion-sheet-out by
+   the same edge. Reduced motion swaps the slide for a fade. */
+@keyframes new-task-in-y {
+  from {
+    transform: translateY(100%);
+  }
+}
+@keyframes new-task-out-y {
+  to {
+    transform: translateY(100%);
+  }
+}
+@keyframes new-task-in-x {
+  from {
+    transform: translateX(100%);
+  }
+}
+@keyframes new-task-out-x {
+  to {
+    transform: translateX(100%);
+  }
+}
+@keyframes new-task-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes new-task-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+/* A fade by default, which is all reduced motion gets; the slide is for
+   everyone else (written as "not reduce" so the one reduced-motion rule
+   below stays the only one). */
+[data-slot="new-task-sheet"][data-state="open"] {
+  animation: new-task-fade-in var(--motion-sheet-in) var(--ease-drawer) both;
+}
+[data-slot="new-task-sheet"][data-state="closed"] {
+  animation: new-task-fade-out var(--motion-sheet-out) var(--ease-drawer) both;
+}
+@media not all and (prefers-reduced-motion: reduce) {
+  [data-slot="new-task-sheet"][data-state="open"] {
+    animation-name: new-task-in-y;
+  }
+  [data-slot="new-task-sheet"][data-state="closed"] {
+    animation-name: new-task-out-y;
+  }
+}
+@media (min-width: 768px) {
+  @media not all and (prefers-reduced-motion: reduce) {
+    [data-slot="new-task-sheet"][data-state="open"] {
+      animation-name: new-task-in-x;
+    }
+    [data-slot="new-task-sheet"][data-state="closed"] {
+      animation-name: new-task-out-x;
+    }
+  }
+}
+
+/* The undo toast's countdown bar: scaleX 1 → 0 from the left over the undo
+   window, linear. Under reduced motion the bar is stepped by script instead
+   (src/components/ui/toast.tsx), since the rule above caps animation
+   durations. */
+@keyframes toast-countdown {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
+.toast-countdown {
+  animation: toast-countdown var(--motion-undo-window) linear forwards;
+}
+
+/* Board cards (DESIGN.md › Motion). A card someone else moved, or a new task,
+   gets data-highlight once: a navy-tint overlay, held, then faded out. It
+   multiplies over the card so the text stays readable while it shows. */
+@keyframes card-highlight {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+[data-highlight] {
+  position: relative;
+}
+
+[data-highlight]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-lg);
+  background: var(--color-navy-tint);
+  mix-blend-mode: multiply;
+  pointer-events: none;
+  animation: card-highlight var(--motion-highlight) var(--ease-out)
+    var(--motion-highlight-hold) both;
+}
+
+/* A card the viewer just moved fades into its new column. */
+@keyframes card-land {
+  from {
+    opacity: 0;
+    transform: translateY(var(--motion-land-y)) scale(var(--motion-land-scale));
+  }
+}
+
+[data-landed] {
+  animation: card-land var(--motion-enter) var(--ease-out) both;
+}
+
+/* The card under the pointer (the drag overlay): tilts and lifts, its deep
+   shadow pre-painted on a pseudo-element whose opacity changes, never an
+   animated shadow. */
+@keyframes card-lift {
+  from {
+    transform: none;
+  }
+}
+
+@keyframes card-lift-shadow {
+  from {
+    opacity: 0;
+  }
+}
+
+.card-dragging {
+  position: relative;
+  transform: rotate(var(--motion-lift-rotate)) scale(var(--motion-lift-scale));
+  animation: card-lift var(--motion-lift) var(--ease-out) both;
+}
+
+.card-dragging::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lift);
+  animation: card-lift-shadow var(--motion-lift) var(--ease-out) both;
 }

@@ -3,12 +3,19 @@ import "@testing-library/jest-dom/vitest"
 
 import { cleanup, render, screen } from "@testing-library/react"
 import axe from "axe-core"
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 // vi.mock factories run before this file's imports, so what they share with
 // the tests is created in vi.hoisted.
-const { getWhatsMine, WhatsMineTasks } = vi.hoisted(() => ({
+const {
+  getWhatsMine,
+  WhatsMineTasks,
+  getMyOnboarding,
+  recordOnboardingAction,
+} = vi.hoisted(() => ({
   getWhatsMine: vi.fn(),
+  getMyOnboarding: vi.fn(),
+  recordOnboardingAction: vi.fn().mockResolvedValue({ ok: true }),
   WhatsMineTasks: vi.fn(
     ({
       whatsMine,
@@ -29,8 +36,28 @@ const { getWhatsMine, WhatsMineTasks } = vi.hoisted(() => ({
 }))
 
 vi.mock("@/features/tasks", () => ({ getWhatsMine, WhatsMineTasks }))
+// first-run-card.test.tsx covers the card; here it only has to be rendered
+// with the page's props.
+vi.mock("@/features/members", () => ({
+  getMyOnboarding,
+  recordOnboardingAction,
+  FirstRunCard: ({
+    shown,
+    record,
+  }: {
+    shown: boolean
+    record: (step: "first_run_shown") => void
+  }) => {
+    if (!shown) record("first_run_shown")
+    return <h2>Welcome to the portal.</h2>
+  },
+}))
 
 import { WhatsMineView } from "./whats-mine-view"
+
+beforeEach(() => {
+  getMyOnboarding.mockResolvedValue(null)
+})
 
 afterEach(() => {
   cleanup()
@@ -110,5 +137,44 @@ describe("WhatsMineView", () => {
     getWhatsMine.mockResolvedValue({ waiting: [{}], tasks: [{}] })
     const listed = await renderPage()
     expect(await axeViolations(listed.container)).toEqual([])
+  })
+
+  describe("the staff first-run card (Story 8.9)", () => {
+    const STAFF = {
+      tourAndChecklist: false,
+      firstRunShown: false,
+      firstRunClosed: false,
+    }
+
+    it("shows above the lists for a member who gets it, recording the showing", async () => {
+      getWhatsMine.mockResolvedValue({ waiting: [], tasks: [] })
+      getMyOnboarding.mockResolvedValue(STAFF)
+      await renderPage()
+
+      expect(
+        screen.getByRole("heading", { name: "Welcome to the portal." })
+      ).toBeInTheDocument()
+      expect(recordOnboardingAction).toHaveBeenCalledWith("first_run_shown")
+    })
+
+    it.each([
+      ["closed", { ...STAFF, firstRunClosed: true }],
+      ["the tour and checklist's member", { ...STAFF, tourAndChecklist: true }],
+      ["a failed read", null],
+    ])("is absent for %s", async (_, onboarding) => {
+      getWhatsMine.mockResolvedValue({ waiting: [], tasks: [] })
+      getMyOnboarding.mockResolvedValue(onboarding)
+      await renderPage()
+
+      expect(screen.queryByText("Welcome to the portal.")).toBeNull()
+    })
+
+    it("has no axe violations", async () => {
+      getWhatsMine.mockResolvedValue({ waiting: [], tasks: [] })
+      getMyOnboarding.mockResolvedValue({ ...STAFF, firstRunShown: true })
+      const view = await renderPage()
+
+      expect(await axeViolations(view.container)).toEqual([])
+    })
   })
 })

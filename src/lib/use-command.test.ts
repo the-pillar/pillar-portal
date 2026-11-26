@@ -14,7 +14,9 @@ const { refresh, toastError } = vi.hoisted(() => ({
 }))
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }))
-vi.mock("sonner", () => ({ toast: { error: toastError, success: vi.fn() } }))
+vi.mock("@/components/ui/toast", () => ({
+  toast: { error: toastError, success: vi.fn() },
+}))
 
 // resetAllMocks drops the mockImplementations some tests give toastError and
 // refresh; restoreAllMocks undoes the navigator.onLine and console spies.

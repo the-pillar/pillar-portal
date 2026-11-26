@@ -1,9 +1,10 @@
 import type { Metadata } from "next"
 import { redirect } from "next/navigation"
 
+import { recordCopiedTaskAction } from "@/features/members"
 import {
   getTaskEdit,
-  getTaskFormOptions,
+  getTaskFormOptionsWithLoad,
   TaskForm,
   taskEditKey,
   TaskNotFound,
@@ -12,7 +13,7 @@ import {
 import { requireAdmin } from "../../../../require-admin"
 
 export const metadata: Metadata = {
-  title: "Edit task · The Pillar Portal",
+  title: "Edit task",
 }
 
 // Edit task (spec-3-7): the task form in edit mode. The admin check comes
@@ -30,7 +31,7 @@ export default async function EditTaskPage({
   const { id } = await params
   const [task, options] = await Promise.all([
     getTaskEdit(id),
-    getTaskFormOptions(),
+    getTaskFormOptionsWithLoad(),
   ])
 
   if (!task) return <TaskNotFound />
@@ -40,8 +41,13 @@ export default async function EditTaskPage({
   return (
     <>
       <h1 className="font-heading text-display text-navy">Edit task</h1>
-      <div className="mt-3 max-w-2xl">
-        <TaskForm key={taskEditKey(task)} options={options} task={task} />
+      <div className="mt-3 max-w-2xl rounded-lg bg-card p-4 shadow-card">
+        <TaskForm
+          key={taskEditKey(task)}
+          options={options}
+          task={task}
+          onCopied={recordCopiedTaskAction}
+        />
       </div>
     </>
   )

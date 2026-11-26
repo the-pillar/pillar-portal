@@ -2,6 +2,7 @@
 import "@testing-library/jest-dom/vitest"
 
 import { cleanup, render, screen } from "@testing-library/react"
+import axe from "axe-core"
 import { useEffect } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -9,16 +10,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 // the tests is created in vi.hoisted.
 const {
   getTaskEdit,
-  getTaskFormOptions,
+  getTaskFormOptionsWithLoad,
   TaskForm,
   formMounted,
   taskEditKey,
   TaskNotFound,
   requireAdmin,
   redirect,
+  recordCopiedTaskAction,
 } = vi.hoisted(() => ({
   getTaskEdit: vi.fn(),
-  getTaskFormOptions: vi.fn(),
+  getTaskFormOptionsWithLoad: vi.fn(),
   // Counts its mounts (set up in beforeEach, once React is imported), so a
   // test sees whether a new key remounted it.
   TaskForm: vi.fn<(props: Record<string, unknown>) => React.ReactNode>(),
@@ -30,6 +32,7 @@ const {
   // (task-not-found.test.tsx).
   TaskNotFound: vi.fn(() => <h1>Task not found</h1>),
   requireAdmin: vi.fn(),
+  recordCopiedTaskAction: vi.fn(),
   // Like Next's: it throws, so nothing after it renders.
   redirect: vi.fn((href: string) => {
     throw new Error(`NEXT_REDIRECT ${href}`)
@@ -38,12 +41,13 @@ const {
 
 vi.mock("@/features/tasks", () => ({
   getTaskEdit,
-  getTaskFormOptions,
+  getTaskFormOptionsWithLoad,
   TaskForm,
   taskEditKey,
   TaskNotFound,
 }))
 vi.mock("next/navigation", () => ({ redirect }))
+vi.mock("@/features/members", () => ({ recordCopiedTaskAction }))
 vi.mock("../../../../require-admin", () => ({ requireAdmin }))
 
 import EditTaskPage, { metadata } from "./page"
@@ -66,7 +70,7 @@ const TASK = {
   description: null,
   ownerName: "Layout",
   dueAtInput: "2026-10-31T23:30",
-  referenceUrl: null,
+  referenceUrls: [],
   slots: [
     {
       id: SLOT_A,
@@ -94,7 +98,7 @@ function renderPage(id = TASK_ID) {
 
 beforeEach(() => {
   requireAdmin.mockResolvedValue({ role: "editorial_admin" })
-  getTaskFormOptions.mockResolvedValue(OPTIONS)
+  getTaskFormOptionsWithLoad.mockResolvedValue(OPTIONS)
   taskEditKey.mockReturnValue("key-1")
   TaskForm.mockImplementation(function TaskFormMock() {
     useEffect(() => {
@@ -111,7 +115,7 @@ afterEach(() => {
 
 describe("EditTaskPage", () => {
   it("is titled Edit task", () => {
-    expect(metadata.title).toBe("Edit task · The Pillar Portal")
+    expect(metadata.title).toBe("Edit task")
   })
 
   it("runs the admin check first, then reads the task and the form options together", async () => {
@@ -121,15 +125,17 @@ describe("EditTaskPage", () => {
     )
 
     const rendering = renderPage()
-    await vi.waitFor(() => expect(getTaskFormOptions).toHaveBeenCalledOnce())
+    await vi.waitFor(() =>
+      expect(getTaskFormOptionsWithLoad).toHaveBeenCalledOnce()
+    )
 
     // Both reads started while the task is still loading.
     expect(getTaskEdit).toHaveBeenCalledExactlyOnceWith(TASK_ID)
     const checkedAt = requireAdmin.mock.invocationCallOrder[0]!
     expect(getTaskEdit.mock.invocationCallOrder[0]).toBeGreaterThan(checkedAt)
-    expect(getTaskFormOptions.mock.invocationCallOrder[0]).toBeGreaterThan(
-      checkedAt
-    )
+    expect(
+      getTaskFormOptionsWithLoad.mock.invocationCallOrder[0]
+    ).toBeGreaterThan(checkedAt)
 
     releaseTask(TASK)
     await expect(rendering).resolves.toBeTruthy()
@@ -141,7 +147,7 @@ describe("EditTaskPage", () => {
 
     await expect(renderPage()).rejects.toBe(redirectError)
     expect(getTaskEdit).not.toHaveBeenCalled()
-    expect(getTaskFormOptions).not.toHaveBeenCalled()
+    expect(getTaskFormOptionsWithLoad).not.toHaveBeenCalled()
   })
 
   it("renders the h1 Edit task and the form in edit mode, keyed on the task's version and each slot's id and member", async () => {
@@ -154,7 +160,11 @@ describe("EditTaskPage", () => {
     ).toBeInTheDocument()
     expect(screen.getByRole("form", { name: "Task form" })).toBeInTheDocument()
     expect(TaskForm).toHaveBeenCalledOnce()
-    expect(TaskForm.mock.calls[0][0]).toEqual({ options: OPTIONS, task: TASK })
+    expect(TaskForm.mock.calls[0][0]).toEqual({
+      options: OPTIONS,
+      task: TASK,
+      onCopied: recordCopiedTaskAction,
+    })
   })
 
   it("keys the form with taskEditKey, so a re-read keeps it while the key holds and remounts it once the key changes", async () => {
@@ -208,5 +218,17 @@ describe("EditTaskPage", () => {
     getTaskEdit.mockRejectedValue(failure)
 
     await expect(renderPage()).rejects.toBe(failure)
+  })
+
+  it("has no axe violations", async () => {
+    getTaskEdit.mockResolvedValue(TASK)
+
+    const { container } = render(await renderPage())
+
+    // color-contrast can't be computed in jsdom (it is always "incomplete").
+    const results = await axe.run(container, {
+      rules: { "color-contrast": { enabled: false } },
+    })
+    expect(results.violations).toEqual([])
   })
 })

@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest"
 import {
   boardDoneCutoff,
   boardEmptyMessage,
+  boardFilterChips,
+  matchesFilter,
   ownerFilterParam,
   parseOwnerFilterParam,
   type OwnerFilter,
@@ -19,6 +21,7 @@ const OWNERS: TaskOwnerOption[] = [
 describe("ownerFilterParam", () => {
   it.each<[OwnerFilter, string]>([
     [{ kind: "all" }, "all"],
+    [{ kind: "mine" }, "mine"],
     [{ kind: "articles" }, "articles"],
     [{ kind: "section", id: "sports" }, "section:sports"],
     [{ kind: "desk", id: "photo" }, "desk:photo"],
@@ -58,7 +61,7 @@ describe("boardEmptyMessage", () => {
 
   it("has its own copy for all articles", () => {
     expect(boardEmptyMessage({ kind: "articles" }, OWNERS)).toBe(
-      "No tasks in any section right now."
+      "No tasks in any desk right now."
     )
   })
 
@@ -90,5 +93,68 @@ describe("boardDoneCutoff", () => {
     expect(
       new Date(NOW).getTime() - new Date(boardDoneCutoff(NOW)).getTime()
     ).toBe(30 * 24 * 60 * 60 * 1000)
+  })
+})
+
+const CARD = (
+  ownerKind: "section" | "desk",
+  ownerId: string,
+  yours = false
+) => ({ ownerKind, ownerId, yours })
+
+describe("matchesFilter", () => {
+  const news = CARD("section", "news", true)
+  const layout = CARD("desk", "layout")
+
+  it.each<[string, OwnerFilter, boolean, boolean]>([
+    ["all", { kind: "all" }, true, true],
+    ["mine", { kind: "mine" }, true, false],
+    ["articles", { kind: "articles" }, true, false],
+    ["its section", { kind: "section", id: "news" }, true, false],
+    ["another section", { kind: "section", id: "sports" }, false, false],
+    ["its desk", { kind: "desk", id: "layout" }, false, true],
+    ["a desk named like a section", { kind: "desk", id: "news" }, false, false],
+  ])("%s", (_label, filter, forNews, forLayout) => {
+    expect(matchesFilter(news, filter)).toBe(forNews)
+    expect(matchesFilter(layout, filter)).toBe(forLayout)
+  })
+})
+
+describe("boardFilterChips", () => {
+  const cards = [
+    CARD("section", "news", true),
+    CARD("desk", "layout"),
+    CARD("desk", "layout", true),
+  ]
+
+  it("lists All, Mine, then the owners that have cards, with window counts", () => {
+    const chips = boardFilterChips(cards, OWNERS, { kind: "all" }, false)
+    expect(chips.map((c) => [c.label, c.count])).toEqual([
+      ["All", 3],
+      ["Mine", 2],
+      ["News", 1],
+      ["Layout", 2],
+    ])
+  })
+
+  it("shows All articles only for its home scope or the URL's choice, after Mine", () => {
+    expect(
+      boardFilterChips(cards, OWNERS, { kind: "all" }, true).map((c) => c.label)
+    ).toEqual(["All", "Mine", "All articles", "News", "Layout"])
+    expect(
+      boardFilterChips(cards, OWNERS, { kind: "articles" }, false).map(
+        (c) => c.label
+      )
+    ).toContain("All articles")
+  })
+
+  it("keeps the URL's owner even with no cards", () => {
+    const chips = boardFilterChips(
+      cards,
+      OWNERS,
+      { kind: "desk", id: "photo" },
+      false
+    )
+    expect(chips.find((c) => c.label === "Photo")?.count).toBe(0)
   })
 })

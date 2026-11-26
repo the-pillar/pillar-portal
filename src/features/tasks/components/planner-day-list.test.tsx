@@ -6,7 +6,7 @@ import userEvent from "@testing-library/user-event"
 import axe from "axe-core"
 import { afterEach, describe, expect, it } from "vitest"
 
-import type { TaskCardData } from "../queries/shared"
+import { plannerCard } from "./board-fixtures"
 import { PlannerDayList } from "./planner-day-list"
 
 afterEach(cleanup)
@@ -19,21 +19,8 @@ async function axeViolations(node: Element) {
   return results.violations
 }
 
-let nextId = 0
-function task(title: string, dueAt: string): TaskCardData {
-  nextId += 1
-  return {
-    id: `00000000-0000-4000-8000-${String(nextId).padStart(12, "0")}`,
-    title,
-    ownerName: "Layout",
-    dueAt,
-    column: "doing",
-    overdue: false,
-    sentBack: false,
-    hasAwaitingResponse: false,
-    hasNeedsReassignment: false,
-    assignees: [],
-  }
+function task(title: string, dueAt: string) {
+  return plannerCard({ title, dueAt, column: "doing" })
 }
 
 // Sat, Oct 3 and Tue, Oct 20 2026, in Manila.
@@ -43,65 +30,74 @@ const TASKS = [
   task("Cover art", "2026-10-20T09:00:00Z"),
 ]
 
-const triggers = () =>
-  screen
-    .getAllByRole("button")
-    .filter((b) => !b.getAttribute("aria-label")?.startsWith("More actions"))
+const triggers = () => screen.getAllByRole("button")
 const names = () =>
   triggers().map((trigger) => trigger.getAttribute("aria-label"))
 
 describe("PlannerDayList", () => {
-  it("lists the days with deadlines plus today, in date order, with only today expanded", () => {
-    render(<PlannerDayList month="2026-10" today="2026-10-08" tasks={TASKS} />)
-
-    expect(names()).toEqual([
-      "Sat, Oct 3, 1 deadline",
-      "Thu, Oct 8 · Today, No deadlines",
-      "Tue, Oct 20, 2 deadlines",
-    ])
-    expect(
-      triggers().map((trigger) => trigger.getAttribute("aria-expanded"))
-    ).toEqual(["false", "true", "false"])
-  })
-
-  it("names each 44px trigger by its day and count", () => {
-    render(<PlannerDayList month="2026-10" today="2026-10-08" tasks={TASKS} />)
-
-    const today = screen.getByRole("button", {
-      name: "Thu, Oct 8 · Today, No deadlines",
-    })
-    expect(today).toHaveClass("min-h-11")
-    // The name repeats what the trigger shows, in the same order.
-    expect(
-      [...today.querySelectorAll("span span")].map((span) => span.textContent)
-    ).toEqual(["Thu, Oct 8 · Today", "No deadlines"])
-  })
-
-  it("keeps today's row where its deadlines put it when it has some", () => {
+  it("makes accordion items of the days with deadlines, with only today open", () => {
     render(<PlannerDayList month="2026-10" today="2026-10-20" tasks={TASKS} />)
 
     expect(names()).toEqual([
       "Sat, Oct 3, 1 deadline",
       "Tue, Oct 20 · Today, 2 deadlines",
     ])
+    expect(
+      triggers().map((trigger) => trigger.getAttribute("aria-expanded"))
+    ).toEqual(["false", "true"])
+  })
+
+  it("lists every other day of the month as one plain line, in date order", () => {
+    const { container } = render(
+      <PlannerDayList month="2026-10" today="2026-10-08" tasks={TASKS} />
+    )
+
+    const lines = [...container.querySelectorAll("p")].map(
+      (line) => line.textContent
+    )
+    expect(lines).toHaveLength(29)
+    expect(lines[0]).toBe("Thu, Oct 1 · No deadlines")
+    expect(lines[1]).toBe("Fri, Oct 2 · No deadlines")
+    expect(lines).toContain("Thu, Oct 8 · Today · No deadlines")
+    expect(lines.at(-1)).toBe("Sat, Oct 31 · No deadlines")
+    // Today has nothing, so nothing starts open.
+    for (const trigger of triggers()) {
+      expect(trigger).toHaveAttribute("aria-expanded", "false")
+    }
+  })
+
+  it("names each 44px trigger by its day and count, with a serif header and a count pill", () => {
+    render(<PlannerDayList month="2026-10" today="2026-10-20" tasks={TASKS} />)
+
+    const today = screen.getByRole("button", {
+      name: "Tue, Oct 20 · Today, 2 deadlines",
+    })
+    expect(today).toHaveClass("min-h-11")
+    const [day, pill] = [...today.querySelectorAll("span span")]
+    expect(day).toHaveTextContent("Tue, Oct 20 · Today")
+    expect(day).toHaveClass("font-heading", "text-heading-sm")
+    expect(pill).toHaveTextContent("2")
+    expect(pill).toHaveClass("rounded-full")
+  })
+
+  it("lists a day's tasks as 44px chip rows with owner prefixes, each linking to Task detail", () => {
+    render(<PlannerDayList month="2026-10" today="2026-10-20" tasks={TASKS} />)
+
     const region = screen.getByRole("region", {
       name: "Tue, Oct 20 · Today, 2 deadlines",
     })
-    // Each day is an h3 (Radix's accordion header); its cards are h4s.
-    expect(
-      screen
-        .getAllByRole("heading", { level: 3 })
-        .map((heading) => within(heading).getByRole("button").textContent)
-    ).toHaveLength(2)
-    expect(
-      within(region)
-        .getAllByRole("heading", { level: 4 })
-        .map((heading) => heading.textContent)
-    ).toEqual(["Spread proof", "Cover art"])
-    expect(within(region).queryByRole("heading", { level: 3 })).toBeNull()
+    const links = within(region).getAllByRole("link")
+    expect(links.map((link) => link.getAttribute("aria-label"))).toEqual([
+      "Layout: Spread proof, Doing, due Tue, Oct 20, 9:00 AM",
+      "Layout: Cover art, Doing, due Tue, Oct 20, 5:00 PM",
+    ])
+    expect(links[1]).toHaveAttribute("href", `/dashboard/tasks/${TASKS[2].id}`)
+    for (const link of links) expect(link).toHaveClass("min-h-11", "w-full")
+    expect(within(region).getAllByText("Layout ·")).toHaveLength(2)
+    expect(region.firstElementChild).toHaveClass("h-auto")
   })
 
-  it("expands none, and adds no today row, in another month", () => {
+  it("expands none in another month", () => {
     render(<PlannerDayList month="2026-10" today="2026-11-05" tasks={TASKS} />)
 
     expect(names()).toEqual([
@@ -113,40 +109,34 @@ describe("PlannerDayList", () => {
     }
   })
 
-  it("opens a day's panel of task cards, each linking to Task detail", async () => {
+  it("lets several days stay open", async () => {
     const user = userEvent.setup()
-    render(<PlannerDayList month="2026-10" today="2026-10-08" tasks={TASKS} />)
+    render(<PlannerDayList month="2026-10" today="2026-10-20" tasks={TASKS} />)
 
     await user.click(
-      screen.getByRole("button", { name: "Tue, Oct 20, 2 deadlines" })
+      screen.getByRole("button", { name: "Sat, Oct 3, 1 deadline" })
     )
 
-    const region = screen.getByRole("region", {
-      name: "Tue, Oct 20, 2 deadlines",
-    })
     expect(
-      within(region).getByRole("link", { name: "Cover art" })
-    ).toHaveAttribute("href", `/dashboard/tasks/${TASKS[2].id}`)
-    // The panel's wrapper undoes the generated defaults a task card can't
-    // take: a fixed measured height (which clips a card that rewraps after
-    // opening), underlined links and spaced paragraphs.
-    const wrapper = region.firstElementChild
-    expect(wrapper).toHaveClass(
-      "h-auto",
-      "[&_a]:no-underline",
-      "[&_p:not(:last-child)]:mb-0"
+      screen.getByRole("button", { name: "Sat, Oct 3, 1 deadline" })
+    ).toHaveAttribute("aria-expanded", "true")
+    expect(
+      screen.getByRole("button", { name: "Tue, Oct 20 · Today, 2 deadlines" })
+    ).toHaveAttribute("aria-expanded", "true")
+  })
+
+  it("opens today when the month changes to the one that holds it", () => {
+    const { rerender } = render(
+      <PlannerDayList month="2026-11" today="2026-10-20" tasks={[]} />
     )
-    // One at a time: `not.toHaveClass(a, b)` passes when any one is missing.
-    for (const generated of [
-      "h-(--radix-accordion-content-height)",
-      "[&_a]:underline",
-      "[&_p:not(:last-child)]:mb-4",
-    ]) {
-      expect(wrapper).not.toHaveClass(generated)
-    }
-    // Both today and Oct 20 stay open: the accordion takes several.
+    expect(screen.queryAllByRole("button")).toEqual([])
+
+    rerender(
+      <PlannerDayList month="2026-10" today="2026-10-20" tasks={TASKS} />
+    )
+
     expect(
-      screen.getByRole("button", { name: "Thu, Oct 8 · Today, No deadlines" })
+      screen.getByRole("button", { name: "Tue, Oct 20 · Today, 2 deadlines" })
     ).toHaveAttribute("aria-expanded", "true")
   })
 

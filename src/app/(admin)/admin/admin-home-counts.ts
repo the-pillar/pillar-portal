@@ -6,7 +6,10 @@ import {
 
 import type { AdminHomeCard, AdminHomeRow } from "./admin-home"
 
-type AdminHomeCardSource = Pick<AdminHomeCard, "id" | "label" | "href">
+type AdminHomeCardSource = Pick<
+  AdminHomeCard,
+  "id" | "label" | "href" | "family"
+>
 
 /**
  * One Admin home card's source, read for the viewer on each request. A link
@@ -47,12 +50,14 @@ export const ADMIN_HOME_COUNTS: readonly AdminHomeCount[] = [
     id: "pending-approvals",
     label: "Awaiting approval",
     href: "/admin/members",
+    family: "progress",
     count: countPendingApprovalsForViewer,
   },
   {
     id: "handed-back",
     label: "Needs reassignment",
     href: "/admin/tasks",
+    family: "attention",
     linkLabel: "Reassign in Tasks",
     rows: handedBackRows,
   },
@@ -60,6 +65,7 @@ export const ADMIN_HOME_COUNTS: readonly AdminHomeCount[] = [
     id: "review-queue",
     label: "Waiting for your review",
     href: "/admin/tasks",
+    family: "progress",
     count: countReviewQueueForViewer,
   },
 ]

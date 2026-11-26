@@ -2,6 +2,8 @@ import type { Metadata } from "next"
 import { headers } from "next/headers"
 import { redirect } from "next/navigation"
 
+import Image from "next/image"
+
 import { AppHeader } from "@/components/app-header"
 import {
   ACCOUNT_STATE_COPY,
@@ -33,7 +35,7 @@ export async function generateMetadata(): Promise<Metadata> {
     member && member.state !== "active"
       ? ACCOUNT_STATE_COPY[member.state].title
       : "Sign in"
-  return { title: `${title} · The Pillar Portal` }
+  return { title }
 }
 
 // Sign-in and account states (UX-DR52, AD-7).
@@ -79,7 +81,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
     const inApp = detectInAppBrowser((await headers()).get("user-agent"))
     content = (
       <>
-        <h1 className="font-heading text-display text-navy">Sign in</h1>
+        <h1 className="font-heading text-heading text-navy">Sign in</h1>
         {inApp ? (
           <InAppBrowserNotice
             browser={inApp}
@@ -112,11 +114,27 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
   return (
     <SharedComputerProvider>
       <AppHeader />
-      <main className="mx-auto w-full max-w-160 px-page-margin-mobile py-12 md:px-page-margin-desktop">
-        <div className="rounded-lg border border-card-edge bg-card p-card-padding shadow-card">
+      <main className="mx-auto flex min-h-[calc(100svh-var(--app-header-height))] w-full max-w-md flex-col justify-center gap-4 px-page-margin-mobile py-8 pb-16 md:px-page-margin-desktop">
+        <div className="flex flex-col items-center gap-2 text-center">
+          <Image
+            src="/thepillar-logo.png"
+            alt=""
+            width={56}
+            height={56}
+            priority
+            className="rounded-full ring-2 ring-navy"
+          />
+          <p className="font-heading text-2xl font-bold text-navy">
+            The Pillar Portal
+          </p>
+          <p className="text-sm text-muted-foreground">
+            Critical. Fearless. Unapologetic.
+          </p>
+        </div>
+        <div className="rounded-lg bg-card p-card-padding shadow-card">
           {content}
           {personasEnabled && (
-            <div className="mt-8 border-t border-card-edge pt-6">
+            <div className="mt-8 border-t border-border pt-6">
               <p className="mb-4 text-muted-foreground">
                 Prototype: choose who to sign in as.
               </p>

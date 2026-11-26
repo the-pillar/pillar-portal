@@ -10,10 +10,24 @@ import { createCn } from "cn/config"
 export const cn = createCn({
   extend: {
     theme: {
-      text: ["wordmark", "display", "heading", "heading-sm", "status-badge"],
-      shadow: ["card"],
+      text: [
+        "wordmark-fallback",
+        "display",
+        "heading",
+        "heading-sm",
+        "column-head",
+        "card-title",
+        "owner-label",
+        "status-badge",
+      ],
+      shadow: ["card", "lift"],
       spacing: [
         "card-padding",
+        "card-padding-y",
+        "card-padding-x",
+        "card-gap",
+        "list-padding",
+        "row-padding",
         "column-gap",
         "page-margin-mobile",
         "page-margin-desktop",

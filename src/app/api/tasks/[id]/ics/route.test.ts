@@ -53,7 +53,7 @@ const ROW = {
   title: "Lay out the spread",
   description: "a, b; c\nnext",
   due_at: "2026-10-10T09:00:00+00:00",
-  reference_url: null,
+  reference_urls: [],
 }
 
 const call = (id = ID, query = "") =>

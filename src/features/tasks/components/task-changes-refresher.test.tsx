@@ -45,8 +45,10 @@ const { refresh, createClient, state } = vi.hoisted(() => {
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }))
 vi.mock("@/lib/supabase/client", () => ({ createClient }))
 
-async function mount() {
-  const view = render(<TaskChangesRefresher />)
+async function mount(deliverableLinks = false) {
+  const view = render(
+    <TaskChangesRefresher deliverableLinks={deliverableLinks} />
+  )
   // Let the awaited setAuth() settle so the channel is joined.
   await act(async () => {})
   return view
@@ -121,6 +123,19 @@ describe("TaskChangesRefresher", () => {
       { event: "*", schema: "public", table: "tasks" },
       { event: "*", schema: "public", table: "task_assignments" },
     ])
+  })
+
+  it("also listens to task_deliverable_links when asked to, and refreshes on it", async () => {
+    await mount(true)
+
+    expect(state.listeners.map((listener) => listener.filter)).toEqual([
+      { event: "*", schema: "public", table: "tasks" },
+      { event: "*", schema: "public", table: "task_assignments" },
+      { event: "*", schema: "public", table: "task_deliverable_links" },
+    ])
+    state.listeners[2].callback()
+    vi.advanceTimersByTime(300)
+    expect(refresh).toHaveBeenCalledTimes(1)
   })
 
   it("refreshes once, 300ms after the last of a burst of events", async () => {

@@ -7,6 +7,8 @@ import {
 } from "@/features/members"
 import { createClient } from "@/lib/supabase/server"
 
+import { deliverablesByRole, type MessengerDeliverables } from "../messenger"
+import { getDeliverableLinks } from "./deliverable-links"
 import { FORMER_MEMBER, nameMap } from "./shared"
 
 type ServerClient = Awaited<ReturnType<typeof createClient>>
@@ -24,6 +26,10 @@ export type HandedBackSlot = {
   taskTitle: string
   /** UTC ISO timestamp; shown in PHT. */
   dueAt: string
+  /** The saved reference links, for the reassign Messenger text. */
+  referenceUrls: string[]
+  /** The task's every deliverable link by role, for the reassign Messenger text. */
+  deliverables: MessengerDeliverables[]
   role: ProductionRole
   /** Resolved here for the same client-bundle reason as TaskFormOptions's (./task-form.ts). */
   roleLabel: string
@@ -57,7 +63,7 @@ async function reassignableHandedBack(supabase: ServerClient, where: string) {
   const tasksResult = await supabase
     .from("tasks")
     .select(
-      "id, title, due_at, task_assignments!inner(id, role, member_id, updated_at, assignment_reasons(reason))"
+      "id, title, due_at, reference_urls, task_assignments!inner(id, role, member_id, updated_at, assignment_reasons(reason))"
     )
     .eq("task_assignments.state", "needs_reassignment")
     .neq("column", "done")
@@ -91,6 +97,45 @@ async function reassignableHandedBack(supabase: ServerClient, where: string) {
 }
 
 /**
+ * Each task's deliverable links by role. The tasks' own read embeds only the
+ * handed-back slots, so the slots of the tasks that have any link are read
+ * afterwards (slot order: created_at, then id); a read that finds no link
+ * stops there. Throws on any query error.
+ */
+async function deliverablesOfTasks(
+  supabase: ServerClient,
+  where: string,
+  taskIds: string[]
+): Promise<Map<string, MessengerDeliverables[]>> {
+  const links = await getDeliverableLinks(taskIds)
+  const byTask = new Map<string, MessengerDeliverables[]>()
+  if (links.length === 0) return byTask
+
+  const slotsResult = await supabase
+    .from("task_assignments")
+    .select("id, task_id, role")
+    .in("task_id", [...new Set(links.map((link) => link.taskId))])
+    .order("created_at")
+    .order("id")
+  if (slotsResult.error) {
+    throw new Error(`${where}: reading task_assignments failed`, {
+      cause: slotsResult.error,
+    })
+  }
+  const slots = slotsResult.data ?? []
+  for (const taskId of new Set(links.map((link) => link.taskId))) {
+    byTask.set(
+      taskId,
+      deliverablesByRole(
+        slots.filter((slot) => slot.task_id === taskId),
+        links.filter((link) => link.taskId === taskId)
+      )
+    )
+  }
+  return byTask
+}
+
+/**
  * The read's rows, one per slot in its order, with the members' names from
  * member_directory (never `members`). The whole directory is read rather
  * than an `.in()` of slot members, as getReviewQueue does. With no task kept
@@ -113,6 +158,11 @@ async function handedBackSlots(
   }
 
   const nameById = nameMap(membersResult.data ?? [])
+  const deliverablesByTask = await deliverablesOfTasks(
+    supabase,
+    where,
+    tasks.map((task) => task.id)
+  )
 
   return tasks.flatMap((task) =>
     task.task_assignments.map((slot) => ({
@@ -121,6 +171,8 @@ async function handedBackSlots(
       taskId: task.id,
       taskTitle: task.title,
       dueAt: task.due_at,
+      referenceUrls: task.reference_urls,
+      deliverables: deliverablesByTask.get(task.id) ?? [],
       role: slot.role,
       roleLabel: PRODUCTION_ROLE_LABELS[slot.role],
       memberId: slot.member_id,

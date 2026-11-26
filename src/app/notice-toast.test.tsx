@@ -8,13 +8,13 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 // vi.mock factories run before this file's imports, so what they share with
 // the tests is created in vi.hoisted.
 const { toast, replace, usePathname, useSearchParams } = vi.hoisted(() => ({
-  toast: Object.assign(vi.fn(), { success: vi.fn() }),
+  toast: Object.assign(vi.fn(), { success: vi.fn(), notice: vi.fn() }),
   replace: vi.fn(),
   usePathname: vi.fn(() => "/dashboard"),
   useSearchParams: vi.fn(),
 }))
 
-vi.mock("sonner", () => ({ toast }))
+vi.mock("@/components/ui/toast", () => ({ toast }))
 vi.mock("next/navigation", () => ({
   usePathname,
   useRouter: () => ({ replace }),
@@ -42,7 +42,7 @@ describe("NoticeToast", () => {
     render(<NoticeToast />)
 
     await waitFor(() =>
-      expect(toast).toHaveBeenCalledExactlyOnceWith(
+      expect(toast.notice).toHaveBeenCalledExactlyOnceWith(
         "That area is for the Editorial Board.",
         { id: "notice-admin-restricted" }
       )
@@ -83,7 +83,7 @@ describe("NoticeToast", () => {
         id: "notice-task-deleted",
       })
     )
-    expect(toast).not.toHaveBeenCalled()
+    expect(toast.notice).not.toHaveBeenCalled()
     expect(screen.getByRole("heading", { name: "Tasks" })).toHaveFocus()
     expect(replace).toHaveBeenCalledExactlyOnceWith("/admin/tasks")
   })
@@ -110,7 +110,7 @@ describe("NoticeToast", () => {
       await waitFor(() =>
         expect(replace).toHaveBeenCalledExactlyOnceWith(pathname)
       )
-      expect(toast).not.toHaveBeenCalled()
+      expect(toast.notice).not.toHaveBeenCalled()
       expect(toast.success).not.toHaveBeenCalled()
       expect(screen.getByRole("heading", { level: 1 })).not.toHaveFocus()
     }
@@ -138,7 +138,7 @@ describe("NoticeToast", () => {
     render(<NoticeToast />)
 
     await waitFor(() => expect(replace).toHaveBeenCalledOnce())
-    expect(toast).not.toHaveBeenCalled()
+    expect(toast.notice).not.toHaveBeenCalled()
     expect(toast.success).not.toHaveBeenCalled()
   })
 
@@ -169,7 +169,7 @@ describe("NoticeToast", () => {
 
     render(<NoticeToast />)
 
-    expect(toast).not.toHaveBeenCalled()
+    expect(toast.notice).not.toHaveBeenCalled()
     expect(replace).not.toHaveBeenCalled()
   })
 
@@ -179,7 +179,7 @@ describe("NoticeToast", () => {
     render(<NoticeToast />)
 
     await waitFor(() => expect(replace).toHaveBeenCalledOnce())
-    expect(toast).not.toHaveBeenCalled()
+    expect(toast.notice).not.toHaveBeenCalled()
   })
 
   it("renders nothing", () => {

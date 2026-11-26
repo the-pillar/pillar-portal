@@ -26,7 +26,7 @@ const {
   refresh,
   toastSuccess,
   toastError,
-  toastPlain,
+  toastNotice,
 } = vi.hoisted(() => ({
   createTaskAction: vi.fn(),
   updateTaskAction: vi.fn(),
@@ -34,17 +34,18 @@ const {
   refresh: vi.fn(),
   toastSuccess: vi.fn(),
   toastError: vi.fn(),
-  toastPlain: vi.fn(),
+  toastNotice: vi.fn(),
 }))
 
 vi.mock("../actions", () => ({ createTaskAction, updateTaskAction }))
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push, refresh }),
 }))
-vi.mock("sonner", () => ({
-  toast: Object.assign(toastPlain, {
+vi.mock("@/components/ui/toast", () => ({
+  toast: Object.assign(vi.fn(), {
     success: toastSuccess,
     error: toastError,
+    notice: toastNotice,
   }),
 }))
 // TaskForm imports PRODUCTION_ROLE_LABELS through @/features/members, whose
@@ -164,6 +165,20 @@ describe("TaskForm", () => {
     expect(screen.queryByText("Choose one owner")).not.toBeInTheDocument()
   })
 
+  it("names its slot group Role slots, and draws each slot row as a borderless tan panel", async () => {
+    const user = userEvent.setup()
+    renderForm()
+
+    expect(screen.getByText("Role slots")).toBeInTheDocument()
+    expect(screen.queryByText("Slots")).not.toBeInTheDocument()
+    await chooseOption(user, "Role", "Layout Artist")
+    const row = screen
+      .getByRole("combobox", { name: "Role" })
+      .closest("div.bg-muted")
+    expect(row).not.toBeNull()
+    expect(row!.className).not.toMatch(/\bborder\b/)
+  })
+
   it("clears the owner error a submit left once an owner is chosen", async () => {
     const user = userEvent.setup()
     renderForm()
@@ -263,16 +278,50 @@ describe("TaskForm", () => {
     expect(createTaskAction).not.toHaveBeenCalled()
   })
 
-  it("blocks submit with an inline error on a malformed reference link", async () => {
+  it("blocks submit with an inline error on a malformed reference link, and focuses it", async () => {
     const user = userEvent.setup()
     renderForm()
 
     await fillMinimalValidForm(user)
-    await user.type(screen.getByLabelText("Reference link"), "not-a-url")
+    await user.type(screen.getByLabelText("Reference link 1"), "not-a-url")
     await user.click(screen.getByRole("button", { name: "Create task" }))
 
-    expect(await screen.findByText("Enter a valid link")).toBeInTheDocument()
+    expect(
+      await screen.findByText(
+        "This doesn't look like a link. Copy the full address from your browser."
+      )
+    ).toBeInTheDocument()
+    await waitFor(() =>
+      expect(screen.getByLabelText("Reference link 1")).toHaveFocus()
+    )
     expect(createTaskAction).not.toHaveBeenCalled()
+  })
+
+  it("drops empty link rows on save and carries the cleaned links into Copy for Messenger", async () => {
+    createTaskAction.mockResolvedValue({ ok: true, data: { id: "task-1" } })
+    const user = userEvent.setup()
+    renderForm()
+
+    await fillMinimalValidForm(user)
+    await user.click(screen.getByRole("button", { name: "Add a link" }))
+    await user.click(screen.getByRole("button", { name: "Add a link" }))
+    await user.type(screen.getByLabelText("Reference link 1"), "canva.com/x")
+    await user.type(screen.getByLabelText("Reference link 3"), "youtu.be/abc")
+    await user.click(screen.getByRole("button", { name: "Create task" }))
+
+    await waitFor(() => expect(createTaskAction).toHaveBeenCalledOnce())
+    expect(createTaskAction.mock.calls[0][0].referenceUrls).toEqual([
+      "https://canva.com/x",
+      "https://youtu.be/abc",
+    ])
+    await waitFor(() => expect(toastSuccess).toHaveBeenCalled())
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    vi.stubGlobal("navigator", { clipboard: { writeText } })
+    await toastSuccess.mock.calls[0][1].action.onClick()
+    expect(writeText.mock.calls[0][0]).toContain(
+      "\n\nReference\n• Canva: https://canva.com/x\n• YouTube: https://youtu.be/abc"
+    )
+    vi.unstubAllGlobals()
   })
 
   it("submits the parsed data, toasts Task created, and resets while keeping the owner", async () => {
@@ -290,7 +339,7 @@ describe("TaskForm", () => {
         owningSectionId: "news",
         owningDeskId: null,
         dueAt: "2026-11-01T09:00",
-        referenceUrl: null,
+        referenceUrls: [],
         description: null,
         slots: [{ role: "layout_artist", memberId: MEMBER_1 }],
       })
@@ -329,7 +378,7 @@ describe("TaskForm", () => {
     vi.stubGlobal("navigator", {})
     await toastSuccess.mock.calls[0][1].action.onClick()
     vi.unstubAllGlobals()
-    expect(toastPlain).toHaveBeenCalledWith(
+    expect(toastNotice).toHaveBeenCalledWith(
       "Copy this and paste it in Messenger.",
       expect.objectContaining({
         description: expect.stringContaining("/dashboard/tasks/task-1"),
@@ -527,25 +576,29 @@ const TASK: TaskEdit = {
   description: "Two pages.",
   ownerName: "Layout",
   dueAtInput: "2026-10-31T23:30",
-  referenceUrl: "https://example.com/brief",
+  referenceUrls: ["https://example.com/brief"],
+  deliverables: [],
   slots: [
     {
       id: SLOT_A,
       role: "layout_artist",
       memberId: MEMBER_1,
       memberName: "Staff Layout Artist",
+      linkCount: 0,
     },
     {
       id: SLOT_B,
       role: "cartoonist",
       memberId: MEMBER_1,
       memberName: "Staff Layout Artist",
+      linkCount: 0,
     },
     {
       id: SLOT_C,
       role: "photojournalist",
       memberId: FORMER,
       memberName: "Former member",
+      linkCount: 0,
     },
   ],
   done: false,
@@ -578,8 +631,21 @@ const LOADED_SLOTS = [
 
 // As the edit page renders it: keyed with taskEditKey, so a re-read that
 // brings a newer task remounts the form.
-function EditPage({ task = TASK }: { task?: TaskEdit }) {
-  return <TaskForm key={taskEditKey(task)} options={OPTIONS} task={task} />
+function EditPage({
+  task = TASK,
+  onCopied,
+}: {
+  task?: TaskEdit
+  onCopied?: () => void
+}) {
+  return (
+    <TaskForm
+      key={taskEditKey(task)}
+      options={OPTIONS}
+      task={task}
+      onCopied={onCopied}
+    />
+  )
 }
 
 const memberBoxes = () => screen.getAllByRole("combobox", { name: "Member" })
@@ -601,7 +667,7 @@ describe("TaskForm in edit mode", () => {
     expect(screen.getByLabelText("Title")).toHaveValue("Lay out the spread")
     expect(screen.getByLabelText("Description")).toHaveValue("Two pages.")
     expect(screen.getByLabelText("Due date")).toHaveValue("2026-10-31T23:30")
-    expect(screen.getByLabelText("Reference link")).toHaveValue(
+    expect(screen.getByLabelText("Reference link 1")).toHaveValue(
       "https://example.com/brief"
     )
     expect(memberBoxes().map((box) => box.textContent)).toEqual([
@@ -689,7 +755,8 @@ describe("TaskForm in edit mode", () => {
       title: "Lay out the spread, v2",
       description: "Two pages.",
       dueAt: "2026-11-05T17:00",
-      referenceUrl: "https://example.com/brief",
+      referenceUrls: ["https://example.com/brief"],
+      loadedReferenceUrls: ["https://example.com/brief"],
       slots: LOADED_SLOTS,
     })
     expect(toastSuccess).toHaveBeenCalledExactlyOnceWith(
@@ -700,6 +767,27 @@ describe("TaskForm in edit mode", () => {
     expect(refresh).not.toHaveBeenCalled()
     // Nothing resends the save while the page leaves.
     expect(save()).toBeDisabled()
+  })
+
+  it("calls onCopied when the saved toast's Copy for Messenger worked", async () => {
+    updateTaskAction.mockResolvedValue({
+      ok: true,
+      data: { taskId: TASK_ID, newAssignee: true },
+    })
+    const onCopied = vi.fn()
+    const user = userEvent.setup()
+    render(<EditPage onCopied={onCopied} />)
+
+    await choose(user, memberBoxes()[1], "Head Layout Artist")
+    await user.click(save())
+    await waitFor(() => expect(push).toHaveBeenCalledOnce())
+
+    vi.stubGlobal("navigator", {
+      clipboard: { writeText: vi.fn().mockResolvedValue(undefined) },
+    })
+    await toastSuccess.mock.calls[0][1].action.onClick()
+
+    expect(onCopied).toHaveBeenCalledOnce()
   })
 
   it("sends a reassigned slot with its id and the member it loaded, a new one with neither, and offers Copy for Messenger when a slot got a new member", async () => {
@@ -740,7 +828,7 @@ describe("TaskForm in edit mode", () => {
     expect(toastSuccess).toHaveBeenCalledWith("Copied — paste it in Messenger.")
     // 23:30 on 2026-10-31 PHT, every slot's role, the task's own link.
     expect(writeText).toHaveBeenCalledWith(
-      `📌 Lay out the spread — Layout Artist / Cartoonist / Photojournalist / Writer · due Sat, Oct 31, 11:30 PM\nhttps://pillar.example/dashboard/tasks/${TASK_ID}`
+      `📌 Lay out the spread — Layout Artist / Cartoonist / Photojournalist / Writer · due Sat, Oct 31, 11:30 PM\nhttps://pillar.example/dashboard/tasks/${TASK_ID}\n\nReference\n• example.com: https://example.com/brief`
     )
   })
 
@@ -869,17 +957,73 @@ describe("TaskForm in edit mode", () => {
     expect(memberBoxes()[3]).toHaveTextContent("Staff Layout Artist")
   })
 
+  it("saves a loaded link left unchanged, even one a new link would be refused for, and never cleans it", async () => {
+    updateTaskAction.mockResolvedValue({
+      ok: true,
+      data: { taskId: TASK_ID, newAssignee: false },
+    })
+    const odd = "https://example.com/has a space"
+    const user = userEvent.setup()
+    render(<EditPage task={{ ...TASK, referenceUrls: [odd] }} />)
+
+    const row = screen.getByLabelText("Reference link 1")
+    await user.click(row)
+    await user.tab()
+    expect(row).toHaveValue(odd)
+    expect(row).not.toHaveAttribute("aria-invalid", "true")
+    await user.click(save())
+
+    await waitFor(() => expect(updateTaskAction).toHaveBeenCalledOnce())
+    expect(updateTaskAction.mock.calls[0][0]).toMatchObject({
+      referenceUrls: [odd],
+      loadedReferenceUrls: [odd],
+    })
+  })
+
+  it("shows the server's refusal of the list under the field, not as a toast, and clears it on the next save", async () => {
+    updateTaskAction.mockResolvedValueOnce({
+      ok: false,
+      code: "tasks.invalid_links",
+    })
+    const user = userEvent.setup()
+    render(<EditPage />)
+
+    await user.click(save())
+
+    const message = await screen.findByText(
+      "A link didn't save. Check the links and try again."
+    )
+    expect(toastError).not.toHaveBeenCalled()
+    expect(
+      screen.getByLabelText("Reference link 1").getAttribute("aria-describedby")
+    ).toContain(message.id)
+
+    updateTaskAction.mockResolvedValueOnce({
+      ok: true,
+      data: { taskId: TASK_ID, newAssignee: false },
+    })
+    await user.click(save())
+    await waitFor(() => expect(push).toHaveBeenCalled())
+    expect(
+      screen.queryByText("A link didn't save. Check the links and try again.")
+    ).toBeNull()
+  })
+
   it("validates the fields as create does", async () => {
     const user = userEvent.setup()
     render(<EditPage />)
 
     await user.clear(screen.getByLabelText("Title"))
-    await user.clear(screen.getByLabelText("Reference link"))
-    await user.type(screen.getByLabelText("Reference link"), "not-a-url")
+    await user.clear(screen.getByLabelText("Reference link 1"))
+    await user.type(screen.getByLabelText("Reference link 1"), "not-a-url")
     await user.click(save())
 
     expect(await screen.findByText("Add a title")).toBeInTheDocument()
-    expect(screen.getByText("Enter a valid link")).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        "This doesn't look like a link. Copy the full address from your browser."
+      )
+    ).toBeInTheDocument()
     expect(updateTaskAction).not.toHaveBeenCalled()
   })
 
@@ -914,6 +1058,129 @@ describe("TaskForm in edit mode", () => {
       LOADED_SLOTS[0],
       LOADED_SLOTS[2],
     ])
+  })
+
+  describe("deliverable links", () => {
+    const WITH_LINKS: TaskEdit = {
+      ...TASK,
+      slots: TASK.slots.map((slot) =>
+        slot.id === SLOT_B
+          ? { ...slot, linkCount: 2 }
+          : slot.id === SLOT_A
+            ? { ...slot, linkCount: 1 }
+            : slot
+      ),
+      deliverables: [
+        {
+          role: "layout_artist",
+          urls: ["https://www.canva.com/design/DAF1/edit"],
+        },
+        {
+          role: "cartoonist",
+          urls: ["https://example.org/1", "https://example.org/2"],
+        },
+      ],
+    }
+
+    it("shows a muted count under a slot's role only when it has links", () => {
+      render(<EditPage task={WITH_LINKS} />)
+
+      const roles = screen.getAllByRole("group", { name: "Role" })
+      expect(roles[0]).toHaveTextContent("1 deliverable link")
+      expect(roles[0]).not.toHaveTextContent("1 deliverable links")
+      expect(roles[1]).toHaveTextContent("2 deliverable links")
+      expect(roles[2]).not.toHaveTextContent("deliverable")
+    })
+
+    it("still offers Remove on a slot with links: the database refuses the save", () => {
+      render(<EditPage task={WITH_LINKS} />)
+
+      expect(
+        screen.getAllByRole("button", { name: /Remove slot/ })
+      ).toHaveLength(3)
+    })
+
+    it("puts the refused slot back where it was, with the message under it and focus on its member picker, keeping every other edit", async () => {
+      updateTaskAction.mockResolvedValue({
+        ok: false,
+        code: "tasks.slot_has_links",
+        params: { role: "cartoonist" },
+      })
+      const user = userEvent.setup()
+      render(<EditPage task={WITH_LINKS} />)
+
+      await user.clear(screen.getByLabelText("Title"))
+      await user.type(screen.getByLabelText("Title"), "Edited title")
+      await user.click(screen.getByRole("button", { name: "Remove slot 2" }))
+      expect(memberBoxes()).toHaveLength(2)
+      await user.click(save())
+
+      await waitFor(() => expect(memberBoxes()).toHaveLength(3))
+      const message =
+        "Cartoonist has deliverable links. Remove them on the task first, or reassign the slot."
+      expect(screen.getByText(message)).toBeInTheDocument()
+      expect(memberBoxes()[1]).toHaveFocus()
+      expect(memberBoxes()[1]).toHaveAccessibleDescription(message)
+      expect(
+        screen
+          .getAllByRole("group", { name: "Role" })
+          .map((group) => group.textContent)
+      ).toEqual([
+        "RoleLayout Artist1 deliverable link",
+        "RoleCartoonist2 deliverable links",
+        "RolePhotojournalist",
+      ])
+      expect(screen.getByLabelText("Title")).toHaveValue("Edited title")
+      // No toast, no reload: what was typed stays.
+      expect(toastError).not.toHaveBeenCalled()
+      expect(refresh).not.toHaveBeenCalled()
+      expect(push).not.toHaveBeenCalled()
+
+      // The next save sends the slot again, as loaded, and clears the message.
+      updateTaskAction.mockResolvedValue({
+        ok: true,
+        data: { taskId: TASK_ID, newAssignee: false },
+      })
+      await user.click(save())
+      await waitFor(() => expect(push).toHaveBeenCalledOnce())
+      expect(updateTaskAction.mock.calls[1][0].slots).toEqual(LOADED_SLOTS)
+    })
+
+    it("carries every deliverable link, loaded with the task, into the saved toast's Copy for Messenger", async () => {
+      updateTaskAction.mockResolvedValue({
+        ok: true,
+        data: { taskId: TASK_ID, newAssignee: true },
+      })
+      const user = userEvent.setup()
+      render(<EditPage task={WITH_LINKS} />)
+
+      await choose(user, memberBoxes()[1], "Head Layout Artist")
+      await user.click(save())
+      await waitFor(() => expect(push).toHaveBeenCalledOnce())
+
+      const writeText = vi.fn().mockResolvedValue(undefined)
+      vi.stubGlobal("navigator", { clipboard: { writeText } })
+      await toastSuccess.mock.calls[0][1].action.onClick()
+      expect(writeText.mock.calls[0][0]).toContain(
+        "\n\nReference\n• example.com: https://example.com/brief\n\nLayout Artist\n• Canva: https://www.canva.com/design/DAF1/edit\n\nCartoonist\n• example.org: https://example.org/1\n• example.org: https://example.org/2"
+      )
+      vi.unstubAllGlobals()
+    })
+
+    it("has no axe violations with link counts and the refusal showing", async () => {
+      updateTaskAction.mockResolvedValue({
+        ok: false,
+        code: "tasks.slot_has_links",
+        params: { role: "cartoonist" },
+      })
+      const user = userEvent.setup()
+      const { container } = render(<EditPage task={WITH_LINKS} />)
+      await user.click(screen.getByRole("button", { name: "Remove slot 2" }))
+      await user.click(save())
+      await screen.findByText(/has deliverable links/)
+
+      expect(await axeViolations(container)).toEqual([])
+    })
   })
 
   it("keeps a slot's current member in its list after Show everyone is unchecked", async () => {
@@ -998,7 +1265,8 @@ describe("TaskForm in edit mode", () => {
         title: "Done, renamed",
         description: "Two pages.",
         dueAt: "2026-10-31T23:30",
-        referenceUrl: "https://example.com/brief",
+        referenceUrls: ["https://example.com/brief"],
+        loadedReferenceUrls: ["https://example.com/brief"],
         slots: LOADED_SLOTS,
       })
     })
@@ -1012,5 +1280,122 @@ describe("TaskForm in edit mode", () => {
   it("has no axe violations", async () => {
     const { container } = render(<EditPage />)
     expect(await axeViolations(container)).toEqual([])
+  })
+
+  describe("New task sheet support", () => {
+    it("opens on the prefilled owner and due date", () => {
+      render(
+        <TaskForm
+          options={OPTIONS}
+          defaultValues={{ owner: "desk:layout", dueAt: "2026-11-20T17:00" }}
+        />
+      )
+
+      expect(screen.getByRole("combobox", { name: "Owner" })).toHaveTextContent(
+        "Layout"
+      )
+      expect(screen.getByLabelText("Due date")).toHaveValue("2026-11-20T17:00")
+    })
+
+    it("offers three due presets that set the field and clear its error", async () => {
+      vi.useFakeTimers({ toFake: ["Date"] })
+      // Fri Nov 20 2026, 9:00 AM in Manila.
+      vi.setSystemTime(new Date("2026-11-20T01:00:00Z"))
+      const user = userEvent.setup()
+      renderForm()
+
+      expect(
+        screen
+          .getAllByRole("button", { name: /5 PM$/ })
+          .map((b) => b.textContent)
+      ).toEqual(["Today 5 PM", "Tomorrow 5 PM", "Next Friday 5 PM"])
+
+      await user.click(screen.getByRole("button", { name: "Create task" }))
+      expect(await screen.findByText("Add a due date")).toBeInTheDocument()
+
+      await user.click(screen.getByRole("button", { name: "Next Friday 5 PM" }))
+
+      expect(screen.getByLabelText("Due date")).toHaveValue("2026-11-27T17:00")
+      await waitFor(() =>
+        expect(screen.queryByText("Add a due date")).not.toBeInTheDocument()
+      )
+      vi.useRealTimers()
+    })
+
+    it("hands the new id and Messenger text to onCreated instead of toasting and resetting", async () => {
+      createTaskAction.mockResolvedValue({ ok: true, data: { id: "task-1" } })
+      const onCreated = vi.fn()
+      const user = userEvent.setup()
+      render(<TaskForm options={OPTIONS} onCreated={onCreated} />)
+      await fillMinimalValidForm(user)
+
+      await user.click(screen.getByRole("button", { name: "Create task" }))
+
+      await waitFor(() => expect(onCreated).toHaveBeenCalledOnce())
+      expect(onCreated).toHaveBeenCalledWith(
+        "task-1",
+        expect.stringContaining("Lay out the spread")
+      )
+      expect(toastSuccess).not.toHaveBeenCalled()
+      expect(screen.getByLabelText("Title")).toHaveValue("Lay out the spread")
+    })
+
+    it("reports whether it differs from its prefills", async () => {
+      const onDirtyChange = vi.fn()
+      const user = userEvent.setup()
+      render(
+        <TaskForm
+          options={OPTIONS}
+          defaultValues={{ owner: "desk:layout" }}
+          onDirtyChange={onDirtyChange}
+        />
+      )
+      expect(onDirtyChange).toHaveBeenLastCalledWith(false)
+
+      await user.type(screen.getByLabelText("Title"), "x")
+      expect(onDirtyChange).toHaveBeenLastCalledWith(true)
+    })
+
+    it("leaves the submit button to the one outside, which submits it by form id", async () => {
+      createTaskAction.mockResolvedValue({ ok: true, data: { id: "task-1" } })
+      const user = userEvent.setup()
+      render(
+        <>
+          <TaskForm options={OPTIONS} formId="f" hideSubmit />
+          <button type="submit" form="f">
+            Outside
+          </button>
+        </>
+      )
+      expect(
+        screen.queryByRole("button", { name: "Create task" })
+      ).not.toBeInTheDocument()
+      await fillMinimalValidForm(user)
+
+      await user.click(screen.getByRole("button", { name: "Outside" }))
+
+      await waitFor(() => expect(createTaskAction).toHaveBeenCalledOnce())
+    })
+
+    it("labels members with their open slots when the options carry them", async () => {
+      const user = userEvent.setup()
+      renderForm({
+        ...OPTIONS,
+        slotMembersByRole: {
+          layout_artist: [
+            { id: MEMBER_1, name: "Staff Layout Artist", openSlots: 0 },
+          ],
+        },
+      })
+      await chooseOption(user, "Role", "Layout Artist")
+
+      await user.click(screen.getByRole("combobox", { name: "Member" }))
+
+      expect(
+        await screen.findByRole("option", {
+          name: "Staff Layout Artist · 0 active",
+        })
+      ).toBeInTheDocument()
+    })
   })
 })

@@ -1,7 +1,7 @@
 "use client"
 
 import { useId, useRef, useState, type FormEvent } from "react"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/toast"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -20,7 +20,7 @@ import { cn } from "@/lib/utils"
 
 import { reassignSlotAction } from "../actions"
 import { taskErrorMessage, type TaskErrorCode } from "../errors"
-import { buildMessengerMessage } from "../messenger"
+import { buildMessengerMessage, type MessengerDeliverables } from "../messenger"
 import type { ReassignOptions } from "../queries/reassign"
 import {
   buildReassignList,
@@ -61,6 +61,8 @@ export function ReassignSlot({
   taskId,
   taskTitle,
   taskDueAt,
+  taskReferenceUrls,
+  taskDeliverables,
   slotId,
   role,
   memberId,
@@ -71,11 +73,16 @@ export function ReassignSlot({
   focusTargetId,
   fallbackFocusTargetId,
   namedForTask = false,
+  onCopied,
 }: {
   taskId: string
   taskTitle: string
   /** UTC ISO timestamp, for the Messenger message. */
   taskDueAt: string
+  /** The task's saved reference links, for the Messenger message. */
+  taskReferenceUrls: string[]
+  /** The task's every deliverable link by role, for the Messenger message. */
+  taskDeliverables: MessengerDeliverables[]
   slotId: string
   role: ProductionRole
   /** The slot's member now. */
@@ -97,6 +104,8 @@ export function ReassignSlot({
    * Task detail leaves it off.
    */
   namedForTask?: boolean
+  /** Called after a Copy for Messenger from the toast that worked. */
+  onCopied?: () => void | Promise<unknown>
 }) {
   // The member a save was sent for, so a refused pair names them.
   const pickedRef = useRef<ReassignMember | null>(null)
@@ -157,7 +166,14 @@ export function ReassignSlot({
 
   function messengerText() {
     return buildMessengerMessage(
-      { id: taskId, title: taskTitle, roles: [role], dueAt: taskDueAt },
+      {
+        id: taskId,
+        title: taskTitle,
+        roles: [role],
+        dueAt: taskDueAt,
+        referenceUrls: taskReferenceUrls,
+        deliverables: taskDeliverables,
+      },
       clientEnv.NEXT_PUBLIC_SITE_URL,
       options.roleLabels
     )
@@ -181,7 +197,7 @@ export function ReassignSlot({
           reset()
           toast.success(
             reassignedMessage(picked.name),
-            copyForMessengerAction(messengerText())
+            copyForMessengerAction(messengerText(), onCopied)
           )
         },
         onFailure: (code) => {

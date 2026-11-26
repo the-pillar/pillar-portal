@@ -36,7 +36,7 @@ vi.mock("../actions", () => ({
   reopenTaskAction,
 }))
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }))
-vi.mock("sonner", () => ({
+vi.mock("@/components/ui/toast", () => ({
   toast: { error: toastError, success: toastSuccess },
 }))
 

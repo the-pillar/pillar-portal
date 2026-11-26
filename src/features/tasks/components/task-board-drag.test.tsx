@@ -14,7 +14,14 @@ import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { BoardCard } from "../queries/board"
+import { BOARD_OWNERS, VIEWER, boardCard } from "./board-fixtures"
 import { TaskBoard } from "./task-board"
+
+const base = {
+  owners: BOARD_OWNERS,
+  viewerId: VIEWER,
+  homeFilter: { kind: "all" as const },
+}
 
 // jsdom has no layout, so a real pointer or keyboard drag can't be driven here.
 // Instead the real DndContext is wrapped to capture the handlers TaskBoard
@@ -35,6 +42,7 @@ const {
   refresh,
   toastError,
   toastSuccess,
+  toastUndo,
 } = vi.hoisted(() => ({
   dnd: { current: null as DragHandlers | null },
   moveTaskAction: vi.fn(),
@@ -42,6 +50,7 @@ const {
   refresh: vi.fn(),
   toastError: vi.fn(),
   toastSuccess: vi.fn(),
+  toastUndo: vi.fn(),
 }))
 
 vi.mock("@dnd-kit/core", async (importOriginal) => {
@@ -55,10 +64,21 @@ vi.mock("@dnd-kit/core", async (importOriginal) => {
     },
   }
 })
-vi.mock("../actions", () => ({ moveTaskAction, markDoneAction }))
-vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }))
-vi.mock("sonner", () => ({
-  toast: { error: toastError, success: toastSuccess },
+vi.mock("../actions", () => ({
+  moveTaskAction,
+  markDoneAction,
+  reopenTaskAction: vi.fn(),
+}))
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh }),
+  useSearchParams: () => new URLSearchParams(),
+}))
+vi.mock("@/components/ui/toast", () => ({
+  toast: Object.assign(vi.fn(), {
+    error: toastError,
+    success: toastSuccess,
+    undo: toastUndo,
+  }),
 }))
 
 beforeEach(() => {
@@ -74,24 +94,7 @@ afterEach(() => {
   dnd.current = null
 })
 
-function card(
-  n: number,
-  overrides: Partial<BoardCard> & { title: string }
-): BoardCard {
-  return {
-    id: `00000000-0000-4000-8000-00000000000${n}`,
-    ownerName: "Layout",
-    dueAt: "2099-01-01T00:00:00+00:00",
-    column: "to_do",
-    overdue: false,
-    sentBack: false,
-    hasAwaitingResponse: false,
-    hasNeedsReassignment: false,
-    assignees: [],
-    moves: [],
-    ...overrides,
-  }
-}
+const card = boardCard
 
 const SPREAD = card(1, {
   title: "Lay out the spread",
@@ -163,14 +166,19 @@ function click(element: HTMLElement) {
 
 describe("TaskBoard drag", () => {
   it("moves a card dropped on a column it may move to, at once", async () => {
-    moveTaskAction.mockResolvedValue({ ok: true, data: { column: "doing" } })
-    render(<TaskBoard cards={CARDS} />)
+    moveTaskAction.mockResolvedValue({
+      ok: true,
+      data: { column: "doing", movedAt: "2026-11-15T01:00:00.5+00:00" },
+    })
+    render(<TaskBoard {...base} cards={CARDS} />)
 
     drag(SPREAD, "doing")
 
     expect(moveTaskAction).toHaveBeenCalledExactlyOnceWith({
       taskId: SPREAD.id,
       toColumn: "doing",
+      // The version the card rendered with, exactly as given.
+      expectedMovedAt: SPREAD.movedAt,
     })
     expect(markDoneAction).not.toHaveBeenCalled()
     await waitFor(() =>
@@ -181,7 +189,12 @@ describe("TaskBoard drag", () => {
         })
       ).toBeInTheDocument()
     )
-    // Only a Done move toasts.
+    await waitFor(() =>
+      expect(toastUndo).toHaveBeenCalledExactlyOnceWith(
+        "Moved to Doing.",
+        expect.objectContaining({ action: expect.anything() })
+      )
+    )
     expect(toastSuccess).not.toHaveBeenCalled()
   })
 
@@ -191,7 +204,7 @@ describe("TaskBoard drag", () => {
     ["no column", null],
     ["something that isn't a column", "not-a-column"],
   ])("does nothing for a drop on %s", (_label, overId) => {
-    render(<TaskBoard cards={CARDS} />)
+    render(<TaskBoard {...base} cards={CARDS} />)
 
     drag(SPREAD, overId)
 
@@ -203,7 +216,7 @@ describe("TaskBoard drag", () => {
 
   it("moves a card dropped on Done through markDoneAction, never moveTaskAction, and toasts once saved", async () => {
     markDoneAction.mockResolvedValue({ ok: true, data: { column: "done" } })
-    render(<TaskBoard cards={[REVIEWED, ASSIGNED]} />)
+    render(<TaskBoard {...base} cards={[REVIEWED, ASSIGNED]} />)
 
     drag(REVIEWED, "done")
 
@@ -219,12 +232,17 @@ describe("TaskBoard drag", () => {
       })
     ).toBeInTheDocument()
     await waitFor(() =>
-      expect(toastSuccess).toHaveBeenCalledExactlyOnceWith("Marked done.")
+      expect(toastSuccess).toHaveBeenCalledExactlyOnceWith(
+        "Marked done.",
+        expect.objectContaining({
+          action: expect.objectContaining({ label: "Reopen" }),
+        })
+      )
     )
   })
 
   it("rings Done only while a card whose moves hold it is held over it", () => {
-    render(<TaskBoard cards={[REVIEWED, ASSIGNED]} />)
+    render(<TaskBoard {...base} cards={[REVIEWED, ASSIGNED]} />)
     const over = (task: BoardCard) => {
       const active = { id: task.id }
       act(() => handlers().onDragStart({ active, activatorEvent: pointer() }))
@@ -235,7 +253,7 @@ describe("TaskBoard drag", () => {
           activatorEvent: pointer(),
         })
       )
-      const ringed = column("Done").classList.contains("ring-2")
+      const ringed = column("Done").classList.contains("outline-navy")
       act(() =>
         handlers().onDragCancel({
           active,
@@ -251,7 +269,7 @@ describe("TaskBoard drag", () => {
   })
 
   it("does nothing when a card whose moves lack Done is dropped there", () => {
-    render(<TaskBoard cards={[REVIEWED, ASSIGNED]} />)
+    render(<TaskBoard {...base} cards={[REVIEWED, ASSIGNED]} />)
 
     drag(ASSIGNED, "done")
 
@@ -269,7 +287,7 @@ describe("TaskBoard drag", () => {
     "puts a card dropped on Done back when refused with %s, toasts and refreshes",
     async (code, copy) => {
       markDoneAction.mockResolvedValue({ ok: false, code })
-      render(<TaskBoard cards={[REVIEWED, ASSIGNED]} />)
+      render(<TaskBoard {...base} cards={[REVIEWED, ASSIGNED]} />)
 
       drag(REVIEWED, "done")
 
@@ -286,7 +304,7 @@ describe("TaskBoard drag", () => {
   )
 
   it("does nothing on a cancelled drag", () => {
-    render(<TaskBoard cards={CARDS} />)
+    render(<TaskBoard {...base} cards={CARDS} />)
     const active = { id: SPREAD.id }
 
     act(() => handlers().onDragStart({ active, activatorEvent: pointer() }))
@@ -304,19 +322,21 @@ describe("TaskBoard drag", () => {
   it("ignores a drop while another move saves", async () => {
     const user = userEvent.setup()
     moveTaskAction.mockReturnValue(new Promise(() => {}))
-    render(<TaskBoard cards={CARDS} />)
+    render(<TaskBoard {...base} cards={CARDS} />)
 
     await user.click(
-      screen.getByRole("combobox", { name: "Move to…, Lay out the spread" })
+      screen.getByRole("button", { name: "More actions, Lay out the spread" })
     )
-    await user.click(await screen.findByRole("option", { name: "Doing" }))
+    await user.click(
+      await screen.findByRole("menuitem", { name: "Move to Doing" })
+    )
     drag(PHOTOS, "for_review")
 
     expect(moveTaskAction).toHaveBeenCalledTimes(1)
   })
 
   it("rings the column a held card would drop into, and stops snapping while dragging", () => {
-    render(<TaskBoard cards={CARDS} />)
+    render(<TaskBoard {...base} cards={CARDS} />)
     const active = { id: SPREAD.id }
 
     act(() => handlers().onDragStart({ active, activatorEvent: pointer() }))
@@ -329,19 +349,22 @@ describe("TaskBoard drag", () => {
     )
 
     expect(row()).toHaveClass("snap-none")
-    expect(column("Doing")).toHaveClass("ring-2")
-    expect(column("To Do")).not.toHaveClass("ring-2")
+    expect(column("Doing")).toHaveClass("outline-navy")
+    expect(column("To Do")).not.toHaveClass("outline-navy")
 
     act(() =>
       handlers().onDragCancel({ active, over: null, activatorEvent: pointer() })
     )
     expect(row()).toHaveClass("snap-x")
-    expect(column("Doing")).not.toHaveClass("ring-2")
+    expect(column("Doing")).not.toHaveClass("outline-navy")
   })
 
   it("puts focus back on the moved card's title link after a drag", async () => {
-    moveTaskAction.mockResolvedValue({ ok: true, data: { column: "doing" } })
-    render(<TaskBoard cards={CARDS} />)
+    moveTaskAction.mockResolvedValue({
+      ok: true,
+      data: { column: "doing", movedAt: "x" },
+    })
+    render(<TaskBoard {...base} cards={CARDS} />)
     ;(document.activeElement as HTMLElement | null)?.blur()
 
     drag(SPREAD, "doing", keyboard())
@@ -349,8 +372,43 @@ describe("TaskBoard drag", () => {
     await waitFor(() => expect(link("Lay out the spread")).toHaveFocus())
   })
 
+  it("toasts after a keyboard drop without a spoken status, since the drop announcement says it", async () => {
+    moveTaskAction.mockResolvedValue({
+      ok: true,
+      data: { column: "doing", movedAt: "2026-11-15T01:00:00.5+00:00" },
+    })
+    render(<TaskBoard {...base} cards={CARDS} />)
+
+    drag(SPREAD, "doing", keyboard())
+
+    await waitFor(() =>
+      expect(toastUndo).toHaveBeenCalledWith(
+        "Moved to Doing.",
+        expect.objectContaining({ announce: false })
+      )
+    )
+  })
+
+  it("refuses a stale drop with where the card is now", async () => {
+    moveTaskAction.mockResolvedValue({
+      ok: false,
+      code: "tasks.stale",
+      params: { column: "for_review", movedByName: "Ben Baker" },
+    })
+    render(<TaskBoard {...base} cards={CARDS} />)
+
+    drag(SPREAD, "doing")
+
+    await waitFor(() =>
+      expect(toastError).toHaveBeenCalledWith(
+        "That card moved — it's now in For Review."
+      )
+    )
+    expect(refresh).toHaveBeenCalledOnce()
+  })
+
   it("does not start a drag from a mouse or touch start on the card menu", () => {
-    render(<TaskBoard cards={CARDS} />)
+    render(<TaskBoard {...base} cards={CARDS} />)
     const trigger = screen.getByRole("button", {
       name: "More actions, Lay out the spread",
     })
@@ -367,7 +425,7 @@ describe("TaskBoard drag", () => {
   })
 
   it("swallows the click that ends a pointer drag, once", async () => {
-    render(<TaskBoard cards={CARDS} />)
+    render(<TaskBoard {...base} cards={CARDS} />)
 
     drag(SPREAD, null)
 
@@ -384,7 +442,7 @@ describe("TaskBoard drag", () => {
   })
 
   it("drops the click guard shortly after a drag with no click", async () => {
-    render(<TaskBoard cards={CARDS} />)
+    render(<TaskBoard {...base} cards={CARDS} />)
 
     drag(SPREAD, null)
     await new Promise((resolve) => setTimeout(resolve, 150))
@@ -396,7 +454,7 @@ describe("TaskBoard drag", () => {
   })
 
   it("leaves clicks alone after a keyboard drag", () => {
-    render(<TaskBoard cards={CARDS} />)
+    render(<TaskBoard {...base} cards={CARDS} />)
 
     drag(SPREAD, null, keyboard())
 
@@ -407,7 +465,7 @@ describe("TaskBoard drag", () => {
   })
 
   it("control: a mouse drag on the card itself does start one", () => {
-    render(<TaskBoard cards={CARDS} />)
+    render(<TaskBoard {...base} cards={CARDS} />)
     const title = link("Lay out the spread")
 
     fireEvent.mouseDown(title, { button: 0, clientX: 0, clientY: 0 })

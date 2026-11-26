@@ -72,6 +72,35 @@ describe("AdminShell", () => {
     expect(banner.querySelector(".max-w-\\[1440px\\]")).not.toBeNull()
   })
 
+  it("marks the Members link in both navs as the tour's target, and the avatar as My dashboard", () => {
+    renderShell()
+
+    const members = document.querySelectorAll('a[data-tour="members"]')
+    expect(
+      Array.from(members).map((link) => link.getAttribute("href"))
+    ).toEqual(["/admin/members", "/admin/members"])
+    expect(
+      screen.getByRole("button", { name: "Head Layout Artist, account" })
+    ).toHaveAttribute("data-tour", "my-dashboard")
+  })
+
+  it("adds Show the tour again to the avatar menu from the onboarding prop", async () => {
+    const user = userEvent.setup()
+    render(
+      <AdminShell member={{ name: "Head Layout Artist" }} onboarding="tour">
+        <h1>Home</h1>
+      </AdminShell>
+    )
+
+    await user.click(
+      screen.getByRole("button", { name: "Head Layout Artist, account" })
+    )
+
+    expect(
+      await screen.findByRole("menuitem", { name: "Show the tour again" })
+    ).toHaveAttribute("href", "/admin?tour=again")
+  })
+
   it("links the logo to Admin home", () => {
     renderShell()
     const banner = screen.getByRole("banner")
@@ -182,5 +211,29 @@ describe("AdminShell", () => {
   it("renders the page content in main", () => {
     renderShell()
     expect(screen.getByRole("main")).toHaveTextContent("Create a task")
+  })
+})
+
+describe("AdminShell's New task slot", () => {
+  it("shows the button it is given in the header action slot, and nothing without one", () => {
+    const { container, rerender } = render(
+      <AdminShell
+        member={{ name: "Head Layout Artist" }}
+        newTask={<button type="button">New task</button>}
+      >
+        <h1>Page</h1>
+      </AdminShell>
+    )
+    expect(
+      container.querySelector("[data-slot='header-action']")
+    ).toContainElement(screen.getByRole("button", { name: "New task" }))
+
+    rerender(
+      <AdminShell member={{ name: "Head Layout Artist" }}>
+        <h1>Page</h1>
+      </AdminShell>
+    )
+    expect(container.querySelector("[data-slot='header-action']")).toBeNull()
+    expect(screen.queryByRole("button", { name: "New task" })).toBeNull()
   })
 })

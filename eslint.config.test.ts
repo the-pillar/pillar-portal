@@ -215,6 +215,21 @@ describe("eslint architecture rules", { timeout: 30_000 }, () => {
     expect(rules(messages)).toContain("no-restricted-imports")
   })
 
+  it("reports importing sonner outside the toast module, and allows it there", async () => {
+    const SONNER = 'import { toast } from "sonner"\nexport const t = toast\n'
+    const outside = await lint(
+      { "src/features/tasks/x.ts": SONNER },
+      "src/features/tasks/x.ts"
+    )
+    expect(rules(outside)).toContain("no-restricted-imports")
+
+    const inside = await lint(
+      { "src/components/ui/toast.tsx": SONNER },
+      "src/components/ui/toast.tsx"
+    )
+    expect(rules(inside)).not.toContain("no-restricted-imports")
+  })
+
   const ADMIN_CLIENT = {
     "src/lib/supabase/admin.ts":
       "export const createAdminClient = () => null\n",

@@ -27,6 +27,8 @@ export type {
 export {
   BOARD_ROW_HEIGHT,
   boardEmptyMessage,
+  boardFilterChips,
+  matchesFilter,
   ownerFilterParam,
   parseOwnerFilterParam,
 } from "./board"
@@ -45,18 +47,24 @@ export {
 export type { MessengerTask } from "./messenger"
 export { buildIcs } from "./ics-file"
 export type { CalendarEvent, CalendarTask } from "./calendar"
-export { BoardOwnerFilter } from "./components/board-owner-filter"
+export { BoardFilterChips } from "./components/board-filter-chips"
+export type { FilterChipData } from "./components/board-filter-chips"
 export { AddToCalendarMenu, TaskCardMenu } from "./components/calendar-menu"
 export { CopyForMessenger } from "./components/copy-for-messenger"
 export { HandedBackQueue } from "./components/handed-back-queue"
 export { PlannerChip } from "./components/planner-chip"
 export { PlannerDayList } from "./components/planner-day-list"
 export { PlannerGrid } from "./components/planner-grid"
-export { PlannerScopeToggle } from "./components/planner-scope-toggle"
+export { TaskPlanner } from "./components/task-planner"
 export { ReviewQueue } from "./components/review-queue"
 export { TaskBoard } from "./components/task-board"
 export { TaskChangesRefresher } from "./components/task-changes-refresher"
 export { TaskDetailView } from "./components/task-detail-view"
+export { returnLink } from "./return-link"
+export type { ReturnLink } from "./return-link"
+export { NewTaskButton, NewTaskLink } from "./components/new-task-button"
+export { NewTaskSheet } from "./components/new-task-sheet"
+export { NewTaskTrigger } from "./components/new-task-trigger"
 export { TaskForm } from "./components/task-form"
 export { TaskNotFound } from "./components/task-not-found"
 export { WhatsMineTasks } from "./components/whats-mine-tasks"
@@ -64,14 +72,15 @@ export { TASK_ERROR_COPY, taskErrorMessage } from "./errors"
 export type { TaskErrorCode } from "./errors"
 export {
   deadlineCount,
-  parseIncludeScope,
+  parsePlannerFilter,
   plannerChipLabel,
   plannerChipStatus,
+  plannerEmptyMessage,
+  plannerFilterChips,
   plannerHref,
-  plannerScopeLabel,
   tasksByDay,
 } from "./planner"
-export type { PlannerChipStatusKind, PlannerScope } from "./planner"
+export type { PlannerChipStatusKind } from "./planner"
 export { getBoard, getBoardOwners } from "./queries/board"
 export type { BoardCard } from "./queries/board"
 export { getTaskForCalendar } from "./queries/calendar"
@@ -82,6 +91,14 @@ export {
 } from "./queries/handed-back"
 export type { HandedBackSlot } from "./queries/handed-back"
 export { getPlanner } from "./queries/planner"
+export type { PlannerCard } from "./queries/planner"
+export {
+  canCreateTask,
+  getNewTaskLayoutData,
+  getTaskFormOptionsWithLoad,
+} from "./queries/new-task"
+export type { NewTaskLayoutData } from "./queries/new-task"
+export { hasCreatedTaskForViewer } from "./queries/created-task"
 export { getReassignOptions } from "./queries/reassign"
 export type { ReassignOptions } from "./queries/reassign"
 export {

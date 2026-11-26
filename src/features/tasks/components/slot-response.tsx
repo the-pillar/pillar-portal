@@ -1,6 +1,6 @@
 "use client"
 
-import { toast } from "sonner"
+import { toast } from "@/components/ui/toast"
 
 import { Button } from "@/components/ui/button"
 import { PENDING_STYLE } from "@/lib/pending-style"
@@ -36,10 +36,13 @@ export function SlotResponse({
   slotId,
   slotLabel,
   rowId,
+  className,
 }: {
   slotId: string
   slotLabel: string
   rowId: string
+  /** Overrides the root's `mt-3`, where a container supplies the spacing. */
+  className?: string
 }) {
   const { isPending, run } = useCommand({
     errorMessage: taskErrorMessage,
@@ -82,11 +85,10 @@ export function SlotResponse({
   }
 
   return (
-    <div ref={rootRef} className="mt-3 flex flex-col gap-3">
+    <div ref={rootRef} className={cn("mt-3 flex flex-col gap-3", className)}>
       <div className="grid grid-cols-2 gap-3">
         <Button
           type="button"
-          variant="outline"
           className={cn("min-h-11", PENDING_STYLE)}
           aria-disabled={isPending || undefined}
           onClick={() => respond("on_it")}

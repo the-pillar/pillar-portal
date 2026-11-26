@@ -173,12 +173,15 @@ const TASK_ROW = {
   title: "Lay out the spread",
   description: "Two pages.",
   due_at: "2026-10-31T15:30:00+00:00",
-  reference_url: "https://example.com/brief",
+  reference_urls: ["https://example.com/brief"],
   column: "to_do",
   revision_note: null,
   revision_note_by: null,
   revision_note_at: null,
   updated_at: "2026-10-30T02:15:42.123456+00:00",
+  done_at: null,
+  owning_section_id: null,
+  owning_desk_id: "layout",
   sections: null,
   desks: { name: "Layout" },
 }
@@ -247,6 +250,7 @@ function mockDetail({
     { id: STAFF_WRITER, name: "Staff Writer" },
   ] as unknown,
   reasons = [{ assignment_id: SLOT_B, reason: "Exams all week" }] as unknown,
+  links = [] as unknown,
   errors = {} as Partial<Record<string, unknown>>,
 } = {}) {
   const calls: Call[] = []
@@ -261,6 +265,7 @@ function mockDetail({
     task_assignments: slots,
     member_directory: members,
     assignment_reasons: reasons,
+    task_deliverable_links: links,
   }
   createClient.mockResolvedValue({
     rpc,
@@ -303,7 +308,7 @@ describe("getTaskDetail", () => {
     const tasks = calls.find((c) => c.table === "tasks")!
     expect(tasks.calls).toContainEqual([
       "select",
-      "id, title, description, due_at, reference_url, column, revision_note, revision_note_by, revision_note_at, updated_at, sections(name), desks(name)",
+      "id, title, description, due_at, reference_urls, column, revision_note, revision_note_by, revision_note_at, updated_at, moved_at, done_at, owning_section_id, owning_desk_id, sections(name), desks(name)",
     ])
     expect(tasks.calls).toContainEqual(["eq", "id", TASK_ID])
     const slots = calls.find((c) => c.table === "task_assignments")!
@@ -351,8 +356,10 @@ describe("getTaskDetail", () => {
       title: "Lay out the spread",
       description: "Two pages.",
       ownerName: "Layout",
+      ownerId: "layout",
       dueAt: "2026-10-31T15:30:00+00:00",
-      referenceUrl: "https://example.com/brief",
+      referenceUrls: ["https://example.com/brief"],
+      doneAt: null,
       column: "to_do",
       revisionNote: null,
       slots: [
@@ -361,27 +368,33 @@ describe("getTaskDetail", () => {
           role: "layout_artist",
           memberId: HEAD_LAYOUT,
           memberName: "Head Layout Artist",
+          initials: "HA",
           state: "on_it",
           reason: null,
           updatedAt: "2026-10-30T02:15:42.000001+00:00",
+          links: [],
         },
         {
           id: SLOT_B,
           role: "writer",
           memberId: STAFF_WRITER,
           memberName: "Staff Writer",
+          initials: "SW",
           state: "needs_reassignment",
           reason: "Exams all week",
           updatedAt: "2026-10-30T02:15:42.000002+00:00",
+          links: [],
         },
         {
           id: SLOT_C,
           role: "cartoonist",
           memberId: FORMER,
           memberName: "Former member",
+          initials: "FM",
           state: "awaiting_response",
           reason: null,
           updatedAt: "2026-10-30T02:15:42+00:00",
+          links: [],
         },
       ],
       allowedMoves: ["doing", "for_review"],
@@ -391,9 +404,88 @@ describe("getTaskDetail", () => {
       canReopen: false,
       canManage: false,
       canReassign: false,
+      deliverableAddSlotIds: [],
+      deliverableRemoveSlotIds: [],
+      canRemoveDeliverables: false,
       updatedAt: "2026-10-30T02:15:42.123456+00:00",
       roleLabels: expect.objectContaining({ layout_artist: "Layout Artist" }),
     })
+  })
+
+  it("puts each slot's deliverable links on it in seq order, naming an adder only when it isn't the slot's own member, and passes the three capabilities through", async () => {
+    const { calls } = mockDetail({
+      capabilities: [
+        {
+          task_id: TASK_ID,
+          allowed_moves: [],
+          respondable_slot_ids: [],
+          hand_back_slot_ids: [],
+          can_review: false,
+          can_reopen: false,
+          can_manage: false,
+          can_reassign: false,
+          deliverable_add_slot_ids: [SLOT_A],
+          deliverable_remove_slot_ids: [SLOT_A, SLOT_B],
+          can_remove_deliverables: true,
+        },
+      ],
+      links: [
+        {
+          id: "l1",
+          slot_id: SLOT_A,
+          url: "https://www.canva.com/design/1",
+          added_by: HEAD_LAYOUT,
+          added_at: "2026-10-30T03:00:00+00:00",
+          task_assignments: { task_id: TASK_ID },
+        },
+        {
+          id: "l2",
+          slot_id: SLOT_B,
+          url: "https://docs.google.com/document/d/2",
+          added_by: HEAD_LAYOUT,
+          added_at: "2026-10-30T03:01:00+00:00",
+          task_assignments: { task_id: TASK_ID },
+        },
+        {
+          id: "l3",
+          slot_id: SLOT_B,
+          url: "https://example.org/3",
+          added_by: "00000000-0000-4000-8000-0000000000ee",
+          added_at: "2026-10-30T03:02:00+00:00",
+          task_assignments: { task_id: TASK_ID },
+        },
+      ],
+    })
+
+    const detail = await getTaskDetail(TASK_ID)
+
+    expect(detail?.slots.map((slot) => slot.links)).toEqual([
+      [
+        {
+          id: "l1",
+          url: "https://www.canva.com/design/1",
+          addedByName: null,
+        },
+      ],
+      [
+        {
+          id: "l2",
+          url: "https://docs.google.com/document/d/2",
+          addedByName: "Head Layout Artist",
+        },
+        {
+          id: "l3",
+          url: "https://example.org/3",
+          addedByName: "Former member",
+        },
+      ],
+      [],
+    ])
+    expect(detail?.deliverableAddSlotIds).toEqual([SLOT_A])
+    expect(detail?.deliverableRemoveSlotIds).toEqual([SLOT_A, SLOT_B])
+    expect(detail?.canRemoveDeliverables).toBe(true)
+    const links = calls.find((c) => c.table === "task_deliverable_links")!
+    expect(links.calls).toContainEqual(["order", "seq"])
   })
 
   it("returns the revision note with its author's name from member_directory, and reads that name with the slot members'", async () => {
@@ -746,7 +838,7 @@ describe("getWhatsMine", () => {
     const tasks = calls.find((c) => c.table === "tasks")!
     expect(tasks.calls).toContainEqual([
       "select",
-      "id, title, due_at, column, revision_note_at, sections(name), desks(name)",
+      "id, title, due_at, column, revision_note_at, owning_section_id, owning_desk_id, sections(name), desks(name)",
     ])
     expect(tasks.calls).toContainEqual(["in", "id", [T1, T2, T3]])
     const slots = calls.find((c) => c.table === "task_assignments")!
@@ -943,7 +1035,7 @@ describe("getTaskForCalendar", () => {
         title: "T",
         description: null,
         due_at: "2026-10-10T09:00:00+00:00",
-        reference_url: "https://x.test",
+        reference_urls: ["https://x.test"],
       },
       error: null,
     })
@@ -952,7 +1044,7 @@ describe("getTaskForCalendar", () => {
       title: "T",
       description: null,
       dueAt: "2026-10-10T09:00:00+00:00",
-      referenceUrl: "https://x.test",
+      referenceUrls: ["https://x.test"],
     })
   })
 

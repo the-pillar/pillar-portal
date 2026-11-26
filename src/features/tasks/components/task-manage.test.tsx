@@ -21,7 +21,7 @@ vi.mock("../actions", () => ({ deleteTaskAction }))
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace, refresh }),
 }))
-vi.mock("sonner", () => ({
+vi.mock("@/components/ui/toast", () => ({
   toast: { error: toastError, success: toastSuccess },
 }))
 

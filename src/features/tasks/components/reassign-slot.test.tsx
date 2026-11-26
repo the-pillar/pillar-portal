@@ -15,21 +15,22 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import type { ReassignOptions } from "../queries/reassign"
 import { ReassignSlot } from "./reassign-slot"
 
-const { reassignSlotAction, refresh, toastSuccess, toastError, toastPlain } =
+const { reassignSlotAction, refresh, toastSuccess, toastError, toastNotice } =
   vi.hoisted(() => ({
     reassignSlotAction: vi.fn(),
     refresh: vi.fn(),
     toastSuccess: vi.fn(),
     toastError: vi.fn(),
-    toastPlain: vi.fn(),
+    toastNotice: vi.fn(),
   }))
 
 vi.mock("../actions", () => ({ reassignSlotAction }))
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }))
-vi.mock("sonner", () => ({
-  toast: Object.assign(toastPlain, {
+vi.mock("@/components/ui/toast", () => ({
+  toast: Object.assign(vi.fn(), {
     success: toastSuccess,
     error: toastError,
+    notice: toastNotice,
   }),
 }))
 vi.mock("@/lib/env.client", () => ({
@@ -122,7 +123,9 @@ function Page({
   version = VERSION,
   options = OPTIONS,
   namedForTask,
+  onCopied,
 }: {
+  onCopied?: () => void
   show?: boolean
   showRow?: boolean
   role?: "cartoonist" | "writer" | "layout_artist"
@@ -148,6 +151,8 @@ function Page({
                 taskTitle="Lay out the spread"
                 // 23:30 PHT on Saturday, October 31, 2026.
                 taskDueAt="2026-10-31T15:30:00+00:00"
+                taskReferenceUrls={[]}
+                taskDeliverables={[]}
                 slotId={SLOT_ID}
                 role={role}
                 memberId={memberId}
@@ -158,6 +163,7 @@ function Page({
                 focusTargetId={ROW_ID}
                 fallbackFocusTargetId={STATUS_ID}
                 namedForTask={namedForTask}
+                onCopied={onCopied}
               />
             )}
           </li>
@@ -298,7 +304,9 @@ describe("ReassignSlot", () => {
     )
 
     expect(
-      within(dialog()).getByText("No one on this desk yet — showing everyone.")
+      within(dialog()).getByText(
+        "No one in this section yet — showing everyone."
+      )
     ).toBeInTheDocument()
     expect(listed()).toEqual([
       "Staff Cartoonist · 0 active",
@@ -312,7 +320,9 @@ describe("ReassignSlot", () => {
     ).toBeNull()
     expect(
       within(dialog()).getByRole("radiogroup", { name: "Reassign Writer" })
-    ).toHaveAccessibleDescription("No one on this desk yet — showing everyone.")
+    ).toHaveAccessibleDescription(
+      "No one in this section yet — showing everyone."
+    )
   })
 
   it("offers no Show everyone when the desk is everyone", async () => {
@@ -516,7 +526,7 @@ describe("ReassignSlot", () => {
     })
     await toastSuccess.mock.calls[0][1].action.onClick()
 
-    expect(toastPlain).toHaveBeenCalledWith(
+    expect(toastNotice).toHaveBeenCalledWith(
       "Copy this and paste it in Messenger.",
       expect.objectContaining({
         description: expect.stringContaining("Lay out the spread — Cartoonist"),
@@ -571,6 +581,28 @@ describe("ReassignSlot", () => {
         expectedUpdatedAt: NEWER,
       })
     )
+  })
+
+  it("calls onCopied when the toast's Copy for Messenger worked", async () => {
+    const user = userEvent.setup()
+    const onCopied = vi.fn()
+    reassignSlotAction.mockResolvedValue({
+      ok: true,
+      data: { slotId: SLOT_ID },
+    })
+    render(<Page onCopied={onCopied} />)
+    await openPicker(user)
+    await user.click(radio("Head Cartoonist · 2 active"))
+    await user.click(confirm())
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull())
+    expect(onCopied).not.toHaveBeenCalled()
+
+    vi.stubGlobal("navigator", {
+      clipboard: { writeText: vi.fn().mockResolvedValue(undefined) },
+    })
+    await toastSuccess.mock.calls[0][1].action.onClick()
+
+    expect(onCopied).toHaveBeenCalledOnce()
   })
 
   it("resets the slot when its current member is picked, and still offers Copy for Messenger", async () => {

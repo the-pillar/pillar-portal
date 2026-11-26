@@ -11,8 +11,9 @@ export function parseDashboardView(value: unknown): DashboardView {
   return value === "board" || value === "planner" ? value : "whats-mine"
 }
 
+// Bare names: the root layout's title template adds " · The Pillar".
 export const DASHBOARD_VIEW_TITLES: Record<DashboardView, string> = {
-  "whats-mine": "What's mine · The Pillar Portal",
-  board: "Board · The Pillar Portal",
-  planner: "Planner · The Pillar Portal",
+  "whats-mine": "What's mine",
+  board: "Board",
+  planner: "Planner",
 }

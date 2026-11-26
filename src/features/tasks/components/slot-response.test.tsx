@@ -27,7 +27,7 @@ const { respondToSlotAction, refresh, toastError, toastSuccess } = vi.hoisted(
 
 vi.mock("../actions", () => ({ respondToSlotAction }))
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }))
-vi.mock("sonner", () => ({
+vi.mock("@/components/ui/toast", () => ({
   toast: { error: toastError, success: toastSuccess },
 }))
 
@@ -86,11 +86,12 @@ const cantTake = () => screen.getByRole("button", { name: /^Can't take this/ })
 const reasonInput = () => screen.getByLabelText("Reason (optional)")
 
 describe("SlotResponse", () => {
-  it("offers I'm on it and Can't take this as two equal 44px outline buttons, named for the slot", () => {
+  it("offers I'm on it (primary) and Can't take this (outline) as two 44px buttons, named for the slot", () => {
     renderResponse()
 
+    expect(onIt()).toHaveAttribute("data-variant", "default")
+    expect(cantTake()).toHaveAttribute("data-variant", "outline")
     for (const button of [onIt(), cantTake()]) {
-      expect(button).toHaveAttribute("data-variant", "outline")
       expect(button).toHaveClass("min-h-11")
     }
     expect(onIt()).toHaveAccessibleName(/Layout Artist/)

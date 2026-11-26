@@ -1,5 +1,5 @@
 // The positions the approval picker offers (Story 2.2, UX-DR53), grouped as
-// Staff, Section Editors, Heads, Top editors and Management. The groups come
+// Staff, Desk editors, Heads, Top editors and Management. The groups come
 // from the `positions` flags, so they follow the reference data rather than a
 // list of ids: Staff is every position off the Board, a Section Editor heads a
 // content section, a Head heads a desk, a top editor is one of the three top
@@ -18,7 +18,7 @@ export const OFFERED_POSITION_COUNT = 21
 
 export const POSITION_GROUP_LABELS = {
   staff: "Staff",
-  section_editors: "Section Editors",
+  section_editors: "Desk editors",
   heads: "Heads",
   top_editors: "Top editors",
   management: "Management",

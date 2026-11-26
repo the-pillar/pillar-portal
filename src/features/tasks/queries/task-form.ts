@@ -1,5 +1,7 @@
 import "server-only"
 
+import { cache } from "react"
+
 import { PRODUCTION_ROLE_LABELS, type ProductionRole } from "@/features/members"
 import { createClient } from "@/lib/supabase/server"
 
@@ -9,6 +11,12 @@ import { ownerOptions } from "./shared"
 export type SlotMemberOption = {
   id: string
   name: string
+  /**
+   * Open slots, when the read added each member's load (the New task sheet
+   * and the edit page, like the reassign picker); the form then labels the
+   * row "<name> · <n> active".
+   */
+  openSlots?: number
 }
 
 /** Every active member who can fill a slot of that production role. */
@@ -63,7 +71,7 @@ function parsePositions(value: unknown): MemberDirectoryPosition[] {
  * desk is excluded from `owners` but kept in the role map: an article owned
  * by a content section still gets a Writer slot.
  */
-export async function getTaskFormOptions(): Promise<TaskFormOptions> {
+export const getTaskFormOptions = cache(async (): Promise<TaskFormOptions> => {
   const supabase = await createClient()
 
   const [sectionsResult, desksResult, membersResult] = await Promise.all([
@@ -130,4 +138,4 @@ export async function getTaskFormOptions(): Promise<TaskFormOptions> {
     allMembers,
     roleLabels: PRODUCTION_ROLE_LABELS,
   }
-}
+})

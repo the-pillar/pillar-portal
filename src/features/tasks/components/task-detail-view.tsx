@@ -1,30 +1,47 @@
+import { Check, Clock } from "lucide-react"
+import Link from "next/link"
+
 import { StatusBadge } from "@/components/status-badge"
-import { ExternalLink } from "@/components/ui/external-link"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { avatarSlot } from "@/components/ui/avatar-slot"
 import { clientEnv } from "@/lib/env.client"
 import { formatInPht } from "@/lib/time"
+import { cn } from "@/lib/utils"
 
 import { buildCalendarEvent, googleCalendarUrl } from "../calendar"
-import { buildMessengerMessage } from "../messenger"
+import { buildMessengerMessage, deliverablesByRole } from "../messenger"
 import type { ReassignOptions } from "../queries/reassign"
 import type { TaskDetail } from "../queries/task-detail"
-import { SLOT_STATE_FAMILIES, SLOT_STATE_LABELS } from "../status"
+import { DEFAULT_RETURN_LINK, type ReturnLink } from "../return-link"
+import {
+  isTaskOverdue,
+  SLOT_STATE_FAMILIES,
+  SLOT_STATE_LABELS,
+} from "../status"
 import { AddToCalendarMenu } from "./calendar-menu"
 import { CopyForMessenger } from "./copy-for-messenger"
 import { HandBack } from "./hand-back"
+import { LinkRow } from "./link-row"
 import { ReassignSlot } from "./reassign-slot"
+import { SlotDeliverables } from "./slot-deliverables"
 import { SlotResponse } from "./slot-response"
 import { TaskColumnControl } from "./task-column-control"
 import { TaskManage } from "./task-manage"
 import { TaskReview } from "./task-review"
-import { TASK_STATUS_ID } from "./task-status-id"
+import { TASK_HEADING_ID, TASK_STATUS_ID } from "./task-status-id"
 
 const DUE_FORMAT = "EEE, MMM d, yyyy 'at' h:mm a"
+const DONE_FORMAT = "MMM d"
 const NOTE_DATE_FORMAT = "EEE, MMM d, yyyy"
 
 /**
- * Task detail (EXPERIENCE.md › Task detail): title, column (with the revision
- * note under it while the task stands sent back), owner, due date in PHT,
- * reference link, description, then one row per slot. Which actions appear
+ * Task detail (EXPERIENCE.md › Task detail; the Corkboard mock's order):
+ * the return link, the owner label, the title, the due chip (PHT) and column
+ * with the viewer's actions after them (below md, one fixed action bar while
+ * the viewer holds exactly one open slot), the revision note while the task
+ * stands sent back, the description, the approver's actions, one white row
+ * per role slot, the reference links, then Add to Google Calendar and Copy
+ * for Messenger. Which actions appear
  * comes only from `task.allowedMoves`, `task.respondableSlotIds`,
  * `task.handBackSlotIds`, `task.canReview`, `task.canReopen`,
  * `task.canManage` and `task.canReassign` (task_capabilities, AD-4); nothing
@@ -35,13 +52,35 @@ const NOTE_DATE_FORMAT = "EEE, MMM d, yyyy"
 export function TaskDetailView({
   task,
   reassignOptions,
+  onCopied,
+  returnLink = DEFAULT_RETURN_LINK,
 }: {
   task: TaskDetail
   reassignOptions?: ReassignOptions
+  /** Called after any Copy for Messenger that worked (Story 8.9 records it). */
+  onCopied?: () => void | Promise<unknown>
+  /** Where "‹ <view>" goes, already checked and named by the page. */
+  returnLink?: ReturnLink
 }) {
   const respondable = new Set(task.respondableSlotIds)
   const handBackable = new Set(task.handBackSlotIds)
   const handBackSlots = task.slots.filter((slot) => handBackable.has(slot.id))
+  // The slots the viewer may act on, from task_capabilities alone. Exactly
+  // one puts its controls in the action bar; two stay in their rows.
+  const openSlots = task.slots.filter(
+    (slot) => respondable.has(slot.id) || handBackable.has(slot.id)
+  )
+  const barSlot = openSlots.length === 1 ? openSlots[0] : null
+  // Deliverable controls come from task_capabilities' three fields alone.
+  const deliverableAdd = new Set(task.deliverableAddSlotIds)
+  const deliverableRemove = new Set(task.deliverableRemoveSlotIds)
+  const deliverables = deliverablesByRole(
+    task.slots,
+    task.slots.flatMap((slot) =>
+      slot.links.map((link) => ({ slotId: slot.id, url: link.url }))
+    )
+  )
+  const overdue = isTaskOverdue(task.dueAt, task.column)
   const googleUrl = googleCalendarUrl(
     buildCalendarEvent(
       {
@@ -49,7 +88,7 @@ export function TaskDetailView({
         title: task.title,
         description: task.description,
         dueAt: task.dueAt,
-        referenceUrl: task.referenceUrl,
+        referenceUrls: task.referenceUrls,
       },
       clientEnv.NEXT_PUBLIC_SITE_URL
     )
@@ -61,6 +100,8 @@ export function TaskDetailView({
       title: task.title,
       roles: task.slots.map((slot) => slot.role),
       dueAt: task.dueAt,
+      referenceUrls: task.referenceUrls,
+      deliverables,
     },
     clientEnv.NEXT_PUBLIC_SITE_URL,
     task.roleLabels
@@ -68,18 +109,110 @@ export function TaskDetailView({
 
   return (
     <article>
-      <h1 className="font-heading text-display break-words text-navy">
+      <Link
+        href={returnLink.href}
+        className="-ml-1 inline-flex min-h-11 items-center rounded-sm px-1 font-medium text-navy focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      >
+        <span aria-hidden="true">‹&nbsp;</span>
+        {returnLink.label}
+      </Link>
+
+      <p
+        data-owner={task.ownerId}
+        className="mt-1 w-fit rounded-xs bg-(--owner) px-2 py-0.5 text-owner-label text-white"
+      >
+        <span className="sr-only">Owner: </span>
+        {task.ownerName}
+      </p>
+
+      <h1
+        id={TASK_HEADING_ID}
+        tabIndex={-1}
+        className="mt-2 rounded-sm font-heading text-display break-words text-navy outline-offset-4 focus-visible:outline-2"
+      >
         {task.title}
       </h1>
 
-      <div className="mt-3">
+      <div className="mt-2">
         <TaskColumnControl
           taskId={task.id}
           column={task.column}
           sentBack={task.revisionNote !== null}
           allowedMoves={task.allowedMoves}
-        />
+          movedAt={task.movedAt}
+          barred={barSlot !== null}
+          pairMove={barSlot !== null && !respondable.has(barSlot.id)}
+          lead={
+            <p
+              data-due={
+                task.column === "done" ? "done" : overdue ? "overdue" : "open"
+              }
+              className={cn(
+                "inline-flex items-center gap-1 rounded-xs px-2 py-0.5 text-sm tabular-nums",
+                task.column === "done"
+                  ? "bg-positive-strong text-white"
+                  : overdue
+                    ? "bg-attention-strong text-white"
+                    : "bg-chip-fill text-list-ink"
+              )}
+            >
+              <Clock aria-hidden className="size-3.5 shrink-0" />
+              {task.column === "done" ? (
+                <span>
+                  Done{" "}
+                  {task.doneAt && (
+                    <time dateTime={task.doneAt}>
+                      {formatInPht(task.doneAt, DONE_FORMAT)}
+                    </time>
+                  )}
+                </span>
+              ) : (
+                <span>
+                  <span className="sr-only">Due: </span>
+                  {overdue && "Overdue · "}
+                  <time dateTime={task.dueAt}>
+                    {formatInPht(task.dueAt, DUE_FORMAT)}
+                  </time>
+                </span>
+              )}
+            </p>
+          }
+        >
+          {barSlot !== null &&
+            (respondable.has(barSlot.id) ? (
+              <SlotResponse
+                slotId={barSlot.id}
+                slotLabel={task.roleLabels[barSlot.role]}
+                rowId={`slot-${barSlot.id}`}
+                className="col-span-2 mt-0"
+              />
+            ) : (
+              <>
+                <p className="col-span-2 flex items-center gap-2 font-bold">
+                  <span
+                    aria-hidden="true"
+                    className="check-pop inline-flex size-6 items-center justify-center rounded-full bg-positive-strong text-white"
+                  >
+                    <Check className="size-3.5" strokeWidth={3} />
+                  </span>
+                  You&apos;re on it.
+                </p>
+                <HandBack
+                  slotId={barSlot.id}
+                  slotLabel={task.roleLabels[barSlot.role]}
+                  rowId={`slot-${barSlot.id}`}
+                  inBar
+                />
+              </>
+            ))}
+        </TaskColumnControl>
       </div>
+
+      {handBackSlots.length > 0 && (
+        <p className="mt-2 text-sm text-muted-foreground">
+          Can&apos;t take this? Hand it back — your head will reassign it.
+        </p>
+      )}
 
       {task.revisionNote !== null && (
         <div className="mt-3 rounded-r-lg border-l-[3px] border-status-attention bg-status-attention-tint px-card-padding py-3">
@@ -94,6 +227,12 @@ export function TaskDetailView({
             </time>
           </p>
         </div>
+      )}
+
+      {task.description !== null && task.description !== "" && (
+        <p className="mt-4 break-words whitespace-pre-line">
+          {task.description}
+        </p>
       )}
 
       <TaskReview
@@ -111,100 +250,83 @@ export function TaskDetailView({
         focusTargetId={TASK_STATUS_ID}
       />
 
-      {handBackSlots.length > 0 && (
-        <div className="mt-3 flex flex-col gap-3">
-          {handBackSlots.map((slot) => (
-            <HandBack
-              key={slot.id}
-              slotId={slot.id}
-              slotLabel={task.roleLabels[slot.role]}
-              rowId={`slot-${slot.id}`}
-            />
-          ))}
-          <p className="text-sm text-muted-foreground">
-            Can&apos;t take this? Hand it back — your head will reassign it.
-          </p>
-        </div>
-      )}
-
-      <div className="mt-3 flex flex-wrap items-start gap-3">
-        <AddToCalendarMenu taskId={task.id} googleUrl={googleUrl} />
-        <CopyForMessenger message={message} />
-      </div>
-
-      <dl className="mt-6 flex flex-col gap-3">
-        <div className="flex flex-col gap-0.5 sm:flex-row sm:gap-4">
-          <dt className="text-muted-foreground sm:w-32 sm:shrink-0">Owner</dt>
-          <dd>{task.ownerName}</dd>
-        </div>
-        <div className="flex flex-col gap-0.5 sm:flex-row sm:gap-4">
-          <dt className="text-muted-foreground sm:w-32 sm:shrink-0">Due</dt>
-          <dd>
-            <time dateTime={task.dueAt}>
-              {formatInPht(task.dueAt, DUE_FORMAT)}
-            </time>
-          </dd>
-        </div>
-        {task.referenceUrl !== null && (
-          <div className="flex flex-col gap-0.5 sm:flex-row sm:gap-4">
-            <dt className="text-muted-foreground sm:w-32 sm:shrink-0">
-              Reference link
-            </dt>
-            <dd className="min-w-0 break-all">
-              <ExternalLink
-                href={task.referenceUrl}
-                className="inline-flex min-h-11 items-center"
-              >
-                {task.referenceUrl}
-              </ExternalLink>
-            </dd>
-          </div>
-        )}
-      </dl>
-
-      {task.description !== null && task.description !== "" && (
-        <p className="mt-6 break-words whitespace-pre-line">
-          {task.description}
-        </p>
-      )}
-
-      <h2 className="mt-8 text-heading-sm text-navy">Slots</h2>
-      <ul className="mt-3 flex flex-col divide-y divide-border rounded-lg bg-card px-card-padding shadow-card">
+      <h2 className="mt-8 font-heading text-heading-sm text-navy">
+        Role slots
+      </h2>
+      <ul className="mt-3 flex flex-col gap-2">
         {task.slots.map((slot) => {
           const roleLabel = task.roleLabels[slot.role]
           // Focus lands here once an answer is saved and SlotResponse goes
           // away, or Reassign goes, so it stays on this slot instead of
           // falling to the page.
           const rowId = `slot-${slot.id}`
+          const inBar = barSlot?.id === slot.id
           return (
             <li
               key={slot.id}
               id={rowId}
               tabIndex={-1}
-              className="rounded-sm py-3 outline-offset-2 focus-visible:outline-2"
+              className="rounded-lg bg-card px-2.5 py-2 shadow-card outline-offset-2 focus-visible:outline-2"
             >
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                <span className="font-medium">{roleLabel}</span>
-                <span aria-hidden="true" className="text-muted-foreground">
-                  ·
+              <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                <Avatar
+                  aria-hidden="true"
+                  data-avatar={avatarSlot(slot.memberId)}
+                  className="size-7"
+                >
+                  <AvatarFallback className="bg-(--avatar) text-[10px] font-semibold text-white">
+                    {slot.initials}
+                  </AvatarFallback>
+                </Avatar>
+                <span className="min-w-0 break-words">
+                  <span className="font-semibold">{slot.memberName}</span>
+                  <span aria-hidden="true" className="text-muted-foreground">
+                    {" "}
+                    ·{" "}
+                  </span>
+                  <span className="sr-only">, </span>
+                  {roleLabel}
                 </span>
-                <span>{slot.memberName}</span>
                 <StatusBadge
+                  className="ml-auto"
                   family={SLOT_STATE_FAMILIES[slot.state]}
                   label={SLOT_STATE_LABELS[slot.state]}
                 />
               </div>
+              <SlotDeliverables
+                slotId={slot.id}
+                roleLabel={roleLabel}
+                links={slot.links}
+                canAdd={deliverableAdd.has(slot.id)}
+                canRemove={
+                  deliverableRemove.has(slot.id) || task.canRemoveDeliverables
+                }
+                full={
+                  deliverableRemove.has(slot.id) && !deliverableAdd.has(slot.id)
+                }
+                rowId={rowId}
+                headingId={TASK_HEADING_ID}
+              />
               {slot.reason !== null && (
                 <p className="mt-1 text-sm break-words text-muted-foreground">
                   Reason: {slot.reason}
                 </p>
               )}
-              {respondable.has(slot.id) && (
+              {!inBar && respondable.has(slot.id) && (
                 <SlotResponse
                   slotId={slot.id}
                   slotLabel={roleLabel}
                   rowId={rowId}
                 />
+              )}
+              {!inBar && handBackable.has(slot.id) && (
+                <div className="mt-3">
+                  <HandBack
+                    slotId={slot.id}
+                    slotLabel={roleLabel}
+                    rowId={rowId}
+                  />
+                </div>
               )}
               {task.canReassign && reassignOptions !== undefined && (
                 <div className="mt-3">
@@ -212,6 +334,8 @@ export function TaskDetailView({
                     taskId={task.id}
                     taskTitle={task.title}
                     taskDueAt={task.dueAt}
+                    taskReferenceUrls={task.referenceUrls}
+                    taskDeliverables={deliverables}
                     slotId={slot.id}
                     role={slot.role}
                     memberId={slot.memberId}
@@ -221,6 +345,7 @@ export function TaskDetailView({
                     options={reassignOptions}
                     focusTargetId={rowId}
                     fallbackFocusTargetId={TASK_STATUS_ID}
+                    onCopied={onCopied}
                   />
                 </div>
               )}
@@ -228,6 +353,26 @@ export function TaskDetailView({
           )
         })}
       </ul>
+
+      {task.referenceUrls.length > 0 && (
+        <>
+          <h2 className="mt-8 font-heading text-heading-sm text-navy">
+            Reference links
+          </h2>
+          <ul className="mt-2 flex flex-col">
+            {task.referenceUrls.map((url, index) => (
+              <li key={`${index}-${url}`} className="min-w-0">
+                <LinkRow url={url} />
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+
+      <div className="mt-6 flex flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-start sm:gap-3">
+        <AddToCalendarMenu taskId={task.id} googleUrl={googleUrl} />
+        <CopyForMessenger message={message} onCopied={onCopied} />
+      </div>
     </article>
   )
 }

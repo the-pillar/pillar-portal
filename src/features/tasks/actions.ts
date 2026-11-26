@@ -10,6 +10,8 @@ import { phtInputToUtc } from "@/lib/time"
 
 import type { TaskErrorCode } from "./errors"
 import {
+  deliverableAddSchema,
+  deliverableRemoveSchema,
   slotHandBackSchema,
   slotReassignSchema,
   slotRespondSchema,
@@ -22,48 +24,84 @@ import {
 } from "./schemas"
 import type { SlotState, TaskColumn } from "./status"
 
+type Functions = Database["public"]["Functions"]
+type ListArgs<A> = Extract<A, { reference_urls: string[] }>
+
+// The list overloads' Args, with only the parameters whose SQL type allows a
+// null widened: the generator can't see that a plpgsql parameter accepts one,
+// though create_task and update_task treat a null in each as meaningful.
+// `satisfies` refuses a wrong overload and any missing or extra key.
+type Nullable<A, K extends keyof A> = Omit<A, K> & {
+  [P in K]: A[P] | null
+}
+type CreateTaskArgs = Nullable<
+  ListArgs<Functions["create_task"]["Args"]>,
+  "description" | "owning_section_id" | "owning_desk_id"
+>
+type UpdateTaskArgs = Nullable<
+  ListArgs<Functions["update_task"]["Args"]>,
+  "description"
+>
+
+type WidenedArgs = { create_task: CreateTaskArgs; update_task: UpdateTaskArgs }
+
+// The one place the widened nulls meet the generated Args, which can't
+// express them: this helper holds the only `as` in these RPC args.
+function rpcArgs<N extends keyof WidenedArgs>(
+  args: WidenedArgs[N]
+): ListArgs<Functions[N]["Args"]> {
+  return args as ListArgs<Functions[N]["Args"]>
+}
+
 // AD-3's result shape, shared by every action in the slice.
-type ActionError = { ok: false; code: TaskErrorCode; params?: Record<string, unknown> }
+type ActionError = {
+  ok: false
+  code: TaskErrorCode
+  params?: Record<string, unknown>
+}
 
 export type CreateTaskState = { ok: true; data: { id: string } } | ActionError
 
 export type RespondToSlotState =
-  | { ok: true; data: { state: SlotState } }
-  | ActionError
+  { ok: true; data: { state: SlotState } } | ActionError
 
 export type HandBackSlotState =
-  | { ok: true; data: { state: "needs_reassignment" } }
-  | ActionError
+  { ok: true; data: { state: "needs_reassignment" } } | ActionError
 
+/**
+ * `movedAt`: the version move_task returned, exactly as PostgREST wrote it,
+ * which the next move of the card (Undo) passes back.
+ */
 export type MoveTaskState =
-  | { ok: true; data: { column: TaskColumn } }
-  | ActionError
+  { ok: true; data: { column: TaskColumn; movedAt: string } } | ActionError
 
 export type MarkDoneState = { ok: true; data: { column: "done" } } | ActionError
 
 export type SendBackTaskState =
-  | { ok: true; data: { column: "doing" } }
-  | ActionError
+  { ok: true; data: { column: "doing" } } | ActionError
 
 export type ReopenTaskState =
-  | { ok: true; data: { column: "doing" } }
-  | ActionError
+  { ok: true; data: { column: "doing" } } | ActionError
 
 export type DeleteTaskState =
-  | { ok: true; data: { taskId: string } }
-  | ActionError
+  { ok: true; data: { taskId: string } } | ActionError
 
 /**
  * `newAssignee`: update_task's answer, true when any slot got a new member
  * (reassigned or added), so the form offers Copy for Messenger.
  */
 export type UpdateTaskState =
-  | { ok: true; data: { taskId: string; newAssignee: boolean } }
-  | ActionError
+  { ok: true; data: { taskId: string; newAssignee: boolean } } | ActionError
 
 export type ReassignSlotState =
-  | { ok: true; data: { slotId: string } }
-  | ActionError
+  { ok: true; data: { slotId: string } } | ActionError
+
+export type AddDeliverableLinksState =
+  { ok: true; data: { slotId: string; count: number } } | ActionError
+
+/** `removed` is false when the link was already gone. */
+export type RemoveDeliverableLinkState =
+  { ok: true; data: { removed: boolean } } | ActionError
 
 // The codes each command raises as `raise exception ... message = '<code>'`
 // and the UI has copy for. Any other message — a code the UI never expects
@@ -74,6 +112,7 @@ export type ReassignSlotState =
 const CREATE_ERROR_CODES: ReadonlySet<TaskErrorCode> = new Set([
   "auth.not_active",
   "tasks.not_admin",
+  "tasks.invalid_links",
 ])
 
 const COMMAND_ERROR_CODES: ReadonlySet<TaskErrorCode> = new Set([
@@ -81,6 +120,37 @@ const COMMAND_ERROR_CODES: ReadonlySet<TaskErrorCode> = new Set([
   "tasks.not_found",
   "tasks.not_allowed",
 ])
+
+// move_task adds tasks.stale: the card's version is not the one the caller
+// holds, its detail naming the column it is in and who moved it.
+const MOVE_ERROR_CODES: ReadonlySet<TaskErrorCode> = new Set([
+  ...COMMAND_ERROR_CODES,
+  "tasks.stale",
+])
+
+/**
+ * The params of a tasks.stale from move_task: its `details` is the JSON the
+ * command built ('column', 'moved_by', 'moved_by_name'). Anything else, or
+ * unreadable JSON, gives none and the generic stale copy.
+ */
+function staleMoveParams(
+  details: unknown
+): Record<string, unknown> | undefined {
+  if (typeof details !== "string") return undefined
+  try {
+    const parsed: unknown = JSON.parse(details)
+    if (typeof parsed !== "object" || parsed === null) return undefined
+    const { column, moved_by_name } = parsed as Record<string, unknown>
+    return {
+      ...(typeof column === "string" ? { column } : {}),
+      ...(typeof moved_by_name === "string"
+        ? { movedByName: moved_by_name }
+        : {}),
+    }
+  } catch {
+    return undefined
+  }
+}
 
 // The approver's commands, delete_task included. send_back_task's
 // tasks.invalid_note backstop (taskSendBackSchema already refuses a blank or
@@ -105,7 +175,44 @@ const UPDATE_ERROR_CODES: ReadonlySet<TaskErrorCode> = new Set([
   "tasks.duplicate_slot",
   "tasks.invalid_slot_member",
   "tasks.not_allowed",
+  "tasks.invalid_links",
+  "tasks.slot_has_links",
 ])
+
+// add_deliverable_links and remove_deliverable_link. A refused add's
+// tasks.invalid_links carries its reason and the room left in `details`.
+const ADD_LINKS_ERROR_CODES: ReadonlySet<TaskErrorCode> = new Set([
+  "auth.not_active",
+  "tasks.invalid_links",
+  "tasks.not_found",
+  "tasks.not_allowed",
+])
+
+const REMOVE_LINK_ERROR_CODES: ReadonlySet<TaskErrorCode> = new Set([
+  "auth.not_active",
+  "tasks.not_allowed",
+])
+
+/**
+ * The params of a command's refusal whose `details` is a JSON object
+ * ('reason' and 'remaining' of a refused add, 'role' of a refused update),
+ * kept only where their type is right. Anything else gives none.
+ */
+function detailParams(details: unknown): Record<string, unknown> | undefined {
+  if (typeof details !== "string") return undefined
+  try {
+    const parsed: unknown = JSON.parse(details)
+    if (typeof parsed !== "object" || parsed === null) return undefined
+    const { reason, remaining, role } = parsed as Record<string, unknown>
+    return {
+      ...(typeof reason === "string" ? { reason } : {}),
+      ...(typeof remaining === "number" ? { remaining } : {}),
+      ...(typeof role === "string" ? { role } : {}),
+    }
+  } catch {
+    return undefined
+  }
+}
 
 // reassign_slot: the approver's codes, a Done task (tasks.not_allowed: the
 // task was marked Done while the picker was open), a member who left since
@@ -132,7 +239,9 @@ const UNIQUE_VIOLATION = "23505"
  * because this is reachable directly, not only through the form that already
  * validated it with the same schema.
  */
-export async function createTaskAction(input: unknown): Promise<CreateTaskState> {
+export async function createTaskAction(
+  input: unknown
+): Promise<CreateTaskState> {
   const parsed = taskCreateSchema.safeParse(input)
   if (!parsed.success) {
     return { ok: false, code: "tasks.create_failed" }
@@ -146,25 +255,23 @@ export async function createTaskAction(input: unknown): Promise<CreateTaskState>
   }
 
   const supabase = await createClient()
-  // The generated Args type doesn't mark owning_section_id, owning_desk_id,
-  // description or reference_url nullable (the generator can't see that a
-  // plpgsql parameter's SQL type allows null), though create_task's own body
-  // treats a null in any of them as meaningful. The cast reflects what the
-  // database actually accepts.
   const args = {
     title: parsed.data.title,
     description: parsed.data.description,
     owning_section_id: parsed.data.owningSectionId,
     owning_desk_id: parsed.data.owningDeskId,
     due_at: dueAt.toISOString(),
-    reference_url: parsed.data.referenceUrl,
+    reference_urls: parsed.data.referenceUrls,
     slots: parsed.data.slots.map((slot) => ({
       role: slot.role,
       member_id: slot.memberId,
     })),
-  } as Database["public"]["Functions"]["create_task"]["Args"]
+  } satisfies CreateTaskArgs
 
-  const { data, error } = await supabase.rpc("create_task", args)
+  const { data, error } = await supabase.rpc(
+    "create_task",
+    rpcArgs<"create_task">(args)
+  )
 
   if (error) {
     return {
@@ -180,6 +287,8 @@ export async function createTaskAction(input: unknown): Promise<CreateTaskState>
   }
 
   revalidatePath("/admin/tasks")
+  revalidatePath(MEMBER_AREA, "layout")
+  revalidatePath(ADMIN_AREA, "layout")
   return { ok: true, data: { id: data } }
 }
 
@@ -256,35 +365,37 @@ export async function handBackSlotAction(
 }
 
 /**
- * Moves a task to another column (AD-3, AD-4). move_task decides whether the
- * caller may; this only parses, calls it, maps the error and revalidates.
+ * Moves a task to another column (AD-3, AD-4), if the caller's
+ * `expectedMovedAt` is still the task's version. move_task decides whether
+ * the caller may; this only parses, calls it, maps the error and revalidates.
  */
 export async function moveTaskAction(input: unknown): Promise<MoveTaskState> {
   const parsed = taskMoveSchema.safeParse(input)
   if (!parsed.success) {
     return { ok: false, code: "tasks.save_failed" }
   }
-  const { taskId, toColumn } = parsed.data
+  const { taskId, toColumn, expectedMovedAt } = parsed.data
 
   const supabase = await createClient()
-  const { error } = await supabase.rpc("move_task", {
+  const { data, error } = await supabase.rpc("move_task", {
     task_id: taskId,
     to_column: toColumn,
+    expected_moved_at: expectedMovedAt,
   })
 
   if (error) {
-    return {
-      ok: false,
-      code: mapCommandError(error, COMMAND_ERROR_CODES, "tasks.save_failed", {
-        route: "action moveTaskAction",
-        entityType: "task",
-        entityId: taskId,
-      }),
-    }
+    const code = mapCommandError(error, MOVE_ERROR_CODES, "tasks.save_failed", {
+      route: "action moveTaskAction",
+      entityType: "task",
+      entityId: taskId,
+    })
+    const params =
+      code === "tasks.stale" ? staleMoveParams(error.details) : undefined
+    return { ok: false, code, ...(params ? { params } : {}) }
   }
 
   revalidatePath(MEMBER_AREA, "layout")
-  return { ok: true, data: { column: toColumn } }
+  return { ok: true, data: { column: toColumn, movedAt: data } }
 }
 
 /**
@@ -453,14 +564,12 @@ export async function updateTaskAction(
   }
 
   const supabase = await createClient()
-  // As create's: the generated Args type doesn't mark description or
-  // reference_url nullable, though update_task stores a null in either.
   const args = {
     task_id: taskId,
     title: parsed.data.title,
     description: parsed.data.description,
     due_at: dueAt.toISOString(),
-    reference_url: parsed.data.referenceUrl,
+    reference_urls: parsed.data.referenceUrls,
     slots: parsed.data.slots.map((slot) => ({
       ...(slot.id !== undefined
         ? { id: slot.id, loaded_member_id: slot.loadedMemberId }
@@ -468,22 +577,30 @@ export async function updateTaskAction(
       role: slot.role,
       member_id: slot.memberId,
     })),
-  } as Database["public"]["Functions"]["update_task"]["Args"]
+  } satisfies UpdateTaskArgs
 
-  const { data, error } = await supabase.rpc("update_task", args)
+  const { data, error } = await supabase.rpc(
+    "update_task",
+    rpcArgs<"update_task">(args)
+  )
 
   if (error) {
-    return {
-      ok: false,
-      code:
-        error.code === UNIQUE_VIOLATION
-          ? "tasks.duplicate_slot"
-          : mapCommandError(error, UPDATE_ERROR_CODES, "tasks.save_failed", {
-              route: "action updateTaskAction",
-              entityType: "task",
-              entityId: taskId,
-            }),
+    if (error.code === UNIQUE_VIOLATION) {
+      return { ok: false, code: "tasks.duplicate_slot" }
     }
+    const code = mapCommandError(
+      error,
+      UPDATE_ERROR_CODES,
+      "tasks.save_failed",
+      {
+        route: "action updateTaskAction",
+        entityType: "task",
+        entityId: taskId,
+      }
+    )
+    const params =
+      code === "tasks.slot_has_links" ? detailParams(error.details) : undefined
+    return { ok: false, code, ...(params ? { params } : {}) }
   }
 
   revalidatePath(MEMBER_AREA, "layout")
@@ -533,4 +650,91 @@ export async function reassignSlotAction(
   // The review queue and Admin home's count.
   revalidatePath(ADMIN_AREA, "layout")
   return { ok: true, data: { slotId } }
+}
+
+/**
+ * Adds links to a slot the caller holds (AD-3, AD-4), as one command: every
+ * link or none. add_deliverable_links decides whether the caller may and
+ * whether the slot has room; this only parses, calls it, maps the error
+ * (its `details` give a refused list's reason and the room left) and
+ * revalidates. A list that doesn't parse is the same refusal as a bad link.
+ */
+export async function addDeliverableLinksAction(
+  input: unknown
+): Promise<AddDeliverableLinksState> {
+  const parsed = deliverableAddSchema.safeParse(input)
+  if (!parsed.success) {
+    return {
+      ok: false,
+      code: "tasks.invalid_links",
+      params: { reason: "link" },
+    }
+  }
+  const { slotId, urls } = parsed.data
+
+  const supabase = await createClient()
+  const { error } = await supabase.rpc("add_deliverable_links", {
+    slot_id: slotId,
+    urls,
+  })
+
+  if (error) {
+    const code = mapCommandError(
+      error,
+      ADD_LINKS_ERROR_CODES,
+      "tasks.save_failed",
+      {
+        route: "action addDeliverableLinksAction",
+        entityType: "task_assignment",
+        entityId: slotId,
+      }
+    )
+    const params =
+      code === "tasks.invalid_links" ? detailParams(error.details) : undefined
+    return { ok: false, code, ...(params ? { params } : {}) }
+  }
+
+  revalidatePath(MEMBER_AREA, "layout")
+  revalidatePath(ADMIN_AREA, "layout")
+  return { ok: true, data: { slotId, count: urls.length } }
+}
+
+/**
+ * Removes one deliverable link (AD-3, AD-4). remove_deliverable_link decides
+ * whether the caller may, and answers false for a link already gone; this
+ * only parses, calls it, maps the error and revalidates.
+ */
+export async function removeDeliverableLinkAction(
+  input: unknown
+): Promise<RemoveDeliverableLinkState> {
+  const parsed = deliverableRemoveSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, code: "tasks.save_failed" }
+  }
+  const { linkId } = parsed.data
+
+  const supabase = await createClient()
+  const { data, error } = await supabase.rpc("remove_deliverable_link", {
+    link_id: linkId,
+  })
+
+  if (error) {
+    return {
+      ok: false,
+      code: mapCommandError(
+        error,
+        REMOVE_LINK_ERROR_CODES,
+        "tasks.save_failed",
+        {
+          route: "action removeDeliverableLinkAction",
+          entityType: "task_deliverable_link",
+          entityId: linkId,
+        }
+      ),
+    }
+  }
+
+  revalidatePath(MEMBER_AREA, "layout")
+  revalidatePath(ADMIN_AREA, "layout")
+  return { ok: true, data: { removed: data === true } }
 }

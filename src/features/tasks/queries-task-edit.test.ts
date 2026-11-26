@@ -34,7 +34,7 @@ const TASK_ROW = {
   description: "Two pages.",
   // 23:30 PHT on Oct 31, as PostgREST returns it.
   due_at: "2026-10-31T15:30:00+00:00",
-  reference_url: "https://example.com/brief",
+  reference_urls: ["https://example.com/brief"],
   column: "doing",
   updated_at: "2026-10-30T02:15:42.123456+00:00",
   sections: null,
@@ -85,6 +85,7 @@ function mockEdit({
     { id: STAFF, name: "Staff Layout Artist" },
     { id: WRITER, name: "Staff Writer" },
   ] as unknown,
+  links = [] as unknown,
   errors = {} as Partial<Record<string, unknown>>,
 } = {}) {
   const calls: Call[] = []
@@ -98,6 +99,7 @@ function mockEdit({
     tasks: task,
     task_assignments: slots,
     member_directory: members,
+    task_deliverable_links: links,
   }
   createClient.mockResolvedValue({
     rpc,
@@ -138,7 +140,7 @@ describe("getTaskEdit", () => {
     const tasks = calls.find((c) => c.table === "tasks")!
     expect(tasks.calls).toContainEqual([
       "select",
-      "id, title, description, due_at, reference_url, column, updated_at, sections(name), desks(name)",
+      "id, title, description, due_at, reference_urls, column, updated_at, sections(name), desks(name)",
     ])
     expect(tasks.calls).toContainEqual(["eq", "id", TASK_ID])
     const slots = calls.find((c) => c.table === "task_assignments")!
@@ -151,6 +153,39 @@ describe("getTaskEdit", () => {
     expect(rpc).toHaveBeenCalledExactlyOnceWith("task_capabilities", {
       ids: [TASK_ID],
     })
+  })
+
+  it("counts each slot's deliverable links and groups the task's by role for Messenger", async () => {
+    mockEdit({
+      links: [
+        {
+          id: "l1",
+          slot_id: SLOT_B,
+          url: "https://docs.google.com/document/d/1",
+          added_by: WRITER,
+          added_at: "2026-10-30T03:00:00+00:00",
+          task_assignments: { task_id: TASK_ID },
+        },
+        {
+          id: "l2",
+          slot_id: SLOT_B,
+          url: "https://example.org/2",
+          added_by: WRITER,
+          added_at: "2026-10-30T03:01:00+00:00",
+          task_assignments: { task_id: TASK_ID },
+        },
+      ],
+    })
+
+    const edit = await getTaskEdit(TASK_ID)
+
+    expect(edit?.slots.map((slot) => slot.linkCount)).toEqual([0, 2, 0])
+    expect(edit?.deliverables).toEqual([
+      {
+        role: "writer",
+        urls: ["https://docs.google.com/document/d/1", "https://example.org/2"],
+      },
+    ])
   })
 
   it("names each slot's member from member_directory, never members", async () => {
@@ -176,27 +211,31 @@ describe("getTaskEdit", () => {
       description: "Two pages.",
       ownerName: "Layout",
       dueAtInput: "2026-10-31T23:30",
-      referenceUrl: "https://example.com/brief",
+      referenceUrls: ["https://example.com/brief"],
       slots: [
         {
           id: SLOT_A,
           role: "layout_artist",
           memberId: STAFF,
           memberName: "Staff Layout Artist",
+          linkCount: 0,
         },
         {
           id: SLOT_B,
           role: "writer",
           memberId: WRITER,
           memberName: "Staff Writer",
+          linkCount: 0,
         },
         {
           id: SLOT_C,
           role: "cartoonist",
           memberId: FORMER,
           memberName: "Former member",
+          linkCount: 0,
         },
       ],
+      deliverables: [],
       done: false,
       canManage: true,
       updatedAt: "2026-10-30T02:15:42.123456+00:00",

@@ -10,6 +10,8 @@ import {
   phtMonthBounds,
   phtMonthLabel,
   phtMonthOf,
+  shiftDay,
+  dayOfWeek,
   shiftMonth,
   utcToPhtInput,
 } from "./time"
@@ -324,6 +326,29 @@ describe.each(ZONES)("with TZ=%s", (zone, januaryOffset) => {
 
     it("names a day Manila skipped, as the calendar date it is", () => {
       expect(phtDayLabel("1844-12-31")).toBe("Tue, Dec 31")
+    })
+  })
+
+  describe("shiftDay and dayOfWeek", () => {
+    it.each([
+      ["2026-11-20", 1, "2026-11-21"],
+      ["2026-11-30", 1, "2026-12-01"],
+      ["2026-12-31", 1, "2027-01-01"],
+      ["2026-03-01", -1, "2026-02-28"],
+      ["2028-02-28", 1, "2028-02-29"],
+      ["2026-11-20", 7, "2026-11-27"],
+    ])("%s plus %i is %s", (day, delta, expected) => {
+      expect(shiftDay(day, delta)).toBe(expected)
+    })
+
+    it("names the weekday, Sunday as 0", () => {
+      expect(dayOfWeek("2026-11-15")).toBe(0)
+      expect(dayOfWeek("2026-11-20")).toBe(5)
+      expect(dayOfWeek("2026-11-21")).toBe(6)
+    })
+
+    it("refuses a day that isn't real", () => {
+      expect(() => shiftDay("2026-02-30", 1)).toThrow()
     })
   })
 })

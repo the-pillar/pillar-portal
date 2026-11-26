@@ -5,9 +5,12 @@ export type { InactiveMemberState, MemberState } from "./account-state"
 export {
   approveMemberAction,
   declineMemberAction,
+  recordCopiedTaskAction,
+  recordOnboardingAction,
   resetMemberMfaAction,
   signInAsPersonaAction,
   signInWithGoogleAction,
+  showTipsAgainAction,
   signOutAction,
 } from "./actions"
 export type { MemberCommandState, PersonaSignInState } from "./actions"
@@ -20,6 +23,10 @@ export { TwoFactorSetup } from "./components/two-factor-setup"
 export { MemberApprovalsSkeleton } from "./components/member-approvals-skeleton"
 export { MemberMenu } from "./components/member-menu"
 export type { MemberMenuExtraLink } from "./components/member-menu"
+export { FirstRunCard } from "./components/first-run-card"
+export { OnboardingChecklist } from "./components/onboarding-checklist"
+export type { ChecklistItems } from "./components/onboarding-checklist"
+export { OnboardingTour } from "./components/onboarding-tour"
 export { PersonaSignIn } from "./components/persona-sign-in"
 export { SharedComputerProvider } from "./components/shared-computer"
 export { SharedSessionWatcher } from "./components/shared-session-watcher"
@@ -39,6 +46,7 @@ export {
   getCurrentMember,
   getMemberApprovals,
   getMyHomeScope,
+  getMyOnboarding,
   requireActiveMember,
 } from "./queries"
 export type {
@@ -46,6 +54,7 @@ export type {
   CurrentMember,
   MemberApprovalsData,
   MemberRole,
+  MyOnboarding,
   PendingMember,
   RosterMember,
 } from "./queries"
@@ -59,6 +68,7 @@ export {
   memberApproveSchema,
   memberDeclineSchema,
   memberMfaResetSchema,
+  onboardingStepSchema,
   personaSignInSchema,
 } from "./schemas"
 export type {

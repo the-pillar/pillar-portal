@@ -38,7 +38,7 @@ vi.mock("../actions", () => ({
   renameMemberAction,
 }))
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }))
-vi.mock("sonner", () => ({
+vi.mock("@/components/ui/toast", () => ({
   toast: { error: toastError, success: toastSuccess },
 }))
 
@@ -206,6 +206,17 @@ describe("PendingMemberCard", () => {
     expect(pickButton()).toHaveClass("min-h-11")
     expect(declineButton()).toHaveClass("min-h-11")
     expect(screen.queryByRole("checkbox")).toBeNull()
+  })
+
+  it("leads with a 40px initials avatar, Decline as outline, and no card border", () => {
+    const { container } = render(<Approvals />)
+
+    const avatar = container.querySelector("[data-slot='avatar']")!
+    expect(avatar).toHaveClass("size-10")
+    expect(avatar).toHaveAttribute("data-avatar")
+    expect(avatar).toHaveTextContent("AR")
+    expect(declineButton()).toHaveAttribute("data-variant", "outline")
+    expect(screen.getByRole("listitem").className).not.toMatch(/\bborder\b/)
   })
 
   it("opens one fieldset per group of 44px checkbox rows, Approve disabled, with no axe violations", async () => {

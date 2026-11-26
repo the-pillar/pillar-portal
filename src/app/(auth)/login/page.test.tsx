@@ -198,6 +198,25 @@ describe("LoginPage, shared-computer idle sign-out", () => {
   })
 })
 
+describe("LoginPage, layout", () => {
+  it("shows the brand block, then one white panel with no border whose title is the only h1", async () => {
+    const { container } = await renderLoginPage({ personas: undefined })
+
+    expect(screen.getByText("The Pillar Portal")).toHaveClass("font-heading")
+    expect(screen.getByText("Critical. Fearless. Unapologetic.")).toHaveClass(
+      "text-muted-foreground"
+    )
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1)
+    const panel = screen.getByRole("heading", { level: 1 }).parentElement!
+    expect(panel).toHaveClass("bg-card", "shadow-card")
+    expect(panel.className).not.toMatch(/\bborder/)
+    expect(container.innerHTML).not.toContain("card-edge")
+    expect(
+      screen.getByRole("checkbox", { name: "This is a shared computer" })
+    ).toHaveClass("size-[22px]")
+  })
+})
+
 describe("LoginPage, signed out", () => {
   it("offers Sign in with Google, then the persona buttons while personas are on", async () => {
     const { container } = await renderLoginPage({
@@ -210,7 +229,7 @@ describe("LoginPage, signed out", () => {
     )
     const button = googleButton()!
     expect(button).toHaveAttribute("type", "submit")
-    expect(button).toHaveClass("min-h-11", "w-full")
+    expect(button).toHaveClass("min-h-12", "w-full")
     const form = button.closest("form")!
     expect(form.querySelector('input[name="next"]')).toHaveValue(
       "checked:/dashboard?view=board"
@@ -375,7 +394,10 @@ describe("LoginPage, a member who isn't active", () => {
       expect(screen.getByText(text)).toBeInTheDocument()
       const signOut = screen.getByRole("button", { name: "Sign out" })
       expect(signOut).toHaveAttribute("type", "submit")
+      // A text link, not a button-shaped control.
       expect(signOut).toHaveClass("min-h-11")
+      expect(signOut).toHaveAttribute("data-variant", "link")
+      expect(container.querySelector("[data-family]")).not.toBeNull()
       // Sign out keeps the checked next for the account they switch to.
       expect(
         signOut.closest("form")!.querySelector('input[name="next"]')
@@ -488,9 +510,9 @@ describe("LoginPage inside an in-app browser", () => {
 
 describe("LoginPage's title", () => {
   it.each([
-    ["pending", "pending", "Awaiting approval · The Pillar Portal"],
-    ["declined", "pending", "Access declined · The Pillar Portal"],
-    ["deactivated", "editorial_admin", "No access · The Pillar Portal"],
+    ["pending", "pending", "Awaiting approval"],
+    ["declined", "pending", "Access declined"],
+    ["deactivated", "editorial_admin", "No access"],
   ] as const)("names a %s member's state", async (state, role, title) => {
     getCurrentMember.mockResolvedValue({ ...MEMBER, role, state })
 
@@ -504,7 +526,7 @@ describe("LoginPage's title", () => {
     getCurrentMember.mockResolvedValue(member)
 
     await expect(generateMetadata()).resolves.toEqual({
-      title: "Sign in · The Pillar Portal",
+      title: "Sign in",
     })
   })
 })

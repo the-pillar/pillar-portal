@@ -10,16 +10,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 // imports, so the stubs the tests inspect are vi.hoisted.
 const { BoardView, PlannerView, WhatsMineView, requireActiveMember } =
   vi.hoisted(() => ({
-    BoardView: vi.fn(({ owner }: { owner: unknown }) => (
-      <p>board view, owner={String(owner)}</p>
+    BoardView: vi.fn(({ viewerId }: { viewerId: string }) => (
+      <p>board view, viewer={viewerId}</p>
     )),
-    PlannerView: vi.fn(
-      ({ month, scope }: { month: unknown; scope: unknown }) => (
-        <p>
-          planner view, month={String(month)}, scope={String(scope)}
-        </p>
-      )
-    ),
+    PlannerView: vi.fn(({ month }: { month: unknown }) => (
+      <p>planner view, month={String(month)}</p>
+    )),
     WhatsMineView: vi.fn(() => <p>whats mine view</p>),
     requireActiveMember: vi.fn(),
   }))
@@ -68,14 +64,14 @@ const props = (search: Search) =>
 describe("generateMetadata", () => {
   it("titles the Board view", async () => {
     await expect(generateMetadata(props({ view: "board" }))).resolves.toEqual({
-      title: "Board · The Pillar Portal",
+      title: "Board",
     })
   })
 
   it("titles the Planner view", async () => {
     await expect(generateMetadata(props({ view: "planner" }))).resolves.toEqual(
       {
-        title: "Planner · The Pillar Portal",
+        title: "Planner",
       }
     )
   })
@@ -87,7 +83,7 @@ describe("generateMetadata", () => {
     ["a repeated planner view", { view: ["planner", "planner"] }],
   ])("titles What's mine for %s", async (_label, search) => {
     await expect(generateMetadata(props(search))).resolves.toEqual({
-      title: "What's mine · The Pillar Portal",
+      title: "What's mine",
     })
   })
 })
@@ -103,24 +99,19 @@ describe("DashboardPage", () => {
     expect(requireActiveMember).toHaveBeenCalledOnce()
   })
 
-  it("renders the Board for ?view=board, handing it the raw owner", async () => {
+  it("renders the Board for ?view=board, handing it the viewer's id", async () => {
+    requireActiveMember.mockResolvedValue({ id: "member-1" })
     render(await DashboardPage(props({ view: "board", owner: "desk:photo" })))
 
-    expect(screen.getByText("board view, owner=desk:photo")).toBeInTheDocument()
+    expect(screen.getByText("board view, viewer=member-1")).toBeInTheDocument()
     expect(WhatsMineView).not.toHaveBeenCalled()
     expect(PlannerView).not.toHaveBeenCalled()
   })
 
-  it("renders the Planner for ?view=planner, handing it the raw month and scope", async () => {
-    render(
-      await DashboardPage(
-        props({ view: "planner", month: "2026-11", scope: "home" })
-      )
-    )
+  it("renders the Planner for ?view=planner, handing it the raw month", async () => {
+    render(await DashboardPage(props({ view: "planner", month: "2026-11" })))
 
-    expect(
-      screen.getByText("planner view, month=2026-11, scope=home")
-    ).toBeInTheDocument()
+    expect(screen.getByText("planner view, month=2026-11")).toBeInTheDocument()
     expect(BoardView).not.toHaveBeenCalled()
     expect(WhatsMineView).not.toHaveBeenCalled()
   })
@@ -134,7 +125,6 @@ describe("DashboardPage", () => {
 
     expect(PlannerView.mock.calls[0][0]).toEqual({
       month: ["2026-11", "2026-12"],
-      scope: undefined,
     })
   })
 
@@ -155,14 +145,6 @@ describe("DashboardPage", () => {
       expect(element.props.fallback.type).toBe(skeleton)
     }
   )
-
-  it("hands the Board a repeated owner as it came, for the parser to refuse", async () => {
-    render(
-      await DashboardPage(props({ view: "board", owner: ["all", "articles"] }))
-    )
-
-    expect(BoardView.mock.calls[0][0]).toEqual({ owner: ["all", "articles"] })
-  })
 
   it.each([
     ["no view", {}],

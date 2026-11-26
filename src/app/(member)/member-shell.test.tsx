@@ -30,6 +30,7 @@ vi.mock("@/lib/env.client", () => ({
 vi.mock("@/features/members/actions", () => ({
   signInAsPersonaAction: vi.fn(),
   signOutAction,
+  showTipsAgainAction: vi.fn(),
 }))
 
 // color-contrast can't be computed in jsdom (it is always "incomplete").
@@ -48,16 +49,31 @@ function renderShell(role: "staff" | "editorial_admin" = "staff") {
   )
 }
 
+// jsdom applies no CSS, so both "Views" navs are in its tree. At any width one
+// is `display: none` (the header's below `md`, the bar's from it); hide the
+// one the stylesheet would, so a check sees the page a visitor's browser does.
+function atWidth(width: "phone" | "desktop") {
+  const banner = screen.getByRole("banner")
+  for (const nav of screen.getAllByRole("navigation", { name: "Views" })) {
+    const inHeader = banner.contains(nav)
+    nav.hidden = width === "phone" ? inHeader : !inHeader
+  }
+}
+
 afterEach(() => {
   cleanup()
   vi.clearAllMocks()
 })
 
 describe("MemberShell", () => {
-  it("has no axe violations with the menu closed", async () => {
-    const { container } = renderShell()
-    expect(await axeViolations(container)).toEqual([])
-  })
+  it.each(["phone", "desktop"] as const)(
+    "has no axe violations with the menu closed, at a %s width",
+    async (width) => {
+      const { container } = renderShell()
+      atWidth(width)
+      expect(await axeViolations(container)).toEqual([])
+    }
+  )
 
   it("has a banner with the logo, the wordmark and the account menu, then main", () => {
     renderShell()
@@ -88,27 +104,37 @@ describe("MemberShell", () => {
       "max-w-160",
       "has-[[data-wide-view]]:max-w-[1440px]"
     )
-    // The header's content row and the tabs row stay 640px on every view, so
-    // switching tabs never moves the logo, tabs or avatar.
+    // The header's one row (logo, tabs, avatar) stays 640px on every view, so
+    // switching tabs never moves them.
     const banner = screen.getByRole("banner")
     const rows = [...banner.children].filter((el) => el.tagName === "DIV")
-    expect(rows).toHaveLength(2)
-    for (const row of rows) {
-      expect(row).toHaveClass("max-w-160")
-      expect(row.className).not.toMatch(/1440/)
-    }
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toHaveClass("max-w-160")
+    expect(rows[0].className).not.toMatch(/1440/)
   })
 
-  it("shows the Dashboard views tabs in the banner with What's mine current", () => {
+  it("shows the Views tabs in the banner from md, and as the bottom tab bar after main below it, What's mine current in both", () => {
     renderShell()
     const banner = screen.getByRole("banner")
 
-    const nav = within(banner).getByRole("navigation", {
-      name: "Dashboard views",
-    })
-    expect(
-      within(nav).getByRole("link", { name: "What's mine" })
-    ).toHaveAttribute("aria-current", "page")
+    const [inHeader, bar] = screen.getAllByRole("navigation", { name: "Views" })
+    expect(banner).toContainElement(inHeader)
+    expect(banner).not.toContainElement(bar)
+    expect(bar).toHaveAttribute("data-bottom-tab-bar")
+    expect(screen.getByRole("main").nextElementSibling).toBe(bar)
+    for (const nav of [inHeader, bar]) {
+      expect(
+        within(nav).getByRole("link", { name: "What's mine" })
+      ).toHaveAttribute("aria-current", "page")
+    }
+  })
+
+  it("keeps main clear of the fixed bar by its height and 8px", () => {
+    renderShell()
+
+    expect(screen.getByRole("main")).toHaveClass(
+      "tabbar-fixed:pb-(--bottom-tab-bar-clear)"
+    )
   })
 
   it("opens the menu with Enter, offers Sign out, and returns focus on Escape", async () => {
@@ -180,5 +206,51 @@ describe("MemberShell", () => {
     )
 
     await waitFor(() => expect(signOutAction).toHaveBeenCalledOnce())
+  })
+})
+
+describe("MemberShell's New task slot", () => {
+  it("shows the button it is given in the header action slot, and nothing without one", () => {
+    const { container, rerender } = render(
+      <MemberShell
+        member={{ name: "Head Layout Artist", role: "editorial_admin" }}
+        newTask={<button type="button">New task</button>}
+      >
+        <h1>Page</h1>
+      </MemberShell>
+    )
+    expect(
+      container.querySelector("[data-slot='header-action']")
+    ).toContainElement(screen.getByRole("button", { name: "New task" }))
+
+    rerender(
+      <MemberShell
+        member={{ name: "Head Layout Artist", role: "editorial_admin" }}
+      >
+        <h1>Page</h1>
+      </MemberShell>
+    )
+    expect(container.querySelector("[data-slot='header-action']")).toBeNull()
+    expect(screen.queryByRole("button", { name: "New task" })).toBeNull()
+  })
+
+  it("adds Show tips again to the avatar menu from the onboarding prop", async () => {
+    const user = userEvent.setup()
+    render(
+      <MemberShell
+        member={{ name: "Staff Layout Artist", role: "staff" }}
+        onboarding="tips"
+      >
+        <h1>What&apos;s mine</h1>
+      </MemberShell>
+    )
+
+    await user.click(
+      screen.getByRole("button", { name: "Staff Layout Artist, account" })
+    )
+
+    expect(
+      await screen.findByRole("menuitem", { name: "Show tips again" })
+    ).toBeInTheDocument()
   })
 })

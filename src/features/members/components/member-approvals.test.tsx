@@ -29,7 +29,9 @@ vi.mock("../actions", () => ({
   deactivateMemberAction: vi.fn(),
 }))
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }))
-vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }))
+vi.mock("@/components/ui/toast", () => ({
+  toast: { error: vi.fn(), success: vi.fn() },
+}))
 
 afterEach(() => {
   cleanup()
@@ -236,9 +238,10 @@ describe("MemberApprovals", () => {
     const rows = within(
       screen.getByRole("region", { name: "Active members" })
     ).getAllByRole("listitem")
+    // The 40px initials avatar leads each row's text.
     expect(rows.map((row) => row.textContent)).toEqual([
-      "Head Layout ArtistEdit namepersona-head_layout_artist@example.comHead Layout ArtistChange positionsReset two-factorDeactivate",
-      "News Editor and Online Managerdemo-news_editor@example.comNews Editor · Online Manager",
+      "HAHead Layout ArtistEdit namepersona-head_layout_artist@example.comHead Layout ArtistChange positionsReset two-factorDeactivate",
+      "NMNews Editor and Online Managerdemo-news_editor@example.comNews Editor · Online Manager",
     ])
     expect(
       within(screen.getByRole("region", { name: "Active members" }))

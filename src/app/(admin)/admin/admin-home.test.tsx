@@ -57,17 +57,20 @@ describe("AdminHomeCards", () => {
     const { container } = render(<AdminHomeCards cards={[APPROVALS]} />)
 
     const list = screen.getByRole("list")
-    expect(list).toHaveClass(
-      "grid",
-      "items-start",
-      "sm:grid-cols-2",
-      "lg:grid-cols-3"
-    )
+    expect(list).toHaveClass("grid", "items-start")
+    // "Needs you" heads the rows, in the serif.
+    expect(
+      screen.getByRole("heading", { level: 2, name: "Needs you" })
+    ).toHaveClass("font-heading", "text-heading-sm")
     const items = within(list).getAllByRole("listitem")
     expect(items).toHaveLength(1)
     const link = within(items[0]).getByRole("link")
     expect(link).toHaveAccessibleName("Awaiting approval (2)")
-    expect(link).toHaveTextContent(/^Awaiting approval \(2\)$/)
+    // The dot of the family it counts, then the label; the count is
+    // right-aligned in the serif, hidden from assistive tech (the name has it).
+    expect(link.querySelector("[data-family='progress']")).not.toBeNull()
+    const count = within(link).getByText("2", { selector: "[aria-hidden]" })
+    expect(count).toHaveClass("ml-auto", "font-heading")
     expect(link).toHaveAttribute("href", "/admin/members")
     // A 44px target with the card look.
     expect(link).toHaveClass(
@@ -94,10 +97,12 @@ describe("AdminHomeCards", () => {
       />
     )
 
-    expect(screen.getAllByRole("link").map((l) => l.textContent)).toEqual([
-      "First (1)",
-      "Awaiting approval (2)",
-    ])
+    expect(
+      screen.getAllByRole("link").map((l) => l.getAttribute("href"))
+    ).toEqual(["/admin/fixture", "/admin/members"])
+    expect(
+      screen.getAllByRole("link").map((l) => l.textContent?.trim())
+    ).toEqual(["First1", "Awaiting approval2"])
   })
 
   it.each([
@@ -113,7 +118,7 @@ describe("AdminHomeCards", () => {
           level: 2,
           name: "Nothing needs you right now.",
         })
-      ).toHaveClass("text-heading-sm")
+      ).toHaveClass("font-heading", "text-heading-sm")
       expect(screen.queryByRole("list")).not.toBeInTheDocument()
       expect(screen.queryByRole("link")).not.toBeInTheDocument()
       expect(await axeViolations(container)).toEqual([])
@@ -129,10 +134,10 @@ describe("AdminHomeCards' list card", () => {
     const [card] = cardItems()
     expect(
       within(card).getByRole("heading", {
-        level: 2,
+        level: 3,
         name: "Needs reassignment (7)",
       })
-    ).toHaveClass("text-heading-sm")
+    ).toHaveClass("font-semibold")
     const rows = previewRows()
     expect(card).toContainElement(rows[0])
     expect(rows.map((row) => row.firstElementChild?.textContent)).toEqual([

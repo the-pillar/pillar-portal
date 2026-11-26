@@ -5,7 +5,8 @@ import { cleanup, render, screen, within } from "@testing-library/react"
 import axe from "axe-core"
 import { afterEach, describe, expect, it } from "vitest"
 
-import type { TaskCardData } from "../queries/shared"
+import type { PlannerCard } from "../queries/planner"
+import { plannerCard } from "./board-fixtures"
 import { PlannerGrid } from "./planner-grid"
 
 afterEach(cleanup)
@@ -18,24 +19,11 @@ async function axeViolations(node: Element) {
   return results.violations
 }
 
-let nextId = 0
-function task(title: string, dueAt: string): TaskCardData {
-  nextId += 1
-  return {
-    id: `00000000-0000-4000-8000-${String(nextId).padStart(12, "0")}`,
-    title,
-    ownerName: "Layout",
-    dueAt,
-    column: "to_do",
-    overdue: false,
-    sentBack: false,
-    hasAwaitingResponse: false,
-    hasNeedsReassignment: false,
-    assignees: [],
-  }
+function task(title: string, dueAt: string, yours = false): PlannerCard {
+  return plannerCard({ title, dueAt, yours })
 }
 
-function renderGrid(tasks: TaskCardData[], today = "2026-10-08") {
+function renderGrid(tasks: PlannerCard[], today = "2026-10-08") {
   return render(
     <>
       <h2 id="month-heading">October 2026</h2>
@@ -102,15 +90,25 @@ describe("PlannerGrid", () => {
     ])
   })
 
-  it("marks today's cell with aria-current and the 2px inset navy ring, and no other", () => {
+  it("marks today's cell with aria-current and its number on a filled navy circle, and no other", () => {
     renderGrid([])
 
     const today = cellOf(8)
     expect(today).toHaveAttribute("aria-current", "date")
-    expect(today).toHaveClass("ring-2", "ring-navy", "ring-inset")
+    const number = today.querySelector("time")
+    expect(number).toHaveClass("rounded-full", "bg-navy", "text-white")
     expect(document.querySelectorAll('[aria-current="date"]')).toHaveLength(1)
     expect(cellOf(9)).not.toHaveAttribute("aria-current")
-    expect(cellOf(9)).not.toHaveClass("ring-2")
+    expect(cellOf(9).querySelector("time")).not.toHaveClass("bg-navy")
+    expect(cellOf(9).querySelector("time")).toHaveClass("text-muted-foreground")
+  })
+
+  it("is a white cell at least 112px tall, with outside-month cells in the page color", () => {
+    renderGrid([])
+
+    expect(cellOf(9)).toHaveClass("bg-card", "h-28")
+    const blank = screen.getAllByRole("cell")[0]
+    expect(blank).toHaveClass("bg-background")
   })
 
   it("marks no cell when today is in another month", () => {
@@ -130,13 +128,13 @@ describe("PlannerGrid", () => {
     ])
 
     expect(
-      within(cellOf(10)).getByRole("link", { name: /^Masthead brief,/ })
+      within(cellOf(10)).getByRole("link", { name: /^Layout: Masthead brief,/ })
     ).toBeInTheDocument()
     expect(
-      within(cellOf(31)).getByRole("link", { name: /^Last call,/ })
+      within(cellOf(31)).getByRole("link", { name: /^Layout: Last call,/ })
     ).toBeInTheDocument()
     expect(
-      within(cellOf(2)).getByRole("link", { name: /^Early bird,/ })
+      within(cellOf(2)).getByRole("link", { name: /^Layout: Early bird,/ })
     ).toBeInTheDocument()
     expect(within(cellOf(1)).queryByRole("link")).toBeNull()
   })
@@ -147,7 +145,16 @@ describe("PlannerGrid", () => {
 
     const links = within(cellOf(15)).getAllByRole("link")
     expect(links.map((link) => link.textContent)).toEqual(titles)
+    expect(links.every((link) => link.dataset.owner === "layout")).toBe(true)
     expect(screen.queryByText(/more/)).toBeNull()
+  })
+
+  it("fills the chips I hold an open slot on", () => {
+    renderGrid([task("Mine", "2026-10-15T01:00:00Z", true)])
+
+    expect(
+      within(cellOf(15)).getByRole("link", { name: /^Layout: Mine,/ })
+    ).toHaveClass("bg-navy-tint")
   })
 
   it("has no axe violations", async () => {

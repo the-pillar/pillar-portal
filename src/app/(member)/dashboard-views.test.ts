@@ -24,9 +24,9 @@ describe("parseDashboardView", () => {
 describe("DASHBOARD_VIEW_TITLES", () => {
   it("titles each view", () => {
     expect(DASHBOARD_VIEW_TITLES).toEqual({
-      "whats-mine": "What's mine · The Pillar Portal",
-      board: "Board · The Pillar Portal",
-      planner: "Planner · The Pillar Portal",
+      "whats-mine": "What's mine",
+      board: "Board",
+      planner: "Planner",
     })
   })
 })
