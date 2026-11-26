@@ -10,6 +10,8 @@ import { phtInputToUtc } from "@/lib/time"
 
 import type { TaskErrorCode } from "./errors"
 import {
+  deliverableAddSchema,
+  deliverableRemoveSchema,
   slotHandBackSchema,
   slotReassignSchema,
   slotRespondSchema,
@@ -94,6 +96,13 @@ export type UpdateTaskState =
 export type ReassignSlotState =
   { ok: true; data: { slotId: string } } | ActionError
 
+export type AddDeliverableLinksState =
+  { ok: true; data: { slotId: string; count: number } } | ActionError
+
+/** `removed` is false when the link was already gone. */
+export type RemoveDeliverableLinkState =
+  { ok: true; data: { removed: boolean } } | ActionError
+
 // The codes each command raises as `raise exception ... message = '<code>'`
 // and the UI has copy for. Any other message — a code the UI never expects
 // (create_task's tasks.no_slots and tasks.invalid_slot_member backstops), a
@@ -167,7 +176,43 @@ const UPDATE_ERROR_CODES: ReadonlySet<TaskErrorCode> = new Set([
   "tasks.invalid_slot_member",
   "tasks.not_allowed",
   "tasks.invalid_links",
+  "tasks.slot_has_links",
 ])
+
+// add_deliverable_links and remove_deliverable_link. A refused add's
+// tasks.invalid_links carries its reason and the room left in `details`.
+const ADD_LINKS_ERROR_CODES: ReadonlySet<TaskErrorCode> = new Set([
+  "auth.not_active",
+  "tasks.invalid_links",
+  "tasks.not_found",
+  "tasks.not_allowed",
+])
+
+const REMOVE_LINK_ERROR_CODES: ReadonlySet<TaskErrorCode> = new Set([
+  "auth.not_active",
+  "tasks.not_allowed",
+])
+
+/**
+ * The params of a command's refusal whose `details` is a JSON object
+ * ('reason' and 'remaining' of a refused add, 'role' of a refused update),
+ * kept only where their type is right. Anything else gives none.
+ */
+function detailParams(details: unknown): Record<string, unknown> | undefined {
+  if (typeof details !== "string") return undefined
+  try {
+    const parsed: unknown = JSON.parse(details)
+    if (typeof parsed !== "object" || parsed === null) return undefined
+    const { reason, remaining, role } = parsed as Record<string, unknown>
+    return {
+      ...(typeof reason === "string" ? { reason } : {}),
+      ...(typeof remaining === "number" ? { remaining } : {}),
+      ...(typeof role === "string" ? { role } : {}),
+    }
+  } catch {
+    return undefined
+  }
+}
 
 // reassign_slot: the approver's codes, a Done task (tasks.not_allowed: the
 // task was marked Done while the picker was open), a member who left since
@@ -540,17 +585,22 @@ export async function updateTaskAction(
   )
 
   if (error) {
-    return {
-      ok: false,
-      code:
-        error.code === UNIQUE_VIOLATION
-          ? "tasks.duplicate_slot"
-          : mapCommandError(error, UPDATE_ERROR_CODES, "tasks.save_failed", {
-              route: "action updateTaskAction",
-              entityType: "task",
-              entityId: taskId,
-            }),
+    if (error.code === UNIQUE_VIOLATION) {
+      return { ok: false, code: "tasks.duplicate_slot" }
     }
+    const code = mapCommandError(
+      error,
+      UPDATE_ERROR_CODES,
+      "tasks.save_failed",
+      {
+        route: "action updateTaskAction",
+        entityType: "task",
+        entityId: taskId,
+      }
+    )
+    const params =
+      code === "tasks.slot_has_links" ? detailParams(error.details) : undefined
+    return { ok: false, code, ...(params ? { params } : {}) }
   }
 
   revalidatePath(MEMBER_AREA, "layout")
@@ -600,4 +650,91 @@ export async function reassignSlotAction(
   // The review queue and Admin home's count.
   revalidatePath(ADMIN_AREA, "layout")
   return { ok: true, data: { slotId } }
+}
+
+/**
+ * Adds links to a slot the caller holds (AD-3, AD-4), as one command: every
+ * link or none. add_deliverable_links decides whether the caller may and
+ * whether the slot has room; this only parses, calls it, maps the error
+ * (its `details` give a refused list's reason and the room left) and
+ * revalidates. A list that doesn't parse is the same refusal as a bad link.
+ */
+export async function addDeliverableLinksAction(
+  input: unknown
+): Promise<AddDeliverableLinksState> {
+  const parsed = deliverableAddSchema.safeParse(input)
+  if (!parsed.success) {
+    return {
+      ok: false,
+      code: "tasks.invalid_links",
+      params: { reason: "link" },
+    }
+  }
+  const { slotId, urls } = parsed.data
+
+  const supabase = await createClient()
+  const { error } = await supabase.rpc("add_deliverable_links", {
+    slot_id: slotId,
+    urls,
+  })
+
+  if (error) {
+    const code = mapCommandError(
+      error,
+      ADD_LINKS_ERROR_CODES,
+      "tasks.save_failed",
+      {
+        route: "action addDeliverableLinksAction",
+        entityType: "task_assignment",
+        entityId: slotId,
+      }
+    )
+    const params =
+      code === "tasks.invalid_links" ? detailParams(error.details) : undefined
+    return { ok: false, code, ...(params ? { params } : {}) }
+  }
+
+  revalidatePath(MEMBER_AREA, "layout")
+  revalidatePath(ADMIN_AREA, "layout")
+  return { ok: true, data: { slotId, count: urls.length } }
+}
+
+/**
+ * Removes one deliverable link (AD-3, AD-4). remove_deliverable_link decides
+ * whether the caller may, and answers false for a link already gone; this
+ * only parses, calls it, maps the error and revalidates.
+ */
+export async function removeDeliverableLinkAction(
+  input: unknown
+): Promise<RemoveDeliverableLinkState> {
+  const parsed = deliverableRemoveSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, code: "tasks.save_failed" }
+  }
+  const { linkId } = parsed.data
+
+  const supabase = await createClient()
+  const { data, error } = await supabase.rpc("remove_deliverable_link", {
+    link_id: linkId,
+  })
+
+  if (error) {
+    return {
+      ok: false,
+      code: mapCommandError(
+        error,
+        REMOVE_LINK_ERROR_CODES,
+        "tasks.save_failed",
+        {
+          route: "action removeDeliverableLinkAction",
+          entityType: "task_deliverable_link",
+          entityId: linkId,
+        }
+      ),
+    }
+  }
+
+  revalidatePath(MEMBER_AREA, "layout")
+  revalidatePath(ADMIN_AREA, "layout")
+  return { ok: true, data: { removed: data === true } }
 }

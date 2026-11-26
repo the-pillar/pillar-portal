@@ -8,6 +8,7 @@ import {
 import {
   getReassignOptions,
   getTaskDetail,
+  TaskChangesRefresher,
   TaskDetailView,
   returnLink,
   TaskNotFound,
@@ -43,11 +44,15 @@ export default async function TaskPage({
     : undefined
 
   return (
-    <TaskDetailView
-      task={task}
-      reassignOptions={reassignOptions}
-      onCopied={recordCopiedTaskAction}
-      returnLink={returnLink(safeReturnPath(from))}
-    />
+    <>
+      {/* Links others add or remove show up without a reload. */}
+      <TaskChangesRefresher deliverableLinks />
+      <TaskDetailView
+        task={task}
+        reassignOptions={reassignOptions}
+        onCopied={recordCopiedTaskAction}
+        returnLink={returnLink(safeReturnPath(from))}
+      />
+    </>
   )
 }

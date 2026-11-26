@@ -20,7 +20,7 @@ import { cn } from "@/lib/utils"
 
 import { reassignSlotAction } from "../actions"
 import { taskErrorMessage, type TaskErrorCode } from "../errors"
-import { buildMessengerMessage } from "../messenger"
+import { buildMessengerMessage, type MessengerDeliverables } from "../messenger"
 import type { ReassignOptions } from "../queries/reassign"
 import {
   buildReassignList,
@@ -62,6 +62,7 @@ export function ReassignSlot({
   taskTitle,
   taskDueAt,
   taskReferenceUrls,
+  taskDeliverables,
   slotId,
   role,
   memberId,
@@ -80,6 +81,8 @@ export function ReassignSlot({
   taskDueAt: string
   /** The task's saved reference links, for the Messenger message. */
   taskReferenceUrls: string[]
+  /** The task's every deliverable link by role, for the Messenger message. */
+  taskDeliverables: MessengerDeliverables[]
   slotId: string
   role: ProductionRole
   /** The slot's member now. */
@@ -169,6 +172,7 @@ export function ReassignSlot({
         roles: [role],
         dueAt: taskDueAt,
         referenceUrls: taskReferenceUrls,
+        deliverables: taskDeliverables,
       },
       clientEnv.NEXT_PUBLIC_SITE_URL,
       options.roleLabels

@@ -38,6 +38,7 @@ const S1 = "00000000-0000-4000-8000-0000000000c1"
 const S2 = "00000000-0000-4000-8000-0000000000c2"
 const S3 = "00000000-0000-4000-8000-0000000000c3"
 const S4 = "00000000-0000-4000-8000-0000000000c4"
+const S5 = "00000000-0000-4000-8000-0000000000c5"
 const LAYOUT = "00000000-0000-4000-8000-0000000000a1"
 const WRITER = "00000000-0000-4000-8000-0000000000a2"
 const GONE = "00000000-0000-4000-8000-0000000000a3"
@@ -137,11 +138,15 @@ type Fixture = {
   capabilities?: unknown
   capabilitiesError?: unknown
   directoryError?: unknown
+  links?: unknown
+  slots?: unknown
 }
 
 function mockRead(fixture: Fixture = {}) {
   const taskCalls: Call[] = []
   const directoryCalls: Call[] = []
+  const linkCalls: Call[] = []
+  const slotCalls: Call[] = []
   const rpc = vi.fn(async (name: string, args: unknown) => {
     expect(name).toBe("task_capabilities")
     void args
@@ -178,10 +183,22 @@ function mockRead(fixture: Fixture = {}) {
         error: fixture.directoryError ?? null,
       }))
     }
+    if (table === "task_deliverable_links") {
+      return recorder(linkCalls, () => ({
+        data: fixture.links ?? [],
+        error: null,
+      }))
+    }
+    if (table === "task_assignments") {
+      return recorder(slotCalls, () => ({
+        data: fixture.slots ?? [],
+        error: null,
+      }))
+    }
     throw new Error(`unexpected table: ${table}`)
   })
   createClient.mockResolvedValue({ from, rpc })
-  return { taskCalls, directoryCalls, rpc, from }
+  return { taskCalls, directoryCalls, linkCalls, slotCalls, rpc, from }
 }
 
 const ACTIVE_ADMIN = {
@@ -238,9 +255,12 @@ describe("getHandedBackQueue", () => {
     // The whole directory, never an .in() list of ids that could outgrow a URL.
     expect(directoryCalls).toEqual([{ method: "select", args: ["id, name"] }])
     // The reasons came embedded: no read of their own, no slot ids in a URL.
+    // The deliverable links of those tasks came back empty, so their slots
+    // weren't read at all.
     expect(from.mock.calls.map(([table]) => table)).toEqual([
       "tasks",
       "member_directory",
+      "task_deliverable_links",
     ])
     expect(queue).toEqual([
       {
@@ -250,6 +270,7 @@ describe("getHandedBackQueue", () => {
         taskTitle: "Lay out the spread",
         dueAt: "2099-01-01T00:00:00+00:00",
         referenceUrls: [],
+        deliverables: [],
         role: "layout_artist",
         roleLabel: "Layout Artist",
         memberId: LAYOUT,
@@ -263,6 +284,7 @@ describe("getHandedBackQueue", () => {
         taskTitle: "Lay out the spread",
         dueAt: "2099-01-01T00:00:00+00:00",
         referenceUrls: [],
+        deliverables: [],
         role: "cartoonist",
         roleLabel: "Cartoonist",
         memberId: WRITER,
@@ -277,6 +299,7 @@ describe("getHandedBackQueue", () => {
         taskTitle: "Draw the strip",
         dueAt: "2099-01-03T00:00:00+00:00",
         referenceUrls: [],
+        deliverables: [],
         role: "cartoonist",
         roleLabel: "Cartoonist",
         memberId: GONE,
@@ -284,6 +307,52 @@ describe("getHandedBackQueue", () => {
         memberName: "Former member",
         reason: "Member deactivated",
       },
+    ])
+  })
+
+  it("gives each row its task's every deliverable link by role, reading the task's slots only once a link came back", async () => {
+    const { slotCalls } = mockRead({
+      links: [
+        {
+          id: "l1",
+          slot_id: S5,
+          url: "https://www.canva.com/design/1",
+          added_by: WRITER,
+          added_at: V1,
+          task_assignments: { task_id: T1 },
+        },
+        {
+          id: "l2",
+          slot_id: S5,
+          url: "https://www.canva.com/design/2",
+          added_by: WRITER,
+          added_at: V1,
+          task_assignments: { task_id: T1 },
+        },
+      ],
+      slots: [
+        { id: S5, task_id: T1, role: "layout_artist" },
+        { id: S1, task_id: T1, role: "layout_artist" },
+        { id: S2, task_id: T1, role: "cartoonist" },
+      ],
+    })
+
+    const queue = await getHandedBackQueue()
+
+    expect(slotCalls).toContainEqual({ method: "in", args: ["task_id", [T1]] })
+    const expected = [
+      {
+        role: "layout_artist",
+        urls: [
+          "https://www.canva.com/design/1",
+          "https://www.canva.com/design/2",
+        ],
+      },
+    ]
+    expect(queue.map((row) => [row.slotId, row.deliverables])).toEqual([
+      [S1, expected],
+      [S2, expected],
+      [S4, []],
     ])
   })
 

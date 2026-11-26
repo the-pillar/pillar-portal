@@ -133,6 +133,16 @@ describe("globals.css Task detail action bar", () => {
     expect(css.match(/\[data-bottom-tab-bar\][^{]*\{\s*display: none/g)).toHaveLength(1)
   })
 
+  it("flows the bar in place while a text field has focus, under the same query, after the rules above", () => {
+    const rule = css.indexOf("textarea:focus")
+    expect(rule).toBeGreaterThan(css.indexOf("html:has([data-action-bar]) body main"))
+    expect(css.lastIndexOf("@media", rule)).toBe(block!.open)
+    const body = css.slice(rule, css.indexOf("}", rule))
+    expect(body).toContain("[data-action-bar]")
+    expect(body).toMatch(/position: static;/)
+    expect(body).toMatch(/max-height: none;/)
+  })
+
   it("clears the bar's measured height plus 8px in content and scrollers", () => {
     expect(css).toMatch(
       /html:has\(\[data-action-bar\]\) \{\s*scroll-padding-bottom: calc\(var\(--action-bar-height, [^)]+\) \+ 8px\);/

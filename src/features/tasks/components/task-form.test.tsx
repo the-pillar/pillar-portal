@@ -577,24 +577,28 @@ const TASK: TaskEdit = {
   ownerName: "Layout",
   dueAtInput: "2026-10-31T23:30",
   referenceUrls: ["https://example.com/brief"],
+  deliverables: [],
   slots: [
     {
       id: SLOT_A,
       role: "layout_artist",
       memberId: MEMBER_1,
       memberName: "Staff Layout Artist",
+      linkCount: 0,
     },
     {
       id: SLOT_B,
       role: "cartoonist",
       memberId: MEMBER_1,
       memberName: "Staff Layout Artist",
+      linkCount: 0,
     },
     {
       id: SLOT_C,
       role: "photojournalist",
       memberId: FORMER,
       memberName: "Former member",
+      linkCount: 0,
     },
   ],
   done: false,
@@ -1054,6 +1058,129 @@ describe("TaskForm in edit mode", () => {
       LOADED_SLOTS[0],
       LOADED_SLOTS[2],
     ])
+  })
+
+  describe("deliverable links", () => {
+    const WITH_LINKS: TaskEdit = {
+      ...TASK,
+      slots: TASK.slots.map((slot) =>
+        slot.id === SLOT_B
+          ? { ...slot, linkCount: 2 }
+          : slot.id === SLOT_A
+            ? { ...slot, linkCount: 1 }
+            : slot
+      ),
+      deliverables: [
+        {
+          role: "layout_artist",
+          urls: ["https://www.canva.com/design/DAF1/edit"],
+        },
+        {
+          role: "cartoonist",
+          urls: ["https://example.org/1", "https://example.org/2"],
+        },
+      ],
+    }
+
+    it("shows a muted count under a slot's role only when it has links", () => {
+      render(<EditPage task={WITH_LINKS} />)
+
+      const roles = screen.getAllByRole("group", { name: "Role" })
+      expect(roles[0]).toHaveTextContent("1 deliverable link")
+      expect(roles[0]).not.toHaveTextContent("1 deliverable links")
+      expect(roles[1]).toHaveTextContent("2 deliverable links")
+      expect(roles[2]).not.toHaveTextContent("deliverable")
+    })
+
+    it("still offers Remove on a slot with links: the database refuses the save", () => {
+      render(<EditPage task={WITH_LINKS} />)
+
+      expect(
+        screen.getAllByRole("button", { name: /Remove slot/ })
+      ).toHaveLength(3)
+    })
+
+    it("puts the refused slot back where it was, with the message under it and focus on its member picker, keeping every other edit", async () => {
+      updateTaskAction.mockResolvedValue({
+        ok: false,
+        code: "tasks.slot_has_links",
+        params: { role: "cartoonist" },
+      })
+      const user = userEvent.setup()
+      render(<EditPage task={WITH_LINKS} />)
+
+      await user.clear(screen.getByLabelText("Title"))
+      await user.type(screen.getByLabelText("Title"), "Edited title")
+      await user.click(screen.getByRole("button", { name: "Remove slot 2" }))
+      expect(memberBoxes()).toHaveLength(2)
+      await user.click(save())
+
+      await waitFor(() => expect(memberBoxes()).toHaveLength(3))
+      const message =
+        "Cartoonist has deliverable links. Remove them on the task first, or reassign the slot."
+      expect(screen.getByText(message)).toBeInTheDocument()
+      expect(memberBoxes()[1]).toHaveFocus()
+      expect(memberBoxes()[1]).toHaveAccessibleDescription(message)
+      expect(
+        screen
+          .getAllByRole("group", { name: "Role" })
+          .map((group) => group.textContent)
+      ).toEqual([
+        "RoleLayout Artist1 deliverable link",
+        "RoleCartoonist2 deliverable links",
+        "RolePhotojournalist",
+      ])
+      expect(screen.getByLabelText("Title")).toHaveValue("Edited title")
+      // No toast, no reload: what was typed stays.
+      expect(toastError).not.toHaveBeenCalled()
+      expect(refresh).not.toHaveBeenCalled()
+      expect(push).not.toHaveBeenCalled()
+
+      // The next save sends the slot again, as loaded, and clears the message.
+      updateTaskAction.mockResolvedValue({
+        ok: true,
+        data: { taskId: TASK_ID, newAssignee: false },
+      })
+      await user.click(save())
+      await waitFor(() => expect(push).toHaveBeenCalledOnce())
+      expect(updateTaskAction.mock.calls[1][0].slots).toEqual(LOADED_SLOTS)
+    })
+
+    it("carries every deliverable link, loaded with the task, into the saved toast's Copy for Messenger", async () => {
+      updateTaskAction.mockResolvedValue({
+        ok: true,
+        data: { taskId: TASK_ID, newAssignee: true },
+      })
+      const user = userEvent.setup()
+      render(<EditPage task={WITH_LINKS} />)
+
+      await choose(user, memberBoxes()[1], "Head Layout Artist")
+      await user.click(save())
+      await waitFor(() => expect(push).toHaveBeenCalledOnce())
+
+      const writeText = vi.fn().mockResolvedValue(undefined)
+      vi.stubGlobal("navigator", { clipboard: { writeText } })
+      await toastSuccess.mock.calls[0][1].action.onClick()
+      expect(writeText.mock.calls[0][0]).toContain(
+        "\n\nReference\n• example.com: https://example.com/brief\n\nLayout Artist\n• Canva: https://www.canva.com/design/DAF1/edit\n\nCartoonist\n• example.org: https://example.org/1\n• example.org: https://example.org/2"
+      )
+      vi.unstubAllGlobals()
+    })
+
+    it("has no axe violations with link counts and the refusal showing", async () => {
+      updateTaskAction.mockResolvedValue({
+        ok: false,
+        code: "tasks.slot_has_links",
+        params: { role: "cartoonist" },
+      })
+      const user = userEvent.setup()
+      const { container } = render(<EditPage task={WITH_LINKS} />)
+      await user.click(screen.getByRole("button", { name: "Remove slot 2" }))
+      await user.click(save())
+      await screen.findByText(/has deliverable links/)
+
+      expect(await axeViolations(container)).toEqual([])
+    })
   })
 
   it("keeps a slot's current member in its list after Show everyone is unchecked", async () => {

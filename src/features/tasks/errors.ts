@@ -62,6 +62,10 @@ export const TASK_ERROR_COPY = {
   "tasks.stale": STALE_COPY,
   "tasks.invalid_slot_member": STALE_COPY,
   "tasks.invalid_links": "A link didn't save. Check the links and try again.",
+  // update_task's refusal names the role, which the edit form puts in
+  // slotHasLinksMessage's sentence; this is the bare fallback.
+  "tasks.slot_has_links":
+    "A slot has deliverable links. Remove them on the task first, or reassign the slot.",
 } as const
 
 export type TaskErrorCode = keyof typeof TASK_ERROR_COPY
@@ -103,4 +107,50 @@ export function undoStaleMessage(
   return typeof name === "string" && name !== ""
     ? `Can't undo — ${name} moved this card since.`
     : "Can't undo — someone moved this card since."
+}
+
+/** The edit form's line under a slot row that update_task refused to drop. */
+export function slotHasLinksMessage(roleLabel: string): string {
+  return `${roleLabel} has deliverable links. Remove them on the task first, or reassign the slot.`
+}
+
+/** The role update_task's `tasks.slot_has_links` names, from its params. */
+export function slotHasLinksRole(
+  params: Record<string, unknown> | undefined
+): string | null {
+  return typeof params?.role === "string" ? params.role : null
+}
+
+/** The refusal copy for adding deliverable links (EXPERIENCE.md › Link limit reached, Can't add links now). */
+export function deliverableAddMessage(
+  code: TaskErrorCode,
+  params?: Record<string, unknown>
+): string {
+  switch (code) {
+    case "tasks.invalid_links": {
+      if (params?.reason === "limit") {
+        const remaining = Number(params.remaining)
+        if (!Number.isInteger(remaining) || remaining <= 0) {
+          return "This slot already has 5 links."
+        }
+        return remaining === 1
+          ? "Only 1 more link fits on this slot."
+          : `Only ${remaining} more links fit on this slot.`
+      }
+      return TASK_ERROR_COPY["tasks.invalid_links"]
+    }
+    case "tasks.not_allowed":
+      return "You can't add links to this slot anymore."
+    case "tasks.not_found":
+      return "This task or slot is gone."
+    default:
+      return TASK_ERROR_COPY[code]
+  }
+}
+
+/** The refusal copy for removing a deliverable link (EXPERIENCE.md › Remove a link). */
+export function deliverableRemoveMessage(code: TaskErrorCode): string {
+  return code === "tasks.not_allowed"
+    ? "You can't remove this link anymore."
+    : TASK_ERROR_COPY[code]
 }

@@ -9,6 +9,7 @@ import {
   hasUnsavableCharacter,
   linkError,
   normalizeLink,
+  referenceLinkSchema,
   referenceLinksSchema,
 } from "./links"
 import { TASK_COLUMNS } from "./status"
@@ -285,3 +286,16 @@ export type TaskReviewInput = z.input<typeof taskReviewSchema>
 export type TaskSendBackInput = z.input<typeof taskSendBackSchema>
 export type TaskDeleteInput = z.input<typeof taskDeleteSchema>
 export type SlotReassignInput = z.input<typeof slotReassignSchema>
+
+/**
+ * Adding deliverable links to a slot: one to five links, each cleaned and
+ * checked as a reference link is. The Task detail field trims what doesn't
+ * fit to the room the page shows before it sends; this never trims.
+ */
+export const deliverableAddSchema = z.object({
+  slotId: z.uuid(),
+  urls: z.array(referenceLinkSchema).min(1).max(LINKS_MAX),
+})
+
+/** Removing one deliverable link. */
+export const deliverableRemoveSchema = z.object({ linkId: z.uuid() })

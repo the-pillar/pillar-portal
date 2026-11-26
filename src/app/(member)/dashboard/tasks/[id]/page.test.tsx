@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 const {
   getReassignOptions,
   getTaskDetail,
+  TaskChangesRefresher,
   TaskDetailView,
   TaskNotFound,
   requireActiveMember,
@@ -24,6 +25,9 @@ const {
       returnLink?: unknown
     }) => React.ReactNode
   >(() => <h1>Task detail view</h1>),
+  TaskChangesRefresher: vi.fn((props: { deliverableLinks?: boolean }) => (
+    <p data-live={String(props.deliverableLinks)}>refresher</p>
+  )),
   // Its copy and link have their own tests (task-not-found.test.tsx).
   TaskNotFound: vi.fn(() => <h1>Task not found</h1>),
   requireActiveMember: vi.fn(),
@@ -39,6 +43,7 @@ const {
 vi.mock("@/features/tasks", async () => ({
   getReassignOptions,
   getTaskDetail,
+  TaskChangesRefresher,
   TaskDetailView,
   TaskNotFound,
   returnLink: (
@@ -116,6 +121,22 @@ describe("TaskPage", () => {
       returnLink: { href: "/dashboard", label: "What's mine" },
     })
     expect(screen.getByText("Task detail view")).toBeInTheDocument()
+  })
+
+  it("mounts the refresher with the deliverable links listener beside the view", async () => {
+    getTaskDetail.mockResolvedValue({ id: TASK_ID, canReassign: false })
+
+    await renderPage(TASK_ID)
+
+    expect(screen.getByText("refresher")).toHaveAttribute("data-live", "true")
+  })
+
+  it("mounts no refresher when there is no task", async () => {
+    getTaskDetail.mockResolvedValue(null)
+
+    await renderPage(TASK_ID)
+
+    expect(screen.queryByText("refresher")).not.toBeInTheDocument()
   })
 
   it.each([

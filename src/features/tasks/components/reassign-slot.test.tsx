@@ -152,6 +152,7 @@ function Page({
                 // 23:30 PHT on Saturday, October 31, 2026.
                 taskDueAt="2026-10-31T15:30:00+00:00"
                 taskReferenceUrls={[]}
+                taskDeliverables={[]}
                 slotId={SLOT_ID}
                 role={role}
                 memberId={memberId}

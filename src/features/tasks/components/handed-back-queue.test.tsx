@@ -88,6 +88,7 @@ const RENAMED: HandedBackSlot = {
   // 23:30 PHT on Saturday, October 31, 2026.
   dueAt: "2026-10-31T15:30:00+00:00",
   referenceUrls: [],
+  deliverables: [],
   role: "cartoonist",
   roleLabel: "Cartoonist",
   memberId: EIC.id,
@@ -102,6 +103,7 @@ const NEXT_WEEK: HandedBackSlot = {
   // 09:00 PHT on Monday, November 9, 2026.
   dueAt: "2026-11-09T01:00:00+00:00",
   referenceUrls: [],
+  deliverables: [],
   role: "layout_artist",
   roleLabel: "Layout Artist",
   memberId: STAFF_LAYOUT.id,
@@ -307,6 +309,49 @@ describe("HandedBackQueue", () => {
     await toastSuccess.mock.calls[0][1].action.onClick()
 
     expect(onCopied).toHaveBeenCalledOnce()
+  })
+
+  it("carries the task's deliverable links into the row's Messenger text", async () => {
+    const user = userEvent.setup()
+    reassignSlotAction.mockResolvedValue({
+      ok: true,
+      data: { slotId: RENAMED.slotId },
+    })
+    render(
+      <Page
+        slots={[
+          {
+            ...RENAMED,
+            deliverables: [
+              {
+                role: "layout_artist",
+                urls: ["https://www.canva.com/design/DAF1/edit"],
+              },
+            ],
+          },
+        ]}
+      />
+    )
+    await user.click(reassign("Cartoonist", "3.7 check (edit) renamed"))
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("radio", {
+        name: "Staff Cartoonist · 0 active",
+      })
+    )
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: "Reassign",
+      })
+    )
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull())
+
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    vi.stubGlobal("navigator", { clipboard: { writeText } })
+    await toastSuccess.mock.calls[0][1].action.onClick()
+
+    expect(writeText.mock.calls[0][0]).toContain(
+      "\n\nLayout Artist\n• Canva: https://www.canva.com/design/DAF1/edit"
+    )
   })
 
   it("reassigns a row, toasts with Copy for Messenger, and focuses the h1 as the row leaves with the count", async () => {

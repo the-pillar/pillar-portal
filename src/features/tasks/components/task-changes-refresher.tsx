@@ -13,9 +13,9 @@ const REFRESH_DELAY_MS = 300
 const REFRESH_MAX_WAIT_MS = 2000
 
 /**
- * Keeps an open Board current (AD-14): joins the private `task-changes`
- * channel and, on any change to `tasks` or `task_assignments`, re-reads the
- * page with a debounced `router.refresh()`. The event is only a signal; its
+ * Keeps an open Board or Task detail current (AD-14): joins the private
+ * `task-changes` channel and, on any change to `tasks` or `task_assignments`
+ * (and, with `deliverableLinks`, `task_deliverable_links`), re-reads the page with a debounced `router.refresh()`. The event is only a signal; its
  * payload is never read, so what the Board shows still comes from the
  * server's RLS-gated queries.
  *
@@ -31,7 +31,12 @@ const REFRESH_MAX_WAIT_MS = 2000
  * the same topic, even one still leaving after an earlier Board unmounted, and
  * joining that one would do nothing, so a leftover is removed first.
  */
-export function TaskChangesRefresher() {
+export function TaskChangesRefresher({
+  deliverableLinks = false,
+}: {
+  /** Task detail also listens to `task_deliverable_links`; the Board doesn't. */
+  deliverableLinks?: boolean
+}) {
   const router = useRouter()
 
   useEffect(() => {
@@ -100,11 +105,19 @@ export function TaskChangesRefresher() {
           { event: "*", schema: "public", table: "task_assignments" },
           () => refresh()
         )
-        .subscribe((status) => {
-          if (status !== "SUBSCRIBED") return
-          if (joinedBefore) refresh()
-          joinedBefore = true
-        })
+      if (deliverableLinks) {
+        channel = channel.on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "task_deliverable_links" },
+          () => refresh()
+        )
+      }
+
+      channel.subscribe((status) => {
+        if (status !== "SUBSCRIBED") return
+        if (joinedBefore) refresh()
+        joinedBefore = true
+      })
     }
     void join()
 
@@ -114,7 +127,7 @@ export function TaskChangesRefresher() {
       document.removeEventListener("visibilitychange", onVisibilityChange)
       if (channel) void supabase.removeChannel(channel)
     }
-  }, [router])
+  }, [router, deliverableLinks])
 
   return null
 }

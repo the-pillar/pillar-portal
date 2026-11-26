@@ -85,6 +85,7 @@ function mockEdit({
     { id: STAFF, name: "Staff Layout Artist" },
     { id: WRITER, name: "Staff Writer" },
   ] as unknown,
+  links = [] as unknown,
   errors = {} as Partial<Record<string, unknown>>,
 } = {}) {
   const calls: Call[] = []
@@ -98,6 +99,7 @@ function mockEdit({
     tasks: task,
     task_assignments: slots,
     member_directory: members,
+    task_deliverable_links: links,
   }
   createClient.mockResolvedValue({
     rpc,
@@ -153,6 +155,39 @@ describe("getTaskEdit", () => {
     })
   })
 
+  it("counts each slot's deliverable links and groups the task's by role for Messenger", async () => {
+    mockEdit({
+      links: [
+        {
+          id: "l1",
+          slot_id: SLOT_B,
+          url: "https://docs.google.com/document/d/1",
+          added_by: WRITER,
+          added_at: "2026-10-30T03:00:00+00:00",
+          task_assignments: { task_id: TASK_ID },
+        },
+        {
+          id: "l2",
+          slot_id: SLOT_B,
+          url: "https://example.org/2",
+          added_by: WRITER,
+          added_at: "2026-10-30T03:01:00+00:00",
+          task_assignments: { task_id: TASK_ID },
+        },
+      ],
+    })
+
+    const edit = await getTaskEdit(TASK_ID)
+
+    expect(edit?.slots.map((slot) => slot.linkCount)).toEqual([0, 2, 0])
+    expect(edit?.deliverables).toEqual([
+      {
+        role: "writer",
+        urls: ["https://docs.google.com/document/d/1", "https://example.org/2"],
+      },
+    ])
+  })
+
   it("names each slot's member from member_directory, never members", async () => {
     const { calls } = mockEdit()
 
@@ -183,20 +218,24 @@ describe("getTaskEdit", () => {
           role: "layout_artist",
           memberId: STAFF,
           memberName: "Staff Layout Artist",
+          linkCount: 0,
         },
         {
           id: SLOT_B,
           role: "writer",
           memberId: WRITER,
           memberName: "Staff Writer",
+          linkCount: 0,
         },
         {
           id: SLOT_C,
           role: "cartoonist",
           memberId: FORMER,
           memberName: "Former member",
+          linkCount: 0,
         },
       ],
+      deliverables: [],
       done: false,
       canManage: true,
       updatedAt: "2026-10-30T02:15:42.123456+00:00",
