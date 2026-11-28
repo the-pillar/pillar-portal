@@ -1,6 +1,7 @@
 import type { AdminBanner } from "@/lib/admin-banners"
 
 import { backupBanner } from "./backup-banner"
+import { dailyJobBanner } from "./daily-job-banner"
 
 /**
  * Every admin banner's source (Story 2.3's slot). Each entry is one function
@@ -22,4 +23,7 @@ export const ADMIN_BANNER_SOURCES: (() => Promise<AdminBanner[]>)[] = [
   // #0, Story 2.5: the newest successful backup is over 8 days old, or none
   // has run (production only).
   backupBanner,
+  // #1, Story 4.3: the daily job hasn't started in over 36 hours, or its
+  // latest run had a failed step (production only).
+  dailyJobBanner,
 ]

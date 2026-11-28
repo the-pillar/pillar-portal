@@ -9,8 +9,10 @@ const PASSWORD = "a-persona-password-for-tests"
 // The shape of a secret key, built at runtime so no key-shaped literal sits
 // in the source (GitHub's push protection blocks Supabase secrets).
 const SECRET_KEY = "sb_secret_" + "a-key-for-these-tests-only"
+const CRON_SECRET = "a-cron-secret-of-at-least-32-characters-for-tests"
 
 type Env = {
+  CRON_SECRET?: string
   PROTOTYPE_PERSONAS?: string
   PROTOTYPE_PERSONA_PASSWORD?: string
   NEXT_PUBLIC_SUPABASE_URL?: string
@@ -32,6 +34,10 @@ async function loadServerEnv(env: Env = {}) {
   vi.stubEnv(
     "SUPABASE_SECRET_KEY",
     "SUPABASE_SECRET_KEY" in env ? env.SUPABASE_SECRET_KEY : SECRET_KEY
+  )
+  vi.stubEnv(
+    "CRON_SECRET",
+    "CRON_SECRET" in env ? env.CRON_SECRET : CRON_SECRET
   )
   vi.stubEnv("PROTOTYPE_PERSONAS", env.PROTOTYPE_PERSONAS)
   vi.stubEnv("PROTOTYPE_PERSONA_PASSWORD", env.PROTOTYPE_PERSONA_PASSWORD)
@@ -61,6 +67,7 @@ describe("serverEnv", () => {
   it("lists exactly the server-only variables in its schema", async () => {
     const { serverEnvSchema } = await loadServerEnv()
     expect(Object.keys(serverEnvSchema.shape).sort()).toEqual([
+      "CRON_SECRET",
       "EMAIL_CONFIRMATION_DAILY_CAP",
       "EMAIL_DAILY_LIMIT",
       "EMAIL_FROM",
@@ -86,7 +93,10 @@ describe("serverEnv", () => {
     vi.stubEnv("SOME_UNRELATED_SECRET", "canary-value-1234")
     const { serverEnv, personasEnabled } = await loadServerEnv()
 
-    expect(serverEnv).toEqual({ SUPABASE_SECRET_KEY: SECRET_KEY })
+    expect(serverEnv).toEqual({
+      SUPABASE_SECRET_KEY: SECRET_KEY,
+      CRON_SECRET,
+    })
     expect(personasEnabled).toBe(false)
   })
 
@@ -116,6 +126,24 @@ describe("serverEnv", () => {
       )
     }
   )
+
+  it.each([
+    ["missing", undefined],
+    ["empty", ""],
+    ["31 characters", "c".repeat(31)],
+  ])(
+    "refuses to boot when CRON_SECRET is %s, naming it",
+    async (_label, value) => {
+      await expect(loadServerEnv({ CRON_SECRET: value })).rejects.toThrow(
+        /CRON_SECRET: must be at least 32 characters/
+      )
+    }
+  )
+
+  it("accepts a CRON_SECRET of exactly 32 characters", async () => {
+    const { serverEnv } = await loadServerEnv({ CRON_SECRET: "c".repeat(32) })
+    expect(serverEnv.CRON_SECRET).toBe("c".repeat(32))
+  })
 
   it("never repeats a refused key's value in the error", async () => {
     const value = "sb_secret_" + "not valid!".repeat(3)

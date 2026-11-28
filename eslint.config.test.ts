@@ -295,6 +295,7 @@ describe("eslint architecture rules", { timeout: 30_000 }, () => {
   it.each([
     "src/lib/record-error-event.ts",
     "src/app/api/health/route.ts",
+    "src/app/api/cron/daily/route.ts",
     "src/features/email/sender.ts",
     "src/features/email/webhook.ts",
     "src/lib/supabase/admin.test.ts",

@@ -9,8 +9,8 @@ import { EmailShell } from "./shell"
 import { templates } from "./templates"
 
 describe("renderEmail", () => {
-  it("starts with an empty registry", () => {
-    expect(Object.keys(templates)).toEqual([])
+  it("registers the reminder template", () => {
+    expect(Object.keys(templates)).toEqual(["reminder"])
   })
 
   it("maps an unknown template to email.unknown_template", async () => {

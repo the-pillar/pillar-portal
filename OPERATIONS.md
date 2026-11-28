@@ -620,6 +620,45 @@ where digest = '<digest>';
 `error_events` rows are kept 30 days; from Epic 4, the daily job deletes older
 ones.
 
+### The daily job
+
+One Vercel cron (`0 0 * * *` UTC, best effort: it fires between 08:00 and
+08:59 Manila) calls `GET /api/cron/daily`. The route accepts only
+`Authorization: Bearer <CRON_SECRET>` and answers 401 to anything else.
+`CRON_SECRET` is at least 32 random characters, required at boot, and must be
+set for Production and Preview on every Vercel project, since Vercel Cron
+sends it as the bearer token:
+
+```sh
+openssl rand -hex 32 | tr -d '\n' | vercel env add CRON_SECRET production
+```
+
+Repeat for `preview`, on both projects, before the pull request's preview
+builds: boot refuses without it. Staging runs the cron in sink mode, which
+also keeps the staging database from pausing.
+
+Each run is a `daily` row in `job_runs`, with one row per step (`step` set,
+`run_id` pointing at the run). The steps run in a fixed order and each runs
+even if an earlier one failed: `reminders` (queue the deadline reminders),
+`drain` (send the outbox; it stops claiming 240 s after the run began),
+`sweep` (shared-computer sessions idle over 24 hours) and `retention`
+(`error_events` and final outbox rows older than 30 days; the outbox rows
+lose their address, error and payload). The run closes `ok`, or `failed` when
+a step failed, and a step's fault also lands in `error_events` as route
+`cron daily <step>` (`cron daily <step> log` when only its `job_runs` row
+couldn't be written; a drain that stopped on a failed claim is recorded
+as route `email drain`). A second run while one is open logs `skipped`.
+
+To run it by hand, from a shell with the secret loaded:
+
+```sh
+curl -H "Authorization: Bearer $CRON_SECRET" https://<site>/api/cron/daily
+```
+
+A production admin sees a banner when no run has started for over 36 hours
+("Daily jobs haven't run since <time>.") or the latest run had a failed step
+("Last run's <step> failed."). A skipped row never counts as a run.
+
 ## 6. Backups and restore
 
 ### What runs and what it leaves out

@@ -167,3 +167,15 @@ service_role public.mark_email_failed(uuid, integer, text)
 # client records an event
 authenticated public.email_quota_status(integer, integer, integer)
 service_role public.record_email_event(text, text, text, text, text)
+
+# core_daily_job: the daily cron's step log and retention (Story 4.3;
+# private.clear_old_email_rows has no grant: run_retention calls it)
+service_role public.record_job_step(bigint, text, job_status, integer, jsonb)
+service_role public.run_retention()
+
+# members_shared_session_sweep: the cron's sweep of idle shared sessions
+service_role public.sweep_shared_sessions()
+
+# tasks_reminders: the deadline reminder enqueue (the window and the send
+# check are private, called from definer commands, and have no grant)
+service_role public.enqueue_due_reminders()

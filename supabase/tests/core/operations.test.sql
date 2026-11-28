@@ -402,7 +402,7 @@ select is(
 select is(
   array[
     pg_temp.attempt($q$ insert into public.job_runs (job) values ('Not A Slug') $q$),
-    pg_temp.attempt($q$ insert into public.job_runs (job, step) values ('pgtap_ops', 'step one') $q$),
+    pg_temp.attempt($q$ insert into public.job_runs (job, step, run_id) values ('pgtap_ops', 'step one', (select min(id) from runs)) $q$),
     pg_temp.attempt($q$ insert into public.job_runs (job, status) values ('pgtap_ops', 'ok') $q$),
     pg_temp.attempt($q$ insert into public.job_runs (job, finished_at) values ('pgtap_ops', now()) $q$),
     pg_temp.attempt($q$ insert into public.job_runs (job, status, started_at, finished_at)

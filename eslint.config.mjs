@@ -77,6 +77,9 @@ const ADMIN_CLIENT = "./src/lib/supabase/admin.ts"
 const ADMIN_CLIENT_IMPORTERS = [
   "src/lib/record-error-event.ts",
   "src/app/api/health/route.ts",
+  // The daily cron: opens the run and hands the client to the pipeline, which
+  // calls service_role commands (AD-6, Story 4.3).
+  "src/app/api/cron/daily/route.ts",
   // The outbox drain: claims, prepares and marks rows through service_role
   // commands (AD-6, Story 4.1).
   "src/features/email/sender.ts",
