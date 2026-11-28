@@ -149,7 +149,10 @@ select is(
     values ('pgtap_daily', (select id from runs where label = 'open'), 'ok', now()) $q$),
   '23514 job_runs_run_id_with_step', 'a run_id without a step is refused by the CHECK');
 
--- sweep_shared_sessions.
+-- sweep_shared_sessions. Real sessions (staging) would change the counts,
+-- so the table is emptied first, inside this rolled-back transaction.
+
+delete from private.shared_sessions;
 
 insert into private.shared_sessions (session_id, user_id, last_activity_at) values
   ('00000000-0000-4000-a200-000000000001', '00000000-0000-4000-a000-0000000000c4',
