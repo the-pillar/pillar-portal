@@ -185,8 +185,9 @@ then checked.
    `SUPABASE_SECRET_KEY: must be a secret key (sb_secret_…)`. Check: `main`
    deploys to production in `sin1`; `https://<app host>/api/health` returns
    200; `vercel env ls production` shows no `PROTOTYPE_PERSONAS`; `EMAIL_MODE`
-   stays `sink` until Story 4.4; previews use the staging project with
-   personas on and `EMAIL_MODE=sink`; and "Automatically expose System
+   stays unset (`sink`) until email goes live (section 5, "Sending email");
+   previews use the staging project with
+   personas on and no `EMAIL_MODE` (so `sink`); and "Automatically expose System
    Environment Variables" is on for the production project
    (`vercel api /v9/projects/<project>` shows `"autoExposeSystemEnvs": true`),
    because the backup banner reads `VERCEL_ENV` and never shows without it.
@@ -252,7 +253,7 @@ then checked.
    domain in Resend, turn off open and click tracking, and publish SPF, DKIM
    and DMARC (`p=none` to start) through the Cloudflare API. Check: `dig`
    shows all three records and Resend reports the domain verified. Nothing is
-   sent until Story 4.4.
+   sent until email goes live (section 5, "Sending email").
 9. **The first admin:** the current Editor-in-Chief signs in once on
    production with Google and sees Awaiting approval. Run the bootstrap
    (section 3). Check: their next page load lands on What's mine as the
@@ -487,8 +488,13 @@ When the Online Manager or the developer changes:
      dashboard's masked text isn't the key; either fails the build). Redeploy,
      check `/api/health` returns 200, then delete the old key in the
      dashboard.
-   - Later server secrets (`CRON_SECRET` from Epic 4, the Resend API key):
-     on the Vercel production project, the same way.
+   - Later server secrets (`CRON_SECRET`, `RESEND_API_KEY`): on the Vercel
+     production project, the same way. For `RESEND_API_KEY`, make the new
+     sending-only key in Resend first and delete the old one after the
+     redeploy.
+   - `RESEND_WEBHOOK_SECRET`: rotate the webhook's signing secret in Resend,
+     then replace the variable the same way and redeploy. Bounces that arrive
+     in between get 401, and Resend retries them.
    - The Cloudflare API token: revoke it, and make a new one only when a step
      needs it.
    - **The database password:** reset it in the Supabase dashboard, to
@@ -655,9 +661,59 @@ To run it by hand, from a shell with the secret loaded:
 curl -H "Authorization: Bearer $CRON_SECRET" https://<site>/api/cron/daily
 ```
 
+Nobody holds production's `CRON_SECRET` (it was piped from `openssl`), so on
+production let Vercel send it instead, from a directory linked to the project:
+
+```sh
+vercel crons run /api/cron/daily
+```
+
 A production admin sees a banner when no run has started for over 36 hours
 ("Daily jobs haven't run since <time>.") or the latest run had a failed step
 ("Last run's <step> failed."). A skipped row never counts as a run.
+
+### Sending email
+
+Every environment runs in `sink` mode unless `EMAIL_MODE=send`: the whole
+send path runs and nothing reaches a recipient. Only production (a Vercel
+production deploy on the production Supabase project) sends: boot refuses
+`send` anywhere else, or without all three of the variables below.
+A missing one fails the Vercel build at `pnpm check:env` and leaves the live
+deployment as it was.
+
+Production's Vercel project holds, on the Production target only:
+
+| Variable | Value |
+|---|---|
+| `EMAIL_MODE` | `send` |
+| `EMAIL_FROM` | `The Pillar <portal@mail.thepillaruep.com>`. It must be on `mail.thepillaruep.com`, the domain DKIM signs as, or DMARC fails |
+| `RESEND_API_KEY` | A sending-only Resend key limited to `mail.thepillaruep.com` (`--sensitive`; the key is in the password manager) |
+| `RESEND_WEBHOOK_SECRET` | The signing secret of the Resend webhook (`--sensitive`; in the password manager) |
+
+The Resend webhook posts `email.bounced`, `email.complained`,
+`email.suppressed` and `email.failed` to
+`https://<app host>/api/webhooks/resend`, which marks the matching outbox row
+`bounced`. The route answers 401 to anything unsigned, so check it with:
+
+```sh
+curl -s -o /dev/null -w '%{http_code}\n' -X POST https://<app host>/api/webhooks/resend
+```
+
+Each variable goes in with `vercel env add <name> production` (paste keys at
+the prompt, or pipe them with `printf '%s'`, never `echo`), then
+`vercel redeploy <production deployment>` or a merge to `main`. Preview
+deployments and the staging project have no `EMAIL_MODE`, so they stay on
+`sink`.
+
+**To stop sending** (a spam complaint, a runaway queue):
+`vercel env rm EMAIL_MODE production`, then redeploy. This drops email, it
+doesn't pause it: the daily job still runs, and in `sink` mode its drain marks
+every queued row, and every reminder queued while sending is off, `sent` with
+a `sink:` id. Those rows never go out, even after `EMAIL_MODE=send` comes
+back. To resume, add `EMAIL_MODE` again the same way and redeploy.
+
+To rotate `RESEND_API_KEY` or `RESEND_WEBHOOK_SECRET`, see section 4,
+"Rotate every server secret".
 
 ## 6. Backups and restore
 
